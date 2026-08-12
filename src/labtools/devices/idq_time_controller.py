@@ -40,19 +40,33 @@ Usage example
         tc.stop_timestamp_stream()
 """
 
+import re
 import time
-import struct
 import logging
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 from threading import Thread
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, Optional
 
 import zmq
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_numeric_response(raw: str, *, cast: type = float):
+    """Convert SCPI responses like ``1000TB`` or ``0.1V`` into a numeric value."""
+    text = str(raw).strip()
+    if not text:
+        raise ValueError("empty numeric response")
+
+    match = re.match(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text)
+    if match is None:
+        raise ValueError(f"could not parse numeric response from {raw!r}")
+    return cast(match.group(0))
+
 
 # ------------------------------------------------------------------
 # Constants
@@ -61,6 +75,7 @@ logger = logging.getLogger(__name__)
 SCPI_PORT = 5555
 DLT_PORT = 6060
 DEFAULT_DLT_PATH = Path("C:/Program Files/IDQ/Time Controller/packages/ScpiClient")
+_DEFAULT_DLT_OUTPUT_DIR = Path(tempfile.gettempdir()) / "labtools_idq_dlt"
 
 # The vendor RAW channel block name for channel n is RAW<n>.
 # Streaming uses per-channel ZMQ PAIR sockets on ports starting here.
@@ -94,7 +109,10 @@ class IDQTimeController:
         self._context: Optional[zmq.Context] = None
         self._tc: Optional[zmq.Socket] = None          # SCPI socket
         self._dlt: Optional[zmq.Socket] = None         # DataLink socket
+        self._dlt_process: Optional[subprocess.Popen] = None
         self._stream_clients: Dict[int, "_StreamClient"] = {}
+        self._stream_ports: Dict[int, int] = {}
+        self._stream_ids: Dict[int, str] = {}
 
     # ------------------------------------------------------------------
     # Context manager
@@ -109,6 +127,8 @@ class IDQTimeController:
             )
         self._context = zmq.Context()
         self._tc = self._context.socket(zmq.REQ)
+        self._tc.setsockopt(zmq.RCVTIMEO, 2000)
+        self._tc.setsockopt(zmq.SNDTIMEO, 2000)
         self._tc.connect(f"tcp://{self.address}:{SCPI_PORT}")
         logger.info(f"Connected to Time Controller at {self.address}")
 
@@ -121,6 +141,17 @@ class IDQTimeController:
             except Exception:
                 pass
             self._dlt = None
+        if self._dlt_process is not None and self._dlt_process.poll() is None:
+            try:
+                self._dlt_process.terminate()
+                self._dlt_process.wait(timeout=2.0)
+            except Exception:
+                try:
+                    self._dlt_process.kill()
+                except Exception:
+                    pass
+            finally:
+                self._dlt_process = None
         if self._tc is not None:
             try:
                 self._tc.close()
@@ -227,9 +258,9 @@ class IDQTimeController:
         ref_block = "STAR" if str(ref_channel).lower() == "start" else f"TSCO{ref_channel + 4}"
 
         if bin_width_ps is None:
-            bin_width_ps = int(self._query("DEVI:RES:BWID?"))
+            bin_width_ps = _parse_numeric_response(self._query("DEVI:RES:BWID?"), cast=int)
         else:
-            resolution = int(self._query("DEVI:RES:BWID?"))
+            resolution = _parse_numeric_response(self._query("DEVI:RES:BWID?"), cast=int)
             if bin_width_ps % resolution != 0:
                 bin_width_ps = ((bin_width_ps // resolution) + 1) * resolution
                 logger.warning(
@@ -277,7 +308,7 @@ class IDQTimeController:
         self._cmd(f"{block}:COUN:MODE ACCU;RESEt")
         self._run_record(duration_ps)
 
-        return int(self._query(f"{block}:COUNter?"))
+        return _parse_numeric_response(self._query(f"{block}:COUNter?"), cast=int)
 
     def get_count_rate(self, channel: int, integration_s: float = 0.1) -> float:
         """Return events per second on a channel.
@@ -326,8 +357,8 @@ class IDQTimeController:
             Counts per bin.
         """
         duration_ps = int(duration_s * 1e12)
-        bin_width_ps = int(self._query(f"HIST{hist}:BWID?"))
-        bin_count = int(self._query(f"HIST{hist}:BCOU?"))
+        bin_width_ps = _parse_numeric_response(self._query(f"HIST{hist}:BWID?"), cast=int)
+        bin_count = _parse_numeric_response(self._query(f"HIST{hist}:BCOU?"), cast=int)
 
         self._cmd(f"HIST{hist}:FLUS")
         self._run_record(duration_ps)
@@ -367,21 +398,28 @@ class IDQTimeController:
             timestamps in picoseconds.
         output_dir : Path or None
             Directory passed to the DataLinkTargetService for its working
-            files. Defaults to a ``dlt_tmp`` folder next to this module.
+            files. Defaults to a writable temp directory under the system temp
+            folder, e.g. ``%TEMP%/labtools_idq_dlt``.
         """
         if output_dir is None:
-            output_dir = Path(__file__).parent / "dlt_tmp"
+            output_dir = _DEFAULT_DLT_OUTPUT_DIR
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        self._dlt = _dlt_connect(output_dir, self.dlt_path)
-
-        # Stop any acquisitions left open from a previous run
-        active = _dlt_exec(self._dlt, "list") or []
-        for acq_id in active:
-            logger.warning(f"Closing leftover DLT acquisition '{acq_id}'")
-            _dlt_exec(self._dlt, f"stop --id {acq_id}")
+        for attempt in range(2):
+            try:
+                self.ensure_dlt_running(output_dir)
+                break
+            except (ConnectionError, TimeoutError, RuntimeError):
+                if attempt == 1:
+                    raise
+                logger.warning("DataLinkTarget did not respond; restarting it and retrying.")
+                self._restart_dlt_service(output_dir)
 
         channels = list(channels)
+
+        # Close any stale acquisitions from earlier failed runs so the service can
+        # accept a clean stream start on the vendor's expected per-channel ports.
+        self._close_active_dlt_streams()
 
         # Configure record for continuous streaming
         self._cmd("REC:TRIG:ARM:MODE MANUal")
@@ -389,10 +427,138 @@ class IDQTimeController:
         self._cmd("REC:STOP")
         self._cmd("REC:NUM 0")  # infinite records
 
+        self._start_stream_channels(channels, callback)
+        self._cmd("REC:PLAY")
+        logger.info(f"Timestamp stream started on channels {channels}")
+
+    def acquire_timestamp_stream(
+        self,
+        channels: Iterable[int],
+        callback: Callable[[int, np.ndarray], None],
+        duration_s: float,
+        output_dir: Optional[Path] = None,
+        timeout_s: float = 30.0,
+    ) -> None:
+        """Acquire a timed timestamp stream using the vendor lifecycle.
+
+        This mirrors the vendor example flow: configure a single timed record,
+        start the DLT streams, wait until the record and DLT transfer have
+        completed, then cleanly stop the stream. This avoids truncating the
+        acquisition mid-flush when the Python process stops the stream on a
+        wall-time deadline.
+        """
+        if output_dir is None:
+            output_dir = _DEFAULT_DLT_OUTPUT_DIR
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        for attempt in range(2):
+            try:
+                self.ensure_dlt_running(output_dir)
+                break
+            except (ConnectionError, TimeoutError, RuntimeError):
+                if attempt == 1:
+                    raise
+                self._restart_dlt_service(output_dir)
+
+        channels = list(channels)
+        self._close_active_dlt_streams()
+
+        self._cmd("REC:TRIG:ARM:MODE MANUal")
+        self._cmd("REC:ENABle ON")
+        self._cmd("REC:STOP")
+        self._cmd("REC:NUM 1")
+        self._cmd(f"REC:DURation {int(duration_s * 1e12)}")
+
+        self._start_stream_channels(channels, callback)
+        self._cmd("REC:PLAY")
+
+        try:
+            self.wait_for_timestamp_stream_idle(timeout_s=timeout_s)
+        finally:
+            self.stop_timestamp_stream()
+
+        logger.info(f"Timed timestamp stream completed for channels {channels} (duration={duration_s:.3f}s)")
+
+    def wait_for_timestamp_stream_idle(self, timeout_s: float = 30.0):
+        """Wait until the acquisition has finished and the DLT is quiescent."""
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            stage = ""
+            try:
+                stage = self._query("REC:STAGe?").upper()
+            except Exception:
+                stage = ""
+
+            status_ok = False
+            for channel, stream_id in list(self._stream_ids.items()):
+                if self._dlt is None:
+                    continue
+                try:
+                    info = _dlt_exec(self._dlt, f"status --id {stream_id}")
+                except Exception:
+                    info = {}
+                if not isinstance(info, dict):
+                    continue
+                if info.get("error"):
+                    raise RuntimeError(f"timestamp stream error on channel {channel}: {info.get('error')}")
+                inactivity = float(info.get("inactivity", 0.0) or 0.0)
+                acquisitions = int(info.get("acquisitions_count", 0) or 0)
+                if acquisitions > 0 and inactivity >= 1.0:
+                    status_ok = True
+                    break
+
+            if stage != "PLAYING" and status_ok:
+                return
+            time.sleep(0.05)
+
+        raise TimeoutError(
+            f"Timed out waiting for timestamp stream completion after {timeout_s}s"
+        )
+
+    def stop_timestamp_stream(self):
+        """Stop an active timestamp stream and join the receiver threads."""
+        if not self._stream_clients:
+            return
+
+        try:
+            self._cmd("REC:STOP")
+        except TimeoutError:
+            logger.warning("REC:STOP timed out; continuing stream shutdown")
+
+        for ch in list(self._stream_clients):
+            try:
+                self._cmd(f"RAW{ch}:SEND OFF")
+            except TimeoutError:
+                logger.warning(f"RAW{ch}:SEND OFF timed out; ignoring")
+            except Exception:
+                pass
+
+            stream_id = self._stream_ids.get(ch)
+            if stream_id is not None and self._dlt is not None:
+                try:
+                    _dlt_exec(self._dlt, f"stop --id {stream_id}")
+                except Exception:
+                    logger.warning(f"Could not stop DLT stream {stream_id} for channel {ch}")
+
+        for client in self._stream_clients.values():
+            client.join(timeout=2.0)
+        self._stream_clients.clear()
+        self._stream_ports.clear()
+        self._stream_ids.clear()
+
+        logger.info("Timestamp stream stopped")
+
+    def _start_stream_channels(
+        self,
+        channels: Iterable[int],
+        callback: Callable[[int, np.ndarray], None],
+    ):
+        """Start a stream client and register the DLT acquisition for each channel."""
         for ch in channels:
             self._cmd(f"RAW{ch}:ERRORS:CLEAR")
 
             recv_port = _STREAM_BASE_PORT + ch
+            self._stream_ports[ch] = recv_port
             client = _StreamClient(
                 addr=f"tcp://localhost:{recv_port}",
                 channel=ch,
@@ -400,45 +566,28 @@ class IDQTimeController:
             )
             client.start()
             self._stream_clients[ch] = client
+            time.sleep(0.05)
 
             command = (
                 f"start-stream --channel {ch} "
                 f"--address {self.address} "
                 f"--stream-port {recv_port}"
             )
-            _dlt_exec(self._dlt, command)
+            answer = _dlt_exec(self._dlt, command)
+            self._stream_ids[ch] = answer["id"]
+
+            deadline = time.time() + 3.0
+            while time.time() < deadline:
+                try:
+                    active = _dlt_exec(self._dlt, "list") or []
+                except Exception:
+                    active = []
+                if self._stream_ids[ch] in active:
+                    break
+                time.sleep(0.05)
+
+            time.sleep(0.05)
             self._cmd(f"RAW{ch}:SEND ON")
-
-        self._cmd("REC:PLAY")
-        logger.info(f"Timestamp stream started on channels {channels}")
-
-    def stop_timestamp_stream(self):
-        """Stop an active timestamp stream and join the receiver threads."""
-        if not self._stream_clients:
-            return
-
-        self._cmd("REC:STOP")
-
-        for ch in list(self._stream_clients):
-            try:
-                self._cmd(f"RAW{ch}:SEND OFF")
-            except Exception:
-                pass
-
-        # Tell the DLT to stop all active acquisitions so ports are freed
-        if self._dlt is not None:
-            try:
-                active = _dlt_exec(self._dlt, "list") or []
-                for acq_id in active:
-                    _dlt_exec(self._dlt, f"stop --id {acq_id}")
-            except Exception:
-                pass
-
-        for client in self._stream_clients.values():
-            client.join()
-        self._stream_clients.clear()
-
-        logger.info("Timestamp stream stopped")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -446,16 +595,37 @@ class IDQTimeController:
 
     def _cmd(self, command: str):
         """Send a SCPI command and discard the response."""
-        self._tc.send_string(command)
-        response = self._tc.recv().decode("utf-8")
+        try:
+            self._tc.send_string(command)
+            response = self._tc.recv().decode("utf-8")
+        except zmq.Again as exc:
+            raise TimeoutError(f"SCPI command timed out: {command}") from exc
         logger.debug(f"CMD  {command!r} -> {response!r}")
 
     def _query(self, command: str) -> str:
         """Send a SCPI query and return the response string."""
-        self._tc.send_string(command)
-        response = self._tc.recv().decode("utf-8")
+        try:
+            self._tc.send_string(command)
+            response = self._tc.recv().decode("utf-8")
+        except zmq.Again as exc:
+            raise TimeoutError(f"SCPI query timed out: {command}") from exc
         logger.debug(f"QURY {command!r} -> {response!r}")
         return response
+
+    def _close_active_dlt_streams(self):
+        """Stop any DLT acquisitions still running from previous attempts."""
+        if self._dlt is None:
+            return
+        try:
+            active = _dlt_exec(self._dlt, "list") or []
+        except Exception:
+            return
+
+        for acquisition_id in active:
+            try:
+                _dlt_exec(self._dlt, f"stop --id {acquisition_id}")
+            except Exception:
+                pass
 
     def _run_record(self, duration_ps: int):
         """Run a single timed acquisition and block until it finishes."""
@@ -467,6 +637,97 @@ class IDQTimeController:
         self._cmd("REC:PLAY")
         while self._query("REC:STAGe?").upper() == "PLAYING":
             time.sleep(0.05)
+
+    def _is_dlt_healthy(self, output_dir: Path) -> bool:
+        """Return True if the DLT service is reachable and can answer a list command."""
+        if not _check_host("localhost", DLT_PORT):
+            return False
+        try:
+            if self._dlt is None:
+                self._dlt = _dlt_connect(output_dir, self.dlt_path)
+            _dlt_exec(self._dlt, "list")
+            return True
+        except Exception:
+            return False
+
+    def _launch_dlt_service(self, output_dir: Path):
+        """Start the vendor DLT service in a writable working directory."""
+        dlt_bin = self.dlt_path if self.dlt_path.is_file() else self.dlt_path / "DataLinkTargetService.exe"
+        if not dlt_bin.exists():
+            raise FileNotFoundError(f"DataLinkTargetService binary not found: {dlt_bin}")
+
+        dlt_root = self.dlt_path if self.dlt_path.is_dir() else self.dlt_path.parent
+        config_template = dlt_root / "config" / "DataLinkTargetService.log.conf"
+        log_conf = output_dir / "DataLinkTargetService.log.conf"
+
+        if config_template.exists():
+            with config_template.open() as tmpl, log_conf.open("w") as out:
+                for line in tmpl:
+                    out.write(
+                        line.replace(
+                            "log4cplus.appender.AppenderFile.File=",
+                            f"log4cplus.appender.AppenderFile.File={output_dir}/",
+                        )
+                    )
+            self._dlt_process = subprocess.Popen(
+                [str(dlt_bin), "-f", str(output_dir), "--logconf", str(log_conf)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(output_dir),
+            )
+        else:
+            self._dlt_process = subprocess.Popen(
+                [str(dlt_bin), "-f", str(output_dir)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(output_dir),
+            )
+
+    def _restart_dlt_service(self, output_dir: Path):
+        """Force the DLT service to restart if it has died or stopped responding."""
+        if self._dlt is not None:
+            try:
+                self._dlt.close()
+            except Exception:
+                pass
+            self._dlt = None
+        if self._dlt_process is not None and self._dlt_process.poll() is None:
+            try:
+                self._dlt_process.terminate()
+                self._dlt_process.wait(timeout=2.0)
+            except Exception:
+                try:
+                    self._dlt_process.kill()
+                except Exception:
+                    pass
+        self._dlt_process = None
+        self._launch_dlt_service(output_dir)
+
+    def ensure_dlt_running(self, output_dir: Optional[Path] = None):
+        """Ensure the DataLinkTargetService is running and responsive.
+
+        This is useful before starting any streaming or file-based timestamp
+        acquisition. If the service is dead or the local port does not answer,
+        the helper restarts it.
+        """
+        if output_dir is None:
+            output_dir = _DEFAULT_DLT_OUTPUT_DIR
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if self._is_dlt_healthy(output_dir):
+            return
+
+        self._restart_dlt_service(output_dir)
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            if self._is_dlt_healthy(output_dir):
+                return
+            time.sleep(0.2)
+
+        raise ConnectionError(
+            "DataLinkTargetService did not respond after restart; "
+            f"checked {self.dlt_path}."
+        )
 
 
 # ------------------------------------------------------------------
@@ -548,8 +809,6 @@ def _check_host(address: str, port: int) -> bool:
 
 def _dlt_connect(output_dir: Path, dlt_path: Path = DEFAULT_DLT_PATH) -> zmq.Socket:
     """Start the DataLinkTargetService if needed and return a ZMQ socket."""
-    import json
-
     if dlt_path.is_dir():
         dlt_bin = dlt_path / "DataLinkTargetService.exe"
         dlt_dir = dlt_path
@@ -576,16 +835,30 @@ def _dlt_connect(output_dir: Path, dlt_path: Path = DEFAULT_DLT_PATH) -> zmq.Soc
             subprocess.Popen(
                 [str(dlt_bin), "-f", str(output_dir), "--logconf", str(log_conf)],
                 stdout=subprocess.PIPE,
+                cwd=str(output_dir),
             )
         else:
             subprocess.Popen(
                 [str(dlt_bin), "-f", str(output_dir)],
                 stdout=subprocess.PIPE,
+                cwd=str(output_dir),
             )
-        time.sleep(0.2)
+
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            if _check_host("localhost", DLT_PORT):
+                break
+            time.sleep(0.2)
+        if not _check_host("localhost", DLT_PORT):
+            raise ConnectionError(
+                "DataLinkTargetService did not start listening on localhost:6060. "
+                f"Checked executable at {dlt_bin}."
+            )
 
     context = zmq.Context()
     sock = context.socket(zmq.REQ)
+    sock.setsockopt(zmq.RCVTIMEO, 2000)
+    sock.setsockopt(zmq.SNDTIMEO, 2000)
     sock.connect(f"tcp://localhost:{DLT_PORT}")
     return sock
 
@@ -593,8 +866,12 @@ def _dlt_connect(output_dir: Path, dlt_path: Path = DEFAULT_DLT_PATH) -> zmq.Soc
 def _dlt_exec(sock: zmq.Socket, command: str):
     import json
 
-    sock.send_string(command)
-    raw = sock.recv().decode("utf-8")
+    try:
+        sock.send_string(command)
+        raw = sock.recv().decode("utf-8")
+    except zmq.Again as exc:
+        raise TimeoutError(f"DataLinkTarget did not respond to command: {command!r}") from exc
+
     answer = json.loads(raw) if raw.strip() else None
 
     if isinstance(answer, dict) and "error" in answer:

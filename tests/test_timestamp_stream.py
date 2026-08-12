@@ -1,74 +1,85 @@
-"""Simple test script for IDQTimeController timestamp streaming.
+"""Vendor-style timestamp streaming smoke test.
 
-Connects to the Time Controller, configures channels 1 and 4, streams
-timestamps for a fixed duration, then prints a summary of what was received.
-
-Run with:
-    python tests/test_timestamp_stream.py
+This mirrors the vendor example flow more closely than a plain wall-time sleep:
+- configure the input channels
+- start the DLT stream for each channel
+- arm and play a timed record
+- wait for the acquisition to complete and the DLT to go idle
+- then stop the stream cleanly and inspect the received timestamps
 """
 
+import socket
 import time
-import threading
+
 import numpy as np
+import pytest
+
 from labtools.devices.idq_time_controller import IDQTimeController
 
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
-
 TC_ADDRESS = "169.254.99.159"
-STREAM_DURATION_S = 5.0
+STREAM_DURATION_S = 3
 CHANNELS = [2, 4]
 THRESHOLD_V = 0.1
-
-# ------------------------------------------------------------------
-# Callback and accumulator
-# ------------------------------------------------------------------
-
-received: dict[int, list[np.ndarray]] = {ch: [] for ch in CHANNELS}
-lock = threading.Lock()
+MIN_DATA_SPAN_S = 0.5
 
 
-def on_chunk(channel: int, timestamps_ps: np.ndarray):
-    with lock:
+def _time_controller_available(address: str = TC_ADDRESS, port: int = 5555) -> bool:
+    sock = socket.socket()
+    sock.settimeout(1)
+    try:
+        sock.connect((address, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def _summarise_channel(chunks: list[np.ndarray]) -> tuple[int, float]:
+    if not chunks:
+        return 0, 0.0
+    all_ts = np.concatenate(chunks)
+    total = int(len(all_ts))
+    if total < 2:
+        span_s = 0.0
+    else:
+        span_s = float((all_ts.max() - all_ts.min()) / 1e12)
+    return total, span_s
+
+
+def test_timestamp_stream_lifecycle_smoke():
+    if not _time_controller_available():
+        pytest.skip(f"Time Controller not reachable at {TC_ADDRESS}:{5555}")
+
+    received: dict[int, list[np.ndarray]] = {ch: [] for ch in CHANNELS}
+
+    def on_chunk(channel: int, timestamps_ps: np.ndarray):
         received[channel].append(timestamps_ps)
-    print(f"  [ch{channel}] chunk: {len(timestamps_ps)} timestamps")
 
-
-# ------------------------------------------------------------------
-# Main
-# ------------------------------------------------------------------
-
-def main():
     with IDQTimeController(TC_ADDRESS) as tc:
-        print(f"Connected to Time Controller at {TC_ADDRESS}\n")
-
         for ch in CHANNELS:
             tc.configure_channel(ch, threshold_v=THRESHOLD_V, edge="rising")
-            print(f"Channel {ch} configured: threshold={THRESHOLD_V}V, edge=rising")
 
-        print(f"\nStarting timestamp stream on channels {CHANNELS} "
-              f"for {STREAM_DURATION_S}s ...\n")
+        tc.acquire_timestamp_stream(
+            channels=CHANNELS,
+            callback=on_chunk,
+            duration_s=STREAM_DURATION_S,
+            timeout_s=30
+        )
 
-        tc.start_timestamp_stream(channels=CHANNELS, callback=on_chunk)
-        time.sleep(STREAM_DURATION_S)
-        tc.stop_timestamp_stream()
+    summary = {}
+    for ch in CHANNELS:
+        total, span_s = _summarise_channel(received[ch])
+        summary[ch] = {"total": total, "span_s": span_s}
+        print(
+            f"Channel {ch}: total timestamps={total}, global span={span_s:.3f}s, "
+            f"chunks={len(received[ch])}"
+        )
+        assert total > 0, f"No timestamps received on channel {ch}"
+        assert span_s > MIN_DATA_SPAN_S, (
+            f"Timestamp span too short on channel {ch}: {span_s:.3f}s "
+            f"(threshold={MIN_DATA_SPAN_S:.3f}s)"
+        )
 
-        print("\n--- Summary ---")
-        for ch in CHANNELS:
-            chunks = received[ch]
-            total = sum(len(c) for c in chunks)
-            if total > 0:
-                all_ts = np.concatenate(chunks)
-                duration_s = (all_ts[-1] - all_ts[0]) / 1e12
-                rate = total / duration_s if duration_s > 0 else 0.0
-                print(
-                    f"Channel {ch}: {total} timestamps in {len(chunks)} chunks "
-                    f"| span={duration_s:.3f}s | rate≈{rate:.0f} counts/s"
-                )
-            else:
-                print(f"Channel {ch}: no timestamps received")
-
-
-if __name__ == "__main__":
-    main()
+    assert all(summary[ch]["total"] > 0 for ch in CHANNELS)
+    assert all(summary[ch]["span_s"] > MIN_DATA_SPAN_S for ch in CHANNELS)
