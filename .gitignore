@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Test cache
+.pytest_cache/
+
+# Build files
+dist/
+build/
+*.egg-info/
+
+# Experimental data
+*.h5
+*.hdf5
+*.tif
+*.tiff
+*.csv
+
+# Windows
+Thumbs.db
+
+# macOS
+.DS_Store

@@ -1,0 +1,28 @@
+[project]
+name = "lab-tools"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "h5py>=3.16.0",
+    "ipykernel>=6.31.0",
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.6.2",
+    "lmfit>=1.3.4",
+    "matplotlib>=3.11.1",
+    "napari>=0.8.0",
+    "numpy>=2.5.1",
+    "pandas>=3.0.5",
+    "pyqt6>=6.11.0",
+    "pyserial>=3.5",
+    "pyvisa>=1.16.2",
+    "pyvisa-py>=0.8.1",
+    "scipy>=1.18.0",
+    "tifffile>=2026.7.14",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
