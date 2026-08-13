@@ -276,6 +276,8 @@ class HoribaSpectrometer:
             raise ValueError(f"mode must be 'single', 'median', or 'sigma_clip', got {mode!r}")
         if dark_frame_mode not in ("none", "single", "per_frame"):
             raise ValueError(f"dark_frame_mode must be 'none', 'single', or 'per_frame', got {dark_frame_mode!r}")
+        if mode == "single" and n_frames != 1:
+            raise ValueError("n_frames must be 1 for mode='single'.")
         if mode in ("median", "sigma_clip") and n_frames < 3:
             raise ValueError(f"n_frames must be >= 3 for mode={mode!r}.")
 

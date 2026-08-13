@@ -94,12 +94,25 @@ class ITC4000:
         return float(self._itc.query("SOUR:CURR?"))
 
     def set_temperature(self, temperature):
-        """Set the TEC target temperature in degrees Celsius."""
-        self._itc.write(f"SOUR:TEMP {temperature}C")
+        """Set the TEC target temperature in degrees Celsius.
+
+        For the ITC4000 series the command is scoped as SOUR2:TEMP, while
+        SOUR:TEMP is the generic TED form and is not the correct readback/query
+        form for this model.
+        """
+        self._itc.write(f"SOUR2:TEMP {temperature}C")
+
+    def get_temperature_setpoint(self):
+        """Return the TEC target temperature setpoint in degrees Celsius."""
+        return float(self._itc.query("SOUR2:TEMP?"))
 
     def get_temperature(self):
-        """Return the TEC set temperature in degrees Celsius."""
-        return float(self._itc.query("SOUR:TEMP?"))
+        """Return the current measured temperature in degrees Celsius.
+
+        The SCPI manual defines the actual sensor reading as a measurement query,
+        not a source setpoint query. For the ITC4001 this is `MEAS:TEMP?`.
+        """
+        return float(self._itc.query("MEAS:TEMP?"))
 
     # ------------------------------------------------------------------
     # Pulse settings

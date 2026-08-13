@@ -1,4 +1,4 @@
-from labtools.gui.horiba_range_gui import main as gui_main
+from labtools.gui.sprectrum_gui_horiba import main as gui_main
 
 
 def main():
