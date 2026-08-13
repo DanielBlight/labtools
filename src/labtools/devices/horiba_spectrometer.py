@@ -232,7 +232,7 @@ class HoribaSpectrometer:
     # Acquisition
     # ------------------------------------------------------------------
 
-    async def get_spectrum(self, exposure_time=None, n_frames=1, mode="single", k_sigma=3.0):
+    async def get_spectrum(self, exposure_time=None, n_frames=1, mode="single", k_sigma=3.0, dark_frame_mode="none"):
         """Acquire a spectrum from the CCD.
 
         Parameters
@@ -256,11 +256,14 @@ class HoribaSpectrometer:
                 standard deviations from the mean. Better SNR than median
                 because clean frames are averaged rather than selected.
                 Requires ``n_frames >= 3``.
-
         k_sigma : float
             Clipping threshold in standard deviations for ``mode="sigma_clip"``
-            (default: 3.0). Cosmic rays typically exceed the mean by 100–1000×
-            so this threshold is conservative.
+            (default: 3.0).
+        dark_frame_mode : str
+            Dark subtraction timing. ``"none"`` disables subtraction,
+            ``"single"`` subtracts one dark frame captured at the start of the
+            acquisition, and ``"per_frame"`` captures a dark frame for each
+            repeated signal frame before subtracting it.
 
         Returns
         -------
@@ -271,6 +274,8 @@ class HoribaSpectrometer:
         """
         if mode not in ("single", "median", "sigma_clip"):
             raise ValueError(f"mode must be 'single', 'median', or 'sigma_clip', got {mode!r}")
+        if dark_frame_mode not in ("none", "single", "per_frame"):
+            raise ValueError(f"dark_frame_mode must be 'none', 'single', or 'per_frame', got {dark_frame_mode!r}")
         if mode in ("median", "sigma_clip") and n_frames < 3:
             raise ValueError(f"n_frames must be >= 3 for mode={mode!r}.")
 
@@ -282,13 +287,20 @@ class HoribaSpectrometer:
         if not await self.ccd.get_acquisition_ready():
             raise RuntimeError("CCD not ready for acquisition.")
 
-        if mode == "single":
-            return await self._acquire_single()
+        if dark_frame_mode == "single":
+            _, dark = await self._acquire_single(open_shutter=False)
 
         frames = []
         for _ in range(n_frames):
-            x_data, y_data = await self._acquire_single()
+            if dark_frame_mode == "per_frame":
+                _, dark = await self._acquire_single(open_shutter=False)
+            x_data, y_data = await self._acquire_single(open_shutter=True)
+            if dark_frame_mode in {"single", "per_frame"}:
+                y_data = y_data - dark
             frames.append(y_data)
+
+        if mode == "single":
+            return x_data, frames[0]
 
         stacked = np.stack(frames)  # shape (n_frames, n_pixels)
 
@@ -302,9 +314,9 @@ class HoribaSpectrometer:
         clean = np.where(mask, np.nan, stacked)
         return x_data, np.nanmean(clean, axis=0)
 
-    async def _acquire_single(self):
+    async def _acquire_single(self, open_shutter=True):
         """Acquire one frame and return (x_data, y_data)."""
-        await self.ccd.acquisition_start(open_shutter=True)
+        await self.ccd.acquisition_start(open_shutter=open_shutter)
         await asyncio.sleep(self._exposure_time + 0.005)
         await self._wait_for_ccd(poll_interval=0.002)
 

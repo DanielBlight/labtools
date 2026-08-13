@@ -1,5 +1,8 @@
+from labtools.gui.horiba_range_gui import main as gui_main
+
+
 def main():
-    print("Hello from lab-tools!")
+    gui_main()
 
 
 if __name__ == "__main__":

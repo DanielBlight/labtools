@@ -3,6 +3,7 @@ import time
 
 
 class ITC4000:
+    DEFAULT_ADDRESS = "USB0::0x1313::0x804A::M00739898::INSTR"
     """Wrapper for the Thorlabs ITC4000 laser diode / TEC controller.
 
     Manages the VISA connection and provides safe startup/shutdown sequencing
@@ -24,7 +25,9 @@ class ITC4000:
         # on exit: current ramped to threshold, diode off, TEC off
     """
 
-    def __init__(self, address, threshold_current=0.049):
+    def __init__(self, address=None, threshold_current=0.049):
+        if address is None:
+            address = self.DEFAULT_ADDRESS
         self._rm = pyvisa.ResourceManager()
         self._itc = self._rm.open_resource(address)
         self.threshold_current = threshold_current

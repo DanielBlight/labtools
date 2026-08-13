@@ -14,6 +14,7 @@ async def get_range_spectrum(
     background_subtract=False,
     n_frames=1,
     mode="single",
+    dark_frame_mode="per_frame",
 ):
     """Acquire a stitched spectrum over a wavelength range.
 
@@ -33,8 +34,7 @@ async def get_range_spectrum(
     stitch_pixel_overlap : int
         Pixel overlap between adjacent captures for stitching (default: 20).
     background_subtract : bool
-        If True, take a dark frame (shutter closed) immediately after each
-        signal frame and subtract it per wavelength step.
+        If True, subtract a dark spectrum using the selected dark timing mode.
     n_frames : int
         Number of frames per wavelength step, passed to
         :meth:`~HoribaSpectrometer.get_spectrum` (default: 1).
@@ -42,6 +42,11 @@ async def get_range_spectrum(
         Frame combination mode passed to
         :meth:`~HoribaSpectrometer.get_spectrum`:
         ``"single"``, ``"median"``, or ``"sigma_clip"``.
+    dark_frame_mode : str
+        Dark subtraction timing when ``background_subtract`` is enabled.
+        ``"single"`` acquires one dark frame at the start of the full scan,
+        while ``"per_frame"`` acquires a dark frame for each repeated signal
+        acquisition before subtracting it.
 
     Returns
     -------
@@ -50,6 +55,13 @@ async def get_range_spectrum(
     y_values : numpy.ndarray
         Intensity values.
     """
+    if background_subtract and dark_frame_mode not in {"single", "per_frame"}:
+        raise ValueError(f"dark_frame_mode must be 'single' or 'per_frame' when background_subtract is True, got {dark_frame_mode!r}")
+
+    static_dark = None
+    if background_subtract and dark_frame_mode == "single":
+        _, static_dark = await _acquire_dark(spec)
+
     center_wavelengths = await spec.ccd.range_mode_center_wavelengths(
         spec.mono.id(), start_wavelength, end_wavelength, stitch_pixel_overlap
     )
@@ -63,11 +75,18 @@ async def get_range_spectrum(
         if i == 0:
             await spec.set_wavelength(center_wavelength)
 
-        x_data, y_data = await spec.get_spectrum(n_frames=n_frames, mode=mode)
-
+        frame_dark_mode = "none"
         if background_subtract:
-            _, y_dark = await _acquire_dark(spec)
-            y_data = y_data - y_dark
+            frame_dark_mode = "none" if static_dark is not None else dark_frame_mode
+
+        x_data, y_data = await spec.get_spectrum(
+            n_frames=n_frames,
+            mode=mode,
+            dark_frame_mode=frame_dark_mode,
+        )
+
+        if background_subtract and static_dark is not None:
+            y_data = y_data - static_dark
 
         # LinearSpectraStitch expects [x_values, [y_values]]
         captures.append([list(x_data), [list(y_data)]])
