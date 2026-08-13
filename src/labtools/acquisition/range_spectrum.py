@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 
 import numpy as np
@@ -8,14 +10,14 @@ from horiba_sdk.core.stitching import LinearSpectraStitch
 
 async def get_range_spectrum(
     spec,
-    start_wavelength,
-    end_wavelength,
-    stitch_pixel_overlap=20,
-    background_subtract=False,
-    n_frames=1,
-    mode="single",
-    dark_frame_mode="per_frame",
-):
+    start_wavelength: float,
+    end_wavelength: float,
+    stitch_pixel_overlap: int = 20,
+    background_subtract: bool = False,
+    n_frames: int = 1,
+    mode: str = "single",
+    dark_frame_mode: str = "per_frame",
+) -> tuple[np.ndarray, np.ndarray]:
     """Acquire a stitched spectrum over a wavelength range.
 
     Steps through the centre wavelengths required to cover

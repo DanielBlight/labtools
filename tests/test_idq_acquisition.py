@@ -1,36 +1,14 @@
-﻿import socket
-
 import numpy as np
-import pytest
 
 from labtools.devices.idq_time_controller import IDQTimeController
 
-TC_ADDRESS = "169.254.99.159"
 THRESHOLD_V = 0.1
 HIST_STOP_CHANNEL = 2
 HIST_REF_CHANNEL = 4
 
 
-def _time_controller_available(address: str = TC_ADDRESS, port: int = 5555) -> bool:
-    sock = socket.socket()
-    sock.settimeout(1)
-    try:
-        sock.connect((address, port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
-
-
-def _device_for_smoke_test():
-    if not _time_controller_available():
-        pytest.skip(f"Time Controller not reachable at {TC_ADDRESS}:{5555}")
-    return IDQTimeController(TC_ADDRESS)
-
-
-def test_get_counts_smoke():
-    with _device_for_smoke_test() as tc:
+def test_get_counts_smoke(time_controller_address):
+    with IDQTimeController(time_controller_address) as tc:
         tc.configure_channel(2, threshold_v=THRESHOLD_V, edge="rising")
         counts = tc.get_counts(channel=2, duration_s=0.5)
 
@@ -38,8 +16,8 @@ def test_get_counts_smoke():
         assert counts >= 0
 
 
-def test_get_histogram_smoke():
-    with _device_for_smoke_test() as tc:
+def test_get_histogram_smoke(time_controller_address):
+    with IDQTimeController(time_controller_address) as tc:
         tc.configure_channel(2, threshold_v=THRESHOLD_V, edge="rising")
         tc.configure_channel(4, threshold_v=THRESHOLD_V, edge="rising")
         tc.configure_histogram(

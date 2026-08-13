@@ -1,5 +1,8 @@
-import u6
+from __future__ import annotations
+
 import time
+
+import u6
 
 
 class LabJackU6:
@@ -27,7 +30,7 @@ class LabJackU6:
     def i2c(self, *args, **kwargs):
         return self._dev.i2c(*args, **kwargs)
 
-    def set_digital_out(self, pin, state):
+    def set_digital_out(self, pin: int, state: int) -> None:
         """Set a digital output pin high (state=1) or low (state=0)."""
         self._dev.setDOState(pin, state)
 
@@ -35,11 +38,11 @@ class LabJackU6:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def close(self):
+    def close(self) -> None:
         self._dev.close()
 
-    def __enter__(self):
+    def __enter__(self) -> LabJackU6:
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_) -> None:
         self.close()

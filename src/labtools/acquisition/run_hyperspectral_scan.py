@@ -36,7 +36,6 @@ BANDS = [
     ("NiV", 875, 890)
 ]
 
-ITC4000_ADDRESS = 'USB0::0x1313::0x804A::M00739898::INSTR'
 OUTPUT_DIR      = "C:\\Users\\Legend\\Documents\\test\\Hyperspectral maps\\"
 
 OUTPUT_FOLDER = os.path.join(OUTPUT_DIR, datetime.now().strftime("%Y-%m-%d-%H.%M"))
@@ -102,7 +101,7 @@ async def run():
         await spec.set_wavelength(START_WL)
 
         # --- laser ---
-        laser = ITC4000(ITC4000_ADDRESS)
+        laser = ITC4000(ITC4000.DEFAULT_ADDRESS)
 
         if DARK_SUBTRACT:
             # acquire dark with laser off

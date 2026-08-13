@@ -1,9 +1,11 @@
-import pyvisa
+from __future__ import annotations
+
 import time
+
+import pyvisa
 
 
 class ITC4000:
-    DEFAULT_ADDRESS = "USB0::0x1313::0x804A::M00739898::INSTR"
     """Wrapper for the Thorlabs ITC4000 laser diode / TEC controller.
 
     Manages the VISA connection and provides safe startup/shutdown sequencing
@@ -25,7 +27,9 @@ class ITC4000:
         # on exit: current ramped to threshold, diode off, TEC off
     """
 
-    def __init__(self, address=None, threshold_current=0.049):
+    DEFAULT_ADDRESS = "USB0::0x1313::0x804A::M00739898::INSTR"
+
+    def __init__(self, address: str | None = None, threshold_current: float = 0.049):
         if address is None:
             address = self.DEFAULT_ADDRESS
         self._rm = pyvisa.ResourceManager()
@@ -36,11 +40,11 @@ class ITC4000:
     # Laser diode
     # ------------------------------------------------------------------
 
-    def enable_diode(self):
+    def enable_diode(self) -> None:
         """Turn on the laser diode output."""
         self._itc.write("OUTP ON")
 
-    def disable_diode(self):
+    def disable_diode(self) -> None:
         """Ramp current to threshold then turn off the laser diode output."""
         self.set_current(self.threshold_current)
         self._itc.write("OUTP OFF")
@@ -49,11 +53,11 @@ class ITC4000:
     # TEC
     # ------------------------------------------------------------------
 
-    def enable_tec(self):
+    def enable_tec(self) -> None:
         """Turn on the TEC."""
         self._itc.write("OUTP2 ON")
 
-    def disable_tec(self):
+    def disable_tec(self) -> None:
         """Turn off the TEC."""
         self._itc.write("OUTP2 OFF")
 
@@ -61,7 +65,7 @@ class ITC4000:
     # Combined enable / disable (safe sequencing)
     # ------------------------------------------------------------------
 
-    def enable(self, current, tec_stabilise_s=5):
+    def enable(self, current: float, tec_stabilise_s: float = 5) -> None:
         """Enable the TEC then the diode at the requested current.
 
         Parameters
@@ -76,7 +80,7 @@ class ITC4000:
         self.set_current(current)
         self.enable_diode()
 
-    def disable(self):
+    def disable(self) -> None:
         """Safely shut down: ramp diode current to threshold, diode off, TEC off."""
         self.disable_diode()
         self.disable_tec()
@@ -85,15 +89,15 @@ class ITC4000:
     # Current and temperature
     # ------------------------------------------------------------------
 
-    def set_current(self, current):
+    def set_current(self, current: float) -> None:
         """Set the diode drive current in amps."""
         self._itc.write(f"SOUR:CURR {current}")
 
-    def get_current(self):
+    def get_current(self) -> float:
         """Return the set drive current in amps."""
         return float(self._itc.query("SOUR:CURR?"))
 
-    def set_temperature(self, temperature):
+    def set_temperature(self, temperature: float) -> None:
         """Set the TEC target temperature in degrees Celsius.
 
         For the ITC4000 series the command is scoped as SOUR2:TEMP, while
@@ -102,11 +106,11 @@ class ITC4000:
         """
         self._itc.write(f"SOUR2:TEMP {temperature}C")
 
-    def get_temperature_setpoint(self):
+    def get_temperature_setpoint(self) -> float:
         """Return the TEC target temperature setpoint in degrees Celsius."""
         return float(self._itc.query("SOUR2:TEMP?"))
 
-    def get_temperature(self):
+    def get_temperature(self) -> float:
         """Return the current measured temperature in degrees Celsius.
 
         The SCPI manual defines the actual sensor reading as a measurement query,
@@ -118,27 +122,31 @@ class ITC4000:
     # Pulse settings
     # ------------------------------------------------------------------
 
-    def set_pulse_frequency(self, frequency):
+    def set_pulse_frequency(self, frequency: float) -> None:
         """Set the pulse frequency in Hz."""
         self._itc.write(f"SOURce:PULSe:PERiod {1 / frequency}")
 
-    def get_pulse_frequency(self):
+    def get_pulse_frequency(self) -> float:
         """Return the pulse frequency in Hz."""
         return 1 / float(self._itc.query("SOURce:PULSe:PERiod?"))
 
-    def set_pulse_width(self, width):
+    def set_pulse_width(self, width: float) -> None:
+        """Set the pulse width in seconds."""
         self._itc.write(f"SOURce:PULSe:WIDTh {width}")
 
-    def get_pulse_width(self):
+    def get_pulse_width(self) -> float:
+        """Return the pulse width in seconds."""
         return float(self._itc.query("SOURce:PULSe:WIDTh?"))
 
-    def set_pulse_duty_cycle(self, duty_cycle):
+    def set_pulse_duty_cycle(self, duty_cycle: float) -> None:
+        """Set the pulse duty cycle in percent."""
         self._itc.write(f"SOURce:PULSe:DCYCle {duty_cycle}")
 
-    def get_pulse_duty_cycle(self):
+    def get_pulse_duty_cycle(self) -> float:
+        """Return the pulse duty cycle in percent."""
         return float(self._itc.query("SOURce:PULSe:DCYCle?"))
 
-    def set_pulse_hold(self, parameter):
+    def set_pulse_hold(self, parameter: str) -> None:
         """Set whether pulse timing holds 'width' or 'dcycle' constant."""
         options = {"width": "WIDTh", "dcycle": "DCYCle"}
         key = parameter.lower()
@@ -146,20 +154,21 @@ class ITC4000:
             raise ValueError(f"parameter must be 'width' or 'dcycle', got {parameter!r}")
         self._itc.write(f"SOURce:PULSe:HOLD {options[key]}")
 
-    def get_pulse_hold(self):
+    def get_pulse_hold(self) -> str:
+        """Return which pulse parameter is held constant ('WIDT' or 'DCYC')."""
         return self._itc.query("SOURce:PULSe:HOLD?").strip()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def close(self):
+    def close(self) -> None:
         """Release the VISA resource."""
         self._itc.close()
         self._rm.close()
 
-    def __enter__(self):
+    def __enter__(self) -> ITC4000:
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_) -> None:
         self.close()

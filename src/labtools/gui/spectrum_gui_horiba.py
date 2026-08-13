@@ -2,9 +2,8 @@
 import csv
 from pathlib import Path
 
-import numpy as np
 import pyvisa
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -29,26 +28,8 @@ from matplotlib.figure import Figure
 from labtools.acquisition.range_spectrum import get_range_spectrum
 from labtools.devices.horiba_spectrometer import HoribaSpectrometer
 from labtools.devices.itc4000 import ITC4000
-
-
-class AsyncTaskRunner(QObject):
-    """Run an async coroutine in a worker thread and forward the result to the UI thread."""
-
-    finished = pyqtSignal(object)
-    failed = pyqtSignal(str)
-
-    def __init__(self, coroutine_factory):
-        super().__init__()
-        self.coroutine_factory = coroutine_factory
-
-    @pyqtSlot()
-    def run(self):
-        try:
-            result = asyncio.run(self.coroutine_factory())
-        except Exception as exc:  # pragma: no cover - UI path only
-            self.failed.emit(str(exc))
-        else:
-            self.finished.emit(result)
+from labtools.gui.async_runner import AsyncTaskRunner
+from labtools.gui.background import apply_background_subtraction, parse_background_csv
 
 
 class HoribaRangeWindow(QMainWindow):
@@ -317,24 +298,7 @@ class HoribaRangeWindow(QMainWindow):
             return None
 
         try:
-            with open(path, newline="") as fh:
-                rows = [row for row in csv.reader(fh) if row and not all(cell.strip() == "" for cell in row)]
-            if not rows:
-                raise ValueError("Background CSV is empty.")
-
-            data = []
-            start_index = 0
-            if len(rows[0]) >= 2 and rows[0][0].strip().lower() in {"wavelength", "wl", "x", "x_data"}:
-                start_index = 1
-            for row in rows[start_index:]:
-                if len(row) < 2:
-                    continue
-                data.append((float(row[0]), float(row[1])))
-            if not data:
-                raise ValueError("Background CSV does not contain wavelength, intensity pairs.")
-
-            x_vals, y_vals = zip(*data)
-            self.background_spectrum = (np.asarray(x_vals, dtype=float), np.asarray(y_vals, dtype=float))
+            self.background_spectrum = parse_background_csv(path)
             self.background_status.setText(f"Background loaded from {Path(path).name}")
             self.set_status("Background spectrum loaded.")
             self.background_mode.setCurrentText("Load background CSV")
@@ -345,15 +309,7 @@ class HoribaRangeWindow(QMainWindow):
             return None
 
     def _apply_background_subtraction(self, x_data, y_data):
-        if self.background_spectrum is None:
-            raise ValueError("No background spectrum available. Capture a dark frame or load a background CSV first.")
-
-        bg_x, bg_y = self.background_spectrum
-        x_arr = np.asarray(x_data)
-        if bg_x.shape != x_arr.shape or not np.allclose(bg_x, x_arr, rtol=0, atol=1e-8):
-            raise ValueError("Background wavelength values must be identical to the acquired spectrum wavelength values.")
-
-        return np.asarray(y_data, dtype=float) - np.asarray(bg_y, dtype=float)
+        return apply_background_subtraction(x_data, y_data, self.background_spectrum)
 
     def _dark_frame_mode(self):
         if not self.use_background.isChecked() or self.background_mode.currentText() != "Capture dark frame":

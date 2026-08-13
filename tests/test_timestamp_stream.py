@@ -8,31 +8,14 @@ This mirrors the vendor example flow more closely than a plain wall-time sleep:
 - then stop the stream cleanly and inspect the received timestamps
 """
 
-import socket
-import time
-
 import numpy as np
-import pytest
 
 from labtools.devices.idq_time_controller import IDQTimeController
 
-TC_ADDRESS = "169.254.99.159"
 STREAM_DURATION_S = 3
 CHANNELS = [2, 4]
 THRESHOLD_V = 0.1
 MIN_DATA_SPAN_S = 0.5
-
-
-def _time_controller_available(address: str = TC_ADDRESS, port: int = 5555) -> bool:
-    sock = socket.socket()
-    sock.settimeout(1)
-    try:
-        sock.connect((address, port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
 
 
 def _summarise_channel(chunks: list[np.ndarray]) -> tuple[int, float]:
@@ -47,16 +30,13 @@ def _summarise_channel(chunks: list[np.ndarray]) -> tuple[int, float]:
     return total, span_s
 
 
-def test_timestamp_stream_lifecycle_smoke():
-    if not _time_controller_available():
-        pytest.skip(f"Time Controller not reachable at {TC_ADDRESS}:{5555}")
-
+def test_timestamp_stream_lifecycle_smoke(time_controller_address):
     received: dict[int, list[np.ndarray]] = {ch: [] for ch in CHANNELS}
 
     def on_chunk(channel: int, timestamps_ps: np.ndarray):
         received[channel].append(timestamps_ps)
 
-    with IDQTimeController(TC_ADDRESS) as tc:
+    with IDQTimeController(time_controller_address) as tc:
         for ch in CHANNELS:
             tc.configure_channel(ch, threshold_v=THRESHOLD_V, edge="rising")
 

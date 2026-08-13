@@ -1,4 +1,4 @@
-"""IDQuantique Time Controller wrapper.
+"""IDQuantique Time Controller SCPI wrapper.
 
 Wraps the ZMQ SCPI interface into a class with methods for the three
 acquisition modes used in this lab:
@@ -10,13 +10,15 @@ acquisition modes used in this lab:
 
 The class does not depend on the vendor example utilities directly; all SCPI
 commands are issued through the private :meth:`_cmd` / :meth:`_query` helpers
-so the communication layer is easy to swap later if needed.
+so the communication layer is easy to swap later if needed. DataLinkTarget
+process management and the streaming transport live in
+:mod:`labtools.devices.idq_time_controller.dlt`.
 
 Requirements
 ------------
 * ``pyzmq`` must be installed in the environment.
 * For timestamp streaming the DataLinkTargetService (DLT) executable must be
-  reachable; its default path is ``DEFAULT_DLT_PATH`` below.
+  reachable; its default path is ``dlt.DEFAULT_DLT_PATH``.
 
 Usage example
 -------------
@@ -40,18 +42,20 @@ Usage example
         tc.stop_timestamp_stream()
 """
 
-import re
-import time
+from __future__ import annotations
+
 import logging
-import socket
+import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
-from threading import Thread
 from typing import Callable, Dict, Iterable, Optional
 
-import zmq
 import numpy as np
+import zmq
+
+from labtools.devices.idq_time_controller import dlt
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +77,6 @@ def _parse_numeric_response(raw: str, *, cast: type = float):
 # ------------------------------------------------------------------
 
 SCPI_PORT = 5555
-DLT_PORT = 6060
-DEFAULT_DLT_PATH = Path("C:/Program Files/IDQ/Time Controller/packages/ScpiClient")
 _DEFAULT_DLT_OUTPUT_DIR = Path(tempfile.gettempdir()) / "labtools_idq_dlt"
 
 # The vendor RAW channel block name for channel n is RAW<n>.
@@ -101,7 +103,7 @@ class IDQTimeController:
     def __init__(
         self,
         address: str,
-        dlt_path: Path = DEFAULT_DLT_PATH,
+        dlt_path: Path = dlt.DEFAULT_DLT_PATH,
     ):
         self.address = address
         self.dlt_path = dlt_path
@@ -109,8 +111,8 @@ class IDQTimeController:
         self._context: Optional[zmq.Context] = None
         self._tc: Optional[zmq.Socket] = None          # SCPI socket
         self._dlt: Optional[zmq.Socket] = None         # DataLink socket
-        self._dlt_process: Optional[subprocess.Popen] = None
-        self._stream_clients: Dict[int, "_StreamClient"] = {}
+        self._dlt_process = None
+        self._stream_clients: Dict[int, dlt.StreamClient] = {}
         self._stream_ports: Dict[int, int] = {}
         self._stream_ids: Dict[int, str] = {}
 
@@ -118,9 +120,9 @@ class IDQTimeController:
     # Context manager
     # ------------------------------------------------------------------
 
-    def connect(self):
+    def connect(self) -> None:
         """Open the SCPI connection to the Time Controller."""
-        if not _check_host(self.address, SCPI_PORT):
+        if not dlt.check_host(self.address, SCPI_PORT):
             raise ConnectionError(
                 f"Cannot reach Time Controller at {self.address}:{SCPI_PORT}. "
                 "Check network and that the device is powered on."
@@ -132,7 +134,7 @@ class IDQTimeController:
         self._tc.connect(f"tcp://{self.address}:{SCPI_PORT}")
         logger.info(f"Connected to Time Controller at {self.address}")
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Close all open connections and stop any active streams."""
         self.stop_timestamp_stream()
         if self._dlt is not None:
@@ -166,11 +168,11 @@ class IDQTimeController:
             self._context = None
         logger.info("Disconnected from Time Controller")
 
-    def __enter__(self):
+    def __enter__(self) -> IDQTimeController:
         self.connect()
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_) -> None:
         self.disconnect()
 
     # ------------------------------------------------------------------
@@ -494,7 +496,7 @@ class IDQTimeController:
                 if self._dlt is None:
                     continue
                 try:
-                    info = _dlt_exec(self._dlt, f"status --id {stream_id}")
+                    info = dlt.dlt_exec(self._dlt, f"status --id {stream_id}")
                 except Exception:
                     info = {}
                 if not isinstance(info, dict):
@@ -536,7 +538,7 @@ class IDQTimeController:
             stream_id = self._stream_ids.get(ch)
             if stream_id is not None and self._dlt is not None:
                 try:
-                    _dlt_exec(self._dlt, f"stop --id {stream_id}")
+                    dlt.dlt_exec(self._dlt, f"stop --id {stream_id}")
                 except Exception:
                     logger.warning(f"Could not stop DLT stream {stream_id} for channel {ch}")
 
@@ -559,7 +561,7 @@ class IDQTimeController:
 
             recv_port = _STREAM_BASE_PORT + ch
             self._stream_ports[ch] = recv_port
-            client = _StreamClient(
+            client = dlt.StreamClient(
                 addr=f"tcp://localhost:{recv_port}",
                 channel=ch,
                 callback=callback,
@@ -573,13 +575,13 @@ class IDQTimeController:
                 f"--address {self.address} "
                 f"--stream-port {recv_port}"
             )
-            answer = _dlt_exec(self._dlt, command)
+            answer = dlt.dlt_exec(self._dlt, command)
             self._stream_ids[ch] = answer["id"]
 
             deadline = time.time() + 3.0
             while time.time() < deadline:
                 try:
-                    active = _dlt_exec(self._dlt, "list") or []
+                    active = dlt.dlt_exec(self._dlt, "list") or []
                 except Exception:
                     active = []
                 if self._stream_ids[ch] in active:
@@ -617,13 +619,13 @@ class IDQTimeController:
         if self._dlt is None:
             return
         try:
-            active = _dlt_exec(self._dlt, "list") or []
+            active = dlt.dlt_exec(self._dlt, "list") or []
         except Exception:
             return
 
         for acquisition_id in active:
             try:
-                _dlt_exec(self._dlt, f"stop --id {acquisition_id}")
+                dlt.dlt_exec(self._dlt, f"stop --id {acquisition_id}")
             except Exception:
                 pass
 
@@ -640,12 +642,12 @@ class IDQTimeController:
 
     def _is_dlt_healthy(self, output_dir: Path) -> bool:
         """Return True if the DLT service is reachable and can answer a list command."""
-        if not _check_host("localhost", DLT_PORT):
+        if not dlt.check_host("localhost", dlt.DLT_PORT):
             return False
         try:
             if self._dlt is None:
-                self._dlt = _dlt_connect(output_dir, self.dlt_path)
-            _dlt_exec(self._dlt, "list")
+                self._dlt = dlt.dlt_connect(output_dir, self.dlt_path)
+            dlt.dlt_exec(self._dlt, "list")
             return True
         except Exception:
             return False
@@ -728,154 +730,3 @@ class IDQTimeController:
             "DataLinkTargetService did not respond after restart; "
             f"checked {self.dlt_path}."
         )
-
-
-# ------------------------------------------------------------------
-# Streaming helper thread
-# ------------------------------------------------------------------
-
-class _StreamClient(Thread):
-    """Background thread that receives binary timestamp chunks from the DLT
-    and delivers them as numpy arrays to a user callback."""
-
-    def __init__(
-        self,
-        addr: str,
-        channel: int,
-        callback: Callable[[int, np.ndarray], None],
-    ):
-        super().__init__(daemon=True)
-        self.channel = channel
-        self.callback = callback
-        self._addr = addr
-        self._running = False
-
-    def run(self):
-        context = zmq.Context()
-        sock = context.socket(zmq.PAIR)
-        sock.connect(self._addr)
-
-        monitor = sock.get_monitor_socket()
-        poller = zmq.Poller()
-        poller.register(sock, zmq.POLLIN)
-        poller.register(monitor, zmq.POLLIN)
-
-        self._running = True
-        try:
-            while self._running:
-                for ready, *_ in poller.poll(timeout=500):
-                    if ready is sock:
-                        data = sock.recv()
-                        if len(data) == 0:
-                            self._running = False
-                            break
-                        # Each timestamp is a 64-bit little-endian integer (ps)
-                        n = len(data) // 8
-                        if n > 0:
-                            ts = np.frombuffer(data[: n * 8], dtype="<i8")
-                            self.callback(self.channel, ts)
-                    elif ready is monitor:
-                        from zmq.utils.monitor import recv_monitor_message
-                        evt = recv_monitor_message(monitor)
-                        if evt["event"] == zmq.EVENT_DISCONNECTED:
-                            self._running = False
-        finally:
-            poller.unregister(sock)
-            poller.unregister(monitor)
-            monitor.close()
-            sock.close()
-            context.term()
-
-    def join(self, timeout=None):
-        self._running = False
-        super().join(timeout)
-
-
-# ------------------------------------------------------------------
-# Module-level utilities (mirror vendor common.py, no external dep)
-# ------------------------------------------------------------------
-
-def _check_host(address: str, port: int) -> bool:
-    s = socket.socket()
-    s.settimeout(5)
-    try:
-        s.connect((address, port))
-        return True
-    except socket.error:
-        return False
-    finally:
-        s.close()
-
-
-def _dlt_connect(output_dir: Path, dlt_path: Path = DEFAULT_DLT_PATH) -> zmq.Socket:
-    """Start the DataLinkTargetService if needed and return a ZMQ socket."""
-    if dlt_path.is_dir():
-        dlt_bin = dlt_path / "DataLinkTargetService.exe"
-        dlt_dir = dlt_path
-    else:
-        dlt_bin = dlt_path
-        dlt_dir = dlt_path.parent
-
-    if not dlt_bin.exists():
-        raise FileNotFoundError(f"DataLinkTargetService binary not found: {dlt_bin}")
-
-    if not _check_host("localhost", DLT_PORT):
-        config_template = dlt_dir / "config" / "DataLinkTargetService.log.conf"
-        log_conf = output_dir / "DataLinkTargetService.log.conf"
-
-        if config_template.exists():
-            with config_template.open() as tmpl, log_conf.open("w") as out:
-                for line in tmpl:
-                    out.write(
-                        line.replace(
-                            "log4cplus.appender.AppenderFile.File=",
-                            f"log4cplus.appender.AppenderFile.File={output_dir}/",
-                        )
-                    )
-            subprocess.Popen(
-                [str(dlt_bin), "-f", str(output_dir), "--logconf", str(log_conf)],
-                stdout=subprocess.PIPE,
-                cwd=str(output_dir),
-            )
-        else:
-            subprocess.Popen(
-                [str(dlt_bin), "-f", str(output_dir)],
-                stdout=subprocess.PIPE,
-                cwd=str(output_dir),
-            )
-
-        deadline = time.time() + 10.0
-        while time.time() < deadline:
-            if _check_host("localhost", DLT_PORT):
-                break
-            time.sleep(0.2)
-        if not _check_host("localhost", DLT_PORT):
-            raise ConnectionError(
-                "DataLinkTargetService did not start listening on localhost:6060. "
-                f"Checked executable at {dlt_bin}."
-            )
-
-    context = zmq.Context()
-    sock = context.socket(zmq.REQ)
-    sock.setsockopt(zmq.RCVTIMEO, 2000)
-    sock.setsockopt(zmq.SNDTIMEO, 2000)
-    sock.connect(f"tcp://localhost:{DLT_PORT}")
-    return sock
-
-
-def _dlt_exec(sock: zmq.Socket, command: str):
-    import json
-
-    try:
-        sock.send_string(command)
-        raw = sock.recv().decode("utf-8")
-    except zmq.Again as exc:
-        raise TimeoutError(f"DataLinkTarget did not respond to command: {command!r}") from exc
-
-    answer = json.loads(raw) if raw.strip() else None
-
-    if isinstance(answer, dict) and "error" in answer:
-        msg = answer.get("error", {}).get("description", "unknown error")
-        raise RuntimeError(f"DataLinkTarget error: {msg}")
-
-    return answer

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 
 import numpy as np
@@ -53,7 +55,7 @@ class HoribaSpectrometer:
         },
     }
 
-    def __init__(self, preset="syncerity", ccd_index=None):
+    def __init__(self, preset: str | None = "syncerity", ccd_index: int | None = None):
         if preset is not None and preset not in self.PRESETS:
             raise ValueError(f"Unknown preset {preset!r}. Choose 'syncerity' or 'symphony'.")
         self._preset_name = preset
@@ -68,7 +70,7 @@ class HoribaSpectrometer:
     # Connection
     # ------------------------------------------------------------------
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Start ICL, open mono and CCD. Raises RuntimeError if not found."""
         self._device_manager = DeviceManager(start_icl=True)
         await self._device_manager.start()
@@ -85,7 +87,7 @@ class HoribaSpectrometer:
         await self.ccd.open()
         await self._wait_for_ccd()
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Close devices and stop ICL."""
         try:
             if self.ccd is not None:
@@ -107,12 +109,12 @@ class HoribaSpectrometer:
         self,
         grating=None,
         mirror_position=None,
-        gain=2,
-        speed=0,
-        initialize=False,
-        exposure_time=None,
-        roi=None,
-    ):
+        gain: int = 2,
+        speed: int = 0,
+        initialize: bool = False,
+        exposure_time: float | None = None,
+        roi: dict | None = None,
+    ) -> None:
         """Configure mono grating/mirror, CCD gain/speed, exposure, and ROI.
 
         Values default to the active preset and can be overridden individually.
@@ -175,7 +177,7 @@ class HoribaSpectrometer:
 
         await self.set_roi(**roi)
 
-    async def set_wavelength(self, wavelength):
+    async def set_wavelength(self, wavelength: float) -> None:
         """Move the monochromator to a centre wavelength (nm)."""
         await self.mono.move_to_target_wavelength(wavelength)
         await self._wait_for_mono()
@@ -184,11 +186,11 @@ class HoribaSpectrometer:
         await self.ccd.set_center_wavelength(self.mono.id(), actual)
         await self.ccd.set_x_axis_conversion_type(XAxisConversionType.FROM_ICL_SETTINGS_INI)
 
-    async def set_slit_width(self, width_mm):
+    async def set_slit_width(self, width_mm: float) -> None:
         """Set entrance slit width in mm."""
         await self.mono.set_slit_position(self.mono.Slit.A, width_mm)
 
-    async def set_exposure_time(self, exposure_time_s):
+    async def set_exposure_time(self, exposure_time_s: float) -> None:
         """Set CCD exposure time.
 
         Parameters
@@ -199,7 +201,16 @@ class HoribaSpectrometer:
         self._exposure_time = exposure_time_s
         await self.ccd.set_exposure_time(int(exposure_time_s * 1000))
 
-    async def set_roi(self, roi_index=1, x_origin=0, y_origin=0, x_size=1024, y_size=100, x_bin=1, y_bin=100):
+    async def set_roi(
+        self,
+        roi_index: int = 1,
+        x_origin: int = 0,
+        y_origin: int = 0,
+        x_size: int = 1024,
+        y_size: int = 100,
+        x_bin: int = 1,
+        y_bin: int = 100,
+    ) -> None:
         """Set the CCD region of interest.
 
         Parameters
@@ -220,7 +231,7 @@ class HoribaSpectrometer:
             x_bin=x_bin, y_bin=y_bin,
         )
 
-    async def reset(self):
+    async def reset(self) -> None:
         """Abort any stuck acquisition and restart the CCD."""
         while await self.ccd.get_acquisition_busy():
             await asyncio.sleep(0.3)
@@ -232,7 +243,14 @@ class HoribaSpectrometer:
     # Acquisition
     # ------------------------------------------------------------------
 
-    async def get_spectrum(self, exposure_time=None, n_frames=1, mode="single", k_sigma=3.0, dark_frame_mode="none"):
+    async def get_spectrum(
+        self,
+        exposure_time: float | None = None,
+        n_frames: int = 1,
+        mode: str = "single",
+        k_sigma: float = 3.0,
+        dark_frame_mode: str = "none",
+    ) -> tuple[list, np.ndarray]:
         """Acquire a spectrum from the CCD.
 
         Parameters
@@ -316,7 +334,7 @@ class HoribaSpectrometer:
         clean = np.where(mask, np.nan, stacked)
         return x_data, np.nanmean(clean, axis=0)
 
-    async def _acquire_single(self, open_shutter=True):
+    async def _acquire_single(self, open_shutter: bool = True) -> tuple[list, np.ndarray]:
         """Acquire one frame and return (x_data, y_data)."""
         await self.ccd.acquisition_start(open_shutter=open_shutter)
         await asyncio.sleep(self._exposure_time + 0.005)
@@ -331,12 +349,12 @@ class HoribaSpectrometer:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _wait_for_ccd(self, poll_interval=0.1):
+    async def _wait_for_ccd(self, poll_interval: float = 0.1) -> None:
         while await self.ccd.get_acquisition_busy():
             await asyncio.sleep(poll_interval)
             logger.debug("CCD busy...")
 
-    async def _wait_for_mono(self):
+    async def _wait_for_mono(self) -> None:
         while await self.mono.is_busy():
             await asyncio.sleep(0.1)
             logger.debug("Mono busy...")
@@ -345,9 +363,9 @@ class HoribaSpectrometer:
     # Async context manager
     # ------------------------------------------------------------------
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> HoribaSpectrometer:
         await self.connect()
         return self
 
-    async def __aexit__(self, *_):
+    async def __aexit__(self, *_) -> None:
         await self.disconnect()

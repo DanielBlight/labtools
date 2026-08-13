@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from labtools.devices.labjack_u6 import LabJackU6
+
+
 class SPADGate:
     """Controls a SPAD gate connected to a digital output on a LabJack U6.
 
@@ -17,14 +22,14 @@ class SPADGate:
             gate.close()
     """
 
-    def __init__(self, device, pin=0):
+    def __init__(self, device: LabJackU6, pin: int = 0):
         self._device = device
         self._pin = pin
 
-    def open(self):
+    def open(self) -> None:
         """Open the gate (enable SPAD counting)."""
         self._device.set_digital_out(self._pin, 1)
 
-    def close(self):
+    def close(self) -> None:
         """Close the gate (disable SPAD counting)."""
         self._device.set_digital_out(self._pin, 0)
