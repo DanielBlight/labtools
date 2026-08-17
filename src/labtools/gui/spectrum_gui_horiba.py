@@ -447,17 +447,25 @@ class HoribaRangeWindow(QMainWindow):
             self.laser_test.setEnabled(True)
 
     def connect_laser(self):
-        address = self.laser_address.text().strip() or ITC4000.DEFAULT_ADDRESS
+        address = (self.laser_address.text().strip() or ITC4000.DEFAULT_ADDRESS)
+
         self.set_status(f"Connecting to laser at {address}...")
         self.laser_connect.setEnabled(False)
 
-        def task():
-            async def _connect():
-                return ITC4000(address)
+        try:
+            if self.laser is not None:
+                self.laser.close()
 
-            return _connect
+            self.laser = ITC4000(address)
 
-        self._run_async(task(), self._handle_laser_connected, self._handle_laser_error)
+        except Exception as exc:
+            self._handle_laser_error(str(exc))
+
+        else:
+            self._handle_laser_connected(self.laser)
+
+        finally:
+            self.laser_connect.setEnabled(True)
 
     def _handle_laser_connected(self, laser):
         self.laser = laser
