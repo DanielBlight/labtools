@@ -15,7 +15,7 @@ import csv
 from pathlib import Path
 from typing import Any, Callable, Coroutine
 
-from PyQt6.QtCore import QThread
+from PyQt6.QtCore import Qt, QThread
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -292,6 +292,9 @@ class HoribaRangeWindow(QMainWindow):
         self.laser_light = QLabel(
             "Laser output: OFF"
         )
+        self.laser_light.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+
         self.set_laser_indicator(False)
         layout.addRow(
             "Status",
@@ -371,9 +374,9 @@ class HoribaRangeWindow(QMainWindow):
             )
             self.laser_light.setStyleSheet(
                 "QLabel { "
-                "background-color: #1f5a2a; "
+                "background-color: #FF000D; "
                 "color: white; "
-                "border: 1px solid #5fd17a; "
+                "border: 1px solid #FFEA00; "
                 "border-radius: 8px; "
                 "padding: 6px; "
                 "}"
