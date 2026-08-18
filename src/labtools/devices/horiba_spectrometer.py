@@ -170,7 +170,7 @@ class HoribaSpectrometer:
         await self.ccd.set_gain(gain)
         await self.ccd.set_speed(speed)
         await self.ccd.set_timer_resolution(TimerResolution.MILLISECONDS)
-        await self.ccd.set_acquisition_format(1, AcquisitionFormat.SPECTRA)
+        await self.ccd.set_acquisition_format(1, AcquisitionFormat.SPECTRA_IMAGE)
 
         if exposure_time is not None:
             await self.set_exposure_time(exposure_time)

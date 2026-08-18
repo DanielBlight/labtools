@@ -1,32 +1,44 @@
-"""Small Qt helper for running async coroutines off the UI thread."""
+"""Qt helper for running asynchronous operations outside the UI thread."""
 
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, Coroutine
+import traceback
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
 class AsyncTaskRunner(QObject):
-    """Run an async coroutine in a worker thread and forward the result to the UI thread.
-
-    Intended to be moved to a :class:`~PyQt6.QtCore.QThread` via
-    :meth:`QObject.moveToThread`, then started with ``thread.started.connect(runner.run)``.
-    """
+    """Run an asynchronous operation and emit its result or traceback."""
 
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, coroutine_factory: Callable[[], Coroutine]):
+    def __init__(
+        self,
+        coroutine_factory: Callable[
+            [],
+            Coroutine[Any, Any, Any],
+        ],
+    ) -> None:
+        """Store a factory that creates a fresh coroutine when run."""
         super().__init__()
         self.coroutine_factory = coroutine_factory
 
     @pyqtSlot()
     def run(self) -> None:
+        """Execute the coroutine and emit either its result or traceback."""
         try:
-            result = asyncio.run(self.coroutine_factory())
-        except Exception as exc:  # pragma: no cover - UI path only
-            self.failed.emit(str(exc))
+            result = asyncio.run(
+                self.coroutine_factory()
+            )
+
+        except Exception:
+            self.failed.emit(
+                traceback.format_exc()
+            )
+
         else:
             self.finished.emit(result)
