@@ -1,20 +1,24 @@
-﻿"""GUI for HORIBA range spectra and optional ITC4000 laser control.
+"""PyQt6 GUI for HORIBA range spectra and optional ITC4000 control.
 
-The HORIBA spectrometer operations use asynchronous worker threads because
-the HORIBA SDK exposes asynchronous methods.
-
-The ITC4000 PyVISA connection remains in the GUI thread for its complete
-lifetime. Connection validation, identification, readback, and control all
-use the same persistent VISA session.
+Each HORIBA operation owns its full asynchronous lifecycle: connect, configure,
+acquire, and disconnect all run inside one worker coroutine. This is required
+because the HORIBA SDK WebSocket belongs to the asyncio event loop that opened
+it. A reusable pre-taken range dark can be captured or loaded for mapping.
 """
 
 from __future__ import annotations
 
-import asyncio
 import csv
+import traceback
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
+import numpy as np
+from loguru import logger
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
 from PyQt6.QtCore import Qt, QThread
 from PyQt6.QtWidgets import (
     QApplication,
@@ -23,6 +27,8 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -30,742 +36,619 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QSpinBox,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
-from matplotlib.backends.backend_qtagg import (
-    FigureCanvasQTAgg as FigureCanvas,
-)
-from matplotlib.figure import Figure
 
 from labtools.acquisition.range_spectrum import (
+    DarkSpectrum,
+    capture_range_dark,
     get_range_spectrum,
 )
-from labtools.devices.horiba_spectrometer import (
-    HoribaSpectrometer,
-)
+from labtools.devices.horiba_spectrometer import HoribaSpectrometer
 from labtools.devices.itc4000 import ITC4000
 from labtools.gui.async_runner import AsyncTaskRunner
-from labtools.gui.background import (
-    apply_background_subtraction,
-    parse_background_csv,
-)
 
-
-# ----------------------------------------------------------------------
-# Laser configuration
-# ----------------------------------------------------------------------
-# Set this to the documented, lab-approved limit for the connected diode.
-# The GUI and ITC4000 wrapper both reject higher values.
 MAX_LASER_CURRENT_A = 0.100
-
-# Initial value displayed by the GUI.
 DEFAULT_LASER_CURRENT_A = 0.080
-
-# Setpoint applied after the laser-diode output has been disabled.
 LASER_THRESHOLD_CURRENT_A = 0.049
+DEFAULT_STITCH_OVERLAP_PIXELS = 20
+
+
+async def _disconnect_safely(spec: HoribaSpectrometer) -> None:
+    """Disconnect a HORIBA wrapper without hiding an earlier exception."""
+    try:
+        await spec.disconnect()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("HORIBA disconnect failed: {}", exc)
 
 
 class HoribaRangeWindow(QMainWindow):
-    """Main window for HORIBA spectra and optional ITC4000 control."""
+    """Main window for stitched spectra, reusable darks, and laser control."""
 
     def __init__(self) -> None:
-        """Build the interface and initialise disconnected device state."""
         super().__init__()
+        self.setWindowTitle("HORIBA Spectrum Acquisition")
+        self.resize(1440, 900)
+        self.setMinimumSize(1120, 720)
 
-        self.setWindowTitle("Horiba range spectrum")
-        self.resize(1150, 820)
-
-        self.spec: HoribaSpectrometer | None = None
         self.laser: ITC4000 | None = None
-        self.background_spectrum: Any = None
+        self.pre_taken_dark: DarkSpectrum | None = None
+        self._async_tasks: list[tuple[QThread, AsyncTaskRunner]] = []
+        self._spectrometer_busy = False
 
-        # Keep references to worker objects so that Qt does not destroy
-        # them while asynchronous spectrometer work is still running.
-        self._async_tasks: list[
-            tuple[QThread, AsyncTaskRunner]
-        ] = []
+        self._apply_application_style()
 
         central = QWidget(self)
         self.setCentralWidget(central)
-        root = QVBoxLayout(central)
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(10)
 
-        self._build_spectrometer_controls(root)
-        self._build_laser_controls(root)
+        header = QHBoxLayout()
+        title_column = QVBoxLayout()
+        title = QLabel("HORIBA Spectrum Acquisition")
+        title.setObjectName("pageTitle")
+        subtitle = QLabel(
+            "Configure the detector, acquire stitched spectra, and manage dark corrections"
+        )
+        subtitle.setObjectName("pageSubtitle")
+        title_column.addWidget(title)
+        title_column.addWidget(subtitle)
+        header.addLayout(title_column)
+        header.addStretch(1)
+        outer.addLayout(header)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(8)
+        outer.addWidget(splitter, 1)
+
+        controls_scroll = QScrollArea()
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        controls_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        controls_scroll.setMinimumWidth(510)
+        controls_scroll.setMaximumWidth(575)
+
+        controls = QWidget()
+        controls.setMinimumWidth(490)
+        controls.setObjectName("controlsPanel")
+        controls_layout = QVBoxLayout(controls)
+        controls_layout.setContentsMargins(8, 4, 8, 8)
+        controls_layout.setSpacing(12)
+        self._build_spectrometer_controls(controls_layout)
+        self._build_laser_controls(controls_layout)
+        controls_layout.addStretch(1)
+        controls_scroll.setWidget(controls)
+        splitter.addWidget(controls_scroll)
+
+        plot_panel = QFrame()
+        plot_panel.setObjectName("plotPanel")
+        plot_layout = QVBoxLayout(plot_panel)
+        plot_layout.setContentsMargins(14, 12, 14, 12)
+        plot_layout.setSpacing(8)
+
+        plot_header = QHBoxLayout()
+        plot_title = QLabel("Spectrum")
+        plot_title.setObjectName("sectionTitle")
+        self.plot_meta = QLabel("No spectrum acquired")
+        self.plot_meta.setObjectName("plotMeta")
+        plot_header.addWidget(plot_title)
+        plot_header.addStretch(1)
+        plot_header.addWidget(self.plot_meta)
+        plot_layout.addLayout(plot_header)
+
+        self.figure = Figure(figsize=(10, 7), dpi=100)
+        self.figure.set_facecolor("#ffffff")
+        self.ax = self.figure.add_subplot(111)
+        self._style_empty_axes()
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.canvas.setMinimumHeight(430)
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        plot_layout.addWidget(self.toolbar)
+        plot_layout.addWidget(self.canvas, 1)
+        splitter.addWidget(plot_panel)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([535, 905])
 
         self.status = QLabel("Ready")
+        self.status.setObjectName("statusText")
         self.status.setWordWrap(True)
-        root.addWidget(self.status)
-
-        self.figure = Figure(
-            figsize=(9, 5),
-            dpi=100,
-        )
-        self.ax = self.figure.add_subplot(111)
-        self.canvas = FigureCanvas(self.figure)
-        root.addWidget(self.canvas)
+        self.statusBar().addWidget(self.status, 1)
 
         self._connect_signals()
-        self._update_background_controls()
         self._update_frame_controls()
-        self._toggle_laser_controls(
-            self.laser_group.isChecked()
+        self._update_background_controls()
+        self._toggle_laser_controls(False)
+        self._update_spectrometer_buttons()
+
+    def _apply_application_style(self) -> None:
+        """Apply a restrained laboratory-instrument visual style."""
+        self.setStyleSheet(
+            """
+            QMainWindow { background: #f3f5f7; }
+            QWidget { color: #17212b; font-size: 13px; }
+            QLabel#pageTitle { font-size: 25px; font-weight: 700; color: #102a43; }
+            QLabel#pageSubtitle { color: #627d98; font-size: 13px; }
+            QLabel#sectionTitle { font-size: 17px; font-weight: 700; color: #102a43; }
+            QLabel#plotMeta { color: #627d98; }
+            QLabel#hintText { color: #627d98; font-size: 12px; }
+            QLabel#statusText { color: #334e68; padding: 4px 8px; }
+            QFrame#plotPanel, QGroupBox {
+                background: #ffffff;
+                border: 1px solid #d9e2ec;
+                border-radius: 8px;
+            }
+            QGroupBox {
+                margin-top: 13px;
+                padding: 14px 10px 10px 10px;
+                font-weight: 650;
+                color: #243b53;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 5px;
+            }
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                min-height: 31px;
+                padding: 2px 7px;
+                background: #ffffff;
+                border: 1px solid #bcccdc;
+                border-radius: 5px;
+                selection-background-color: #2680c2;
+            }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+                border: 2px solid #2680c2;
+            }
+            QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled,
+            QDoubleSpinBox:disabled { background: #f0f4f8; color: #829ab1; }
+            QPushButton {
+                min-height: 32px;
+                padding: 4px 11px;
+                background: #ffffff;
+                border: 1px solid #9fb3c8;
+                border-radius: 5px;
+                color: #243b53;
+            }
+            QPushButton:hover { background: #f0f4f8; border-color: #627d98; }
+            QPushButton:pressed { background: #d9e2ec; }
+            QPushButton:disabled { background: #f0f4f8; color: #9fb3c8; border-color: #d9e2ec; }
+            QPushButton#primaryButton {
+                min-height: 39px;
+                background: #0b6fa4;
+                border: 1px solid #0b6fa4;
+                color: white;
+                font-weight: 700;
+            }
+            QPushButton#primaryButton:hover { background: #095d8a; }
+            QPushButton#dangerButton { color: #b42318; border-color: #f0b4ae; }
+            QCheckBox { spacing: 7px; }
+            QScrollArea { background: transparent; }
+            QSplitter::handle { background: transparent; }
+            QStatusBar { background: #ffffff; border-top: 1px solid #d9e2ec; }
+            """
         )
 
+    def _style_empty_axes(self) -> None:
+        """Prepare a clean, readable spectrum canvas."""
+        self.ax.clear()
+        self.ax.set_xlabel("Wavelength (nm)", fontsize=11)
+        self.ax.set_ylabel("Intensity (counts)", fontsize=11)
+        self.ax.set_title("Ready for acquisition", fontsize=13, pad=12)
+        self.ax.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.8)
+        self.ax.set_facecolor("#fbfcfd")
+        self.figure.tight_layout()
+
     # ------------------------------------------------------------------
-    # Interface construction
+    # Build interface
     # ------------------------------------------------------------------
-    def _build_spectrometer_controls(
-        self,
-        root: QVBoxLayout,
-    ) -> None:
-        """Create the HORIBA acquisition controls."""
-        group = QGroupBox("Horiba spectrometer")
-        layout = QFormLayout(group)
+    def _build_spectrometer_controls(self, root: QVBoxLayout) -> None:
+        acquisition = QGroupBox("1  Acquisition setup")
+        form = QFormLayout(acquisition)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setVerticalSpacing(9)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItems(
-            ["syncerity", "symphony"]
-        )
-        layout.addRow(
-            "Preset",
-            self.preset_combo,
-        )
+        self.preset_combo.addItems(["syncerity", "symphony"])
+        form.addRow("Detector preset", self.preset_combo)
 
+        range_widget = QWidget()
+        range_layout = QGridLayout(range_widget)
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.setHorizontalSpacing(8)
         self.start_wl = QDoubleSpinBox()
-        self.start_wl.setRange(0, 2000)
-        self.start_wl.setValue(600.0)
+        self.start_wl.setRange(0.0, 2000.0)
         self.start_wl.setDecimals(2)
-        layout.addRow(
-            "Start wavelength (nm)",
-            self.start_wl,
-        )
-
+        self.start_wl.setValue(600.0)
+        self.start_wl.setSuffix(" nm")
         self.end_wl = QDoubleSpinBox()
-        self.end_wl.setRange(0, 2000)
-        self.end_wl.setValue(900.0)
+        self.end_wl.setRange(0.0, 2000.0)
         self.end_wl.setDecimals(2)
-        layout.addRow(
-            "End wavelength (nm)",
-            self.end_wl,
-        )
+        self.end_wl.setValue(900.0)
+        self.end_wl.setSuffix(" nm")
+        range_layout.addWidget(QLabel("Start"), 0, 0)
+        range_layout.addWidget(QLabel("End"), 0, 1)
+        range_layout.addWidget(self.start_wl, 1, 0)
+        range_layout.addWidget(self.end_wl, 1, 1)
+        form.addRow("Spectral range", range_widget)
 
         self.exposure_box = QDoubleSpinBox()
-        self.exposure_box.setRange(
-            0.001,
-            1000.0,
-        )
+        self.exposure_box.setRange(0.001, 1000.0)
+        self.exposure_box.setDecimals(3)
         self.exposure_box.setSingleStep(0.1)
         self.exposure_box.setValue(0.5)
-        self.exposure_box.setDecimals(3)
-        layout.addRow(
-            "Exposure time (s)",
-            self.exposure_box,
-        )
+        self.exposure_box.setSuffix(" s")
+        form.addRow("Exposure", self.exposure_box)
 
+        repeat_widget = QWidget()
+        repeat_layout = QGridLayout(repeat_widget)
+        repeat_layout.setContentsMargins(0, 0, 0, 0)
+        repeat_layout.setHorizontalSpacing(8)
         self.frames_box = QSpinBox()
-        self.frames_box.setRange(1, 50)
+        self.frames_box.setRange(1, 100)
         self.frames_box.setValue(1)
-        layout.addRow(
-            "Frames",
-            self.frames_box,
-        )
-
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(
-            ["single", "median", "sigma_clip"]
-        )
-        layout.addRow(
-            "Combine mode",
-            self.mode_combo,
-        )
+        self.mode_combo.addItems(["single", "mean", "median", "sigma_clip"])
+        repeat_layout.addWidget(QLabel("Frames"), 0, 0)
+        repeat_layout.addWidget(QLabel("Combine"), 0, 1)
+        repeat_layout.addWidget(self.frames_box, 1, 0)
+        repeat_layout.addWidget(self.mode_combo, 1, 1)
+        form.addRow("Repeats", repeat_widget)
 
-        self.use_background = QCheckBox(
-            "Use background subtraction"
+        self.overlap_box = QSpinBox()
+        self.overlap_box.setRange(0, 1000)
+        self.overlap_box.setValue(DEFAULT_STITCH_OVERLAP_PIXELS)
+        self.overlap_box.setSuffix(" pixels")
+        form.addRow("Stitch overlap", self.overlap_box)
+
+        hint = QLabel(
+            "Required: detector, wavelength range, exposure, and frame combination."
         )
-        layout.addRow(
-            "",
-            self.use_background,
-        )
+        hint.setObjectName("hintText")
+        hint.setWordWrap(True)
+        form.addRow("", hint)
+        root.addWidget(acquisition)
+
+        dark_group = QGroupBox("2  Dark correction")
+        dark_form = QFormLayout(dark_group)
+        dark_form.setVerticalSpacing(9)
+        self.use_background = QCheckBox("Enable dark subtraction")
+        dark_form.addRow("", self.use_background)
 
         self.background_mode = QComboBox()
         self.background_mode.addItems(
             [
-                "No background",
-                "Capture dark frame",
-                "Load background CSV",
+                "Capture during acquisition",
+                "Use pre-taken stitched dark",
             ]
         )
-        layout.addRow(
-            "Background source",
-            self.background_mode,
-        )
+        dark_form.addRow("Source", self.background_mode)
 
         self.background_timing = QComboBox()
         self.background_timing.addItems(
             [
-                "One dark frame at the start",
-                "Dark frame before each repeated acquisition",
+                "One dark per centre wavelength",
+                "One dark per repeated frame",
             ]
         )
-        layout.addRow(
-            "Background timing",
-            self.background_timing,
-        )
+        dark_form.addRow("Timing", self.background_timing)
 
-        self.background_status = QLabel(
-            "No background selected"
-        )
-        layout.addRow(
-            "",
-            self.background_status,
-        )
+        self.capture_dark_button = QPushButton("Capture reusable dark")
+        self.load_dark_button = QPushButton("Load dark CSV")
+        self.clear_dark_button = QPushButton("Clear")
+        self.clear_dark_button.setObjectName("dangerButton")
+        dark_buttons = QGridLayout()
+        dark_buttons.addWidget(self.capture_dark_button, 0, 0, 1, 2)
+        dark_buttons.addWidget(self.load_dark_button, 1, 0)
+        dark_buttons.addWidget(self.clear_dark_button, 1, 1)
+        dark_form.addRow("Pre-taken dark", dark_buttons)
 
+        self.background_status = QLabel("Dark subtraction disabled")
+        self.background_status.setObjectName("hintText")
+        self.background_status.setWordWrap(True)
+        dark_form.addRow("", self.background_status)
+        root.addWidget(dark_group)
+
+        output_group = QGroupBox("3  Output")
+        output_layout = QVBoxLayout(output_group)
+        save_row = QHBoxLayout()
         self.save_csv = QCheckBox("Save CSV")
         self.save_png = QCheckBox("Save PNG")
-
-        save_row = QHBoxLayout()
         save_row.addWidget(self.save_csv)
         save_row.addWidget(self.save_png)
+        save_row.addStretch(1)
+        output_layout.addLayout(save_row)
+        root.addWidget(output_group)
 
-        layout.addRow(
-            "Save output",
-            save_row,
-        )
+        self.connect_button = QPushButton("Test connection")
+        self.acquire_button = QPushButton("Acquire spectrum")
+        self.acquire_button.setObjectName("primaryButton")
+        root.addWidget(self.connect_button)
+        root.addWidget(self.acquire_button)
 
-        self.connect_button = QPushButton(
-            "Connect spectrometer"
-        )
-        self.acquire_button = QPushButton(
-            "Acquire range spectrum"
-        )
-
-        connect_row = QHBoxLayout()
-        connect_row.addWidget(self.connect_button)
-        connect_row.addWidget(self.acquire_button)
-
-        layout.addRow(connect_row)
-        root.addWidget(group)
-
-    def _build_laser_controls(
-        self,
-        root: QVBoxLayout,
-    ) -> None:
-        """Create ITC4000 controls.
-
-        No separate VISA test button is created. The persistent session is
-        validated automatically when **Connect laser** is selected.
-        """
-        self.laser_group = QGroupBox(
-            "Laser control (optional)"
-        )
+    def _build_laser_controls(self, root: QVBoxLayout) -> None:
+        self.laser_group = QGroupBox("Laser control  (optional)")
         self.laser_group.setCheckable(True)
         self.laser_group.setChecked(False)
+        form = QFormLayout(self.laser_group)
+        form.setVerticalSpacing(9)
 
-        layout = QFormLayout(self.laser_group)
-
-        self.laser_address = QLineEdit()
-        self.laser_address.setText(
-            ITC4000.DEFAULT_ADDRESS
-        )
-        layout.addRow(
-            "VISA address",
-            self.laser_address,
-        )
+        self.laser_address = QLineEdit(ITC4000.DEFAULT_ADDRESS)
+        form.addRow("VISA address", self.laser_address)
 
         self.laser_current = QDoubleSpinBox()
-        self.laser_current.setRange(
-            0.0,
-            MAX_LASER_CURRENT_A,
-        )
-        self.laser_current.setSingleStep(0.001)
-        self.laser_current.setValue(
-            DEFAULT_LASER_CURRENT_A
-        )
+        self.laser_current.setRange(0.0, MAX_LASER_CURRENT_A)
         self.laser_current.setDecimals(3)
-        layout.addRow(
-            "Current (A)",
-            self.laser_current,
-        )
+        self.laser_current.setSingleStep(0.001)
+        self.laser_current.setValue(DEFAULT_LASER_CURRENT_A)
+        self.laser_current.setSuffix(" A")
+        form.addRow("Drive current", self.laser_current)
 
-        self.laser_light = QLabel(
-            "Laser output: OFF"
-        )
+        self.laser_light = QLabel("Laser output: OFF")
+        self.laser_light.setMinimumHeight(34)
         self.laser_light.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-
         self.set_laser_indicator(False)
-        layout.addRow(
-            "Status",
-            self.laser_light,
-        )
+        form.addRow("Status", self.laser_light)
 
-        self.laser_connect = QPushButton(
-            "Connect laser"
-        )
-        self.laser_on = QPushButton(
-            "Laser ON"
-        )
-        self.laser_off = QPushButton(
-            "Laser OFF"
-        )
-        self.laser_set = QPushButton(
-            "Set current"
-        )
-
-        button_row = QHBoxLayout()
-        button_row.addWidget(self.laser_connect)
-        button_row.addWidget(self.laser_on)
-        button_row.addWidget(self.laser_off)
-        button_row.addWidget(self.laser_set)
-
-        layout.addRow(button_row)
+        self.laser_connect = QPushButton("Connect")
+        self.laser_on = QPushButton("Output ON")
+        self.laser_off = QPushButton("Output OFF")
+        self.laser_set = QPushButton("Apply current")
+        row = QGridLayout()
+        row.addWidget(self.laser_connect, 0, 0)
+        row.addWidget(self.laser_set, 0, 1)
+        row.addWidget(self.laser_on, 1, 0)
+        row.addWidget(self.laser_off, 1, 1)
+        form.addRow(row)
         root.addWidget(self.laser_group)
 
     def _connect_signals(self) -> None:
-        """Connect widgets to their handlers."""
-        self.connect_button.clicked.connect(
-            self.connect_spectrometer
-        )
-        self.acquire_button.clicked.connect(
-            self.acquire_spectrum
-        )
-
-        self.mode_combo.currentTextChanged.connect(
-            self._update_frame_controls
-        )
-
-        self.background_mode.currentIndexChanged.connect(
-            self._update_background_controls
-        )
-        self.use_background.toggled.connect(
+        self.connect_button.clicked.connect(self.test_spectrometer_connection)
+        self.acquire_button.clicked.connect(self.acquire_spectrum)
+        self.capture_dark_button.clicked.connect(self.capture_reusable_dark)
+        self.load_dark_button.clicked.connect(self.load_pre_taken_dark)
+        self.clear_dark_button.clicked.connect(self.clear_pre_taken_dark)
+        self.mode_combo.currentTextChanged.connect(self._update_frame_controls)
+        self.use_background.toggled.connect(self._update_background_controls)
+        self.background_mode.currentTextChanged.connect(
             self._update_background_controls
         )
 
-        self.laser_group.toggled.connect(
-            self._toggle_laser_controls
-        )
-        self.laser_connect.clicked.connect(
-            self.connect_laser
-        )
-        self.laser_on.clicked.connect(
-            self.turn_laser_on
-        )
-        self.laser_off.clicked.connect(
-            self.turn_laser_off
-        )
-        self.laser_set.clicked.connect(
-            self.set_laser_current
-        )
+        self.laser_group.toggled.connect(self._toggle_laser_controls)
+        self.laser_connect.clicked.connect(self.connect_laser)
+        self.laser_on.clicked.connect(self.turn_laser_on)
+        self.laser_off.clicked.connect(self.turn_laser_off)
+        self.laser_set.clicked.connect(self.set_laser_current)
 
     # ------------------------------------------------------------------
-    # General UI state
+    # UI helpers
     # ------------------------------------------------------------------
     def set_status(self, message: str) -> None:
-        """Display a status message below the controls."""
         self.status.setText(message)
 
-    def set_laser_indicator(self, on: bool) -> None:
-        """Update the laser-output indicator from controller readback."""
-        if on:
-            self.laser_light.setText(
-                "Laser output: ON"
-            )
-            self.laser_light.setStyleSheet(
-                "QLabel { "
-                "background-color: #FF000D; "
-                "color: white; "
-                "border: 1px solid #FFEA00; "
-                "border-radius: 8px; "
-                "padding: 6px; "
-                "}"
-            )
-        else:
-            self.laser_light.setText(
-                "Laser output: OFF"
-            )
-            self.laser_light.setStyleSheet(
-                "QLabel { "
-                "background-color: #3a3a3a; "
-                "color: white; "
-                "border: 1px solid #666; "
-                "border-radius: 8px; "
-                "padding: 6px; "
-                "}"
-            )
+    @staticmethod
+    def _exception_summary(error: str) -> str:
+        lines = [line.strip() for line in error.splitlines() if line.strip()]
+        return lines[-1] if lines else error
 
-    def _toggle_laser_controls(
-        self,
-        enabled: bool,
-    ) -> None:
-        """Enable controls only when optional laser control is selected."""
-        connected = self.laser is not None
+    def _show_error(self, title: str, summary: str, details: str) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setWindowTitle(title)
+        box.setText(summary)
+        box.setDetailedText(details)
+        box.exec()
 
-        self.laser_address.setEnabled(
-            enabled and not connected
-        )
-        self.laser_current.setEnabled(enabled)
-        self.laser_connect.setEnabled(enabled)
-        self.laser_on.setEnabled(
-            enabled and connected
-        )
-        self.laser_off.setEnabled(
-            enabled and connected
-        )
-        self.laser_set.setEnabled(
-            enabled and connected
-        )
+    def _normalised_range(self) -> tuple[float, float]:
+        start = float(self.start_wl.value())
+        end = float(self.end_wl.value())
+        if start == end:
+            raise ValueError("Start and end wavelengths must be different.")
+        if end < start:
+            start, end = end, start
+            self.start_wl.setValue(start)
+            self.end_wl.setValue(end)
+        return start, end
 
-    def _update_background_controls(self) -> None:
-        """Enable controls relevant to the selected background mode."""
-        enabled = self.use_background.isChecked()
-        mode = self.background_mode.currentText()
+    def _set_spectrometer_busy(self, busy: bool) -> None:
+        self._spectrometer_busy = busy
+        self._update_spectrometer_buttons()
 
-        self.background_mode.setEnabled(enabled)
-
-        if not enabled:
-            self.background_timing.setEnabled(False)
-            self.background_status.setText(
-                "Background subtraction disabled"
-            )
-
-        elif mode == "No background":
-            self.background_timing.setEnabled(False)
-            self.background_status.setText(
-                "Select a background source to enable subtraction"
-            )
-
-        elif mode == "Capture dark frame":
-            self.background_timing.setEnabled(True)
-            self.background_status.setText(
-                "Dark frames will be captured automatically "
-                "during acquisition."
-            )
-
-        else:
-            self.background_timing.setEnabled(False)
-            self.background_status.setText(
-                "A background CSV will be loaded "
-                "before acquisition."
-            )
+    def _update_spectrometer_buttons(self) -> None:
+        idle = not self._spectrometer_busy
+        self.connect_button.setEnabled(idle)
+        self.acquire_button.setEnabled(idle)
+        self.capture_dark_button.setEnabled(idle)
+        self.preset_combo.setEnabled(idle)
+        self.exposure_box.setEnabled(idle)
+        self.overlap_box.setEnabled(idle)
 
     def _update_frame_controls(self) -> None:
-        """Enforce the frame count needed by the combine mode."""
         mode = self.mode_combo.currentText()
-        minimum = 1 if mode == "single" else 3
-
+        minimum = 1 if mode == "single" else 3 if mode == "sigma_clip" else 2
         self.frames_box.setMinimum(minimum)
-        self.frames_box.setEnabled(
-            mode != "single"
-        )
-
-        if self.frames_box.value() < minimum:
+        self.frames_box.setEnabled(mode != "single")
+        if mode == "single":
+            self.frames_box.setValue(1)
+        elif self.frames_box.value() < minimum:
             self.frames_box.setValue(minimum)
 
+    def _update_background_controls(self) -> None:
+        enabled = self.use_background.isChecked()
+        use_pre_taken = (
+            self.background_mode.currentText() == "Use pre-taken stitched dark"
+        )
+        self.background_mode.setEnabled(enabled)
+        self.background_timing.setEnabled(enabled and not use_pre_taken)
+        self.load_dark_button.setEnabled(enabled and use_pre_taken)
+        self.clear_dark_button.setEnabled(self.pre_taken_dark is not None)
+
+        if not enabled:
+            text = "Dark subtraction disabled"
+        elif use_pre_taken and self.pre_taken_dark is None:
+            text = "Load or capture a reusable stitched dark before acquisition."
+        elif use_pre_taken:
+            text = (
+                f"Reusable dark loaded: {self.pre_taken_dark.wavelength_nm.size} points"
+            )
+        elif self.background_timing.currentIndex() == 0:
+            text = "One dark will be acquired and reused at each centre wavelength."
+        else:
+            text = "Every repeated signal frame will be paired with a new dark."
+        self.background_status.setText(text)
+
+    def _selected_dark_mode(self) -> str:
+        if not self.use_background.isChecked():
+            return "none"
+        if self.background_mode.currentText() == "Use pre-taken stitched dark":
+            return "pre_taken"
+        return (
+            "per_center" if self.background_timing.currentIndex() == 0 else "per_frame"
+        )
+
     # ------------------------------------------------------------------
-    # Async HORIBA helper
+    # Async helper
     # ------------------------------------------------------------------
     def _run_async(
         self,
-        coroutine_factory: Callable[
-            [],
-            Coroutine[Any, Any, Any],
-        ],
+        coroutine_factory: Callable[[], Coroutine[Any, Any, Any]],
         on_done: Callable[[Any], None],
         on_error: Callable[[str], None],
     ) -> None:
-        """Run an async HORIBA operation outside the Qt event loop."""
         thread = QThread(self)
-        runner = AsyncTaskRunner(
-            coroutine_factory
-        )
-
+        runner = AsyncTaskRunner(coroutine_factory)
         runner.moveToThread(thread)
-        self._async_tasks.append(
-            (thread, runner)
-        )
+        task = (thread, runner)
+        self._async_tasks.append(task)
 
         thread.started.connect(runner.run)
         runner.finished.connect(on_done)
         runner.failed.connect(on_error)
-
         runner.finished.connect(thread.quit)
         runner.failed.connect(thread.quit)
+        runner.finished.connect(runner.deleteLater)
+        runner.failed.connect(runner.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
-        runner.finished.connect(
-            runner.deleteLater
-        )
-        runner.failed.connect(
-            runner.deleteLater
-        )
-        thread.finished.connect(
-            thread.deleteLater
-        )
-
-        def cleanup(
-            _: object = None,
-        ) -> None:
-            """Remove completed Qt worker references."""
-            task = (thread, runner)
-
+        def cleanup(_: object = None) -> None:
             if task in self._async_tasks:
                 self._async_tasks.remove(task)
 
         runner.finished.connect(cleanup)
         runner.failed.connect(cleanup)
-
         thread.start()
 
     # ------------------------------------------------------------------
-    # HORIBA spectrometer
+    # HORIBA operations: each owns connect/configure/work/disconnect
     # ------------------------------------------------------------------
-    def connect_spectrometer(self) -> None:
-        """Connect to and configure the selected HORIBA preset."""
-        self.set_status(
-            "Connecting to spectrometer..."
-        )
-
-        self.connect_button.setEnabled(False)
-        self.acquire_button.setEnabled(False)
-
+    def test_spectrometer_connection(self) -> None:
+        """Connect, configure, then disconnect within one event loop."""
+        if self._spectrometer_busy:
+            return
+        self._set_spectrometer_busy(True)
+        self.set_status("Testing HORIBA connection and configuration...")
         preset = self.preset_combo.currentText()
-        exposure = float(
-            self.exposure_box.value()
-        )
+        exposure = float(self.exposure_box.value())
 
-        async def connect() -> HoribaSpectrometer:
-            """Open and configure the HORIBA SDK connection."""
-            spec = HoribaSpectrometer(
-                preset=preset
-            )
-
-            await spec.connect()
-
-            await spec.configure(
-                gain=2,
-                speed=0,
-                exposure_time=exposure,
-                roi={},
-            )
-
-            return spec
+        async def test() -> str:
+            spec = HoribaSpectrometer(preset=preset)
+            try:
+                await spec.connect()
+                await spec.configure(
+                    gain=2,
+                    speed=0,
+                    exposure_time=exposure,
+                    roi={},
+                )
+                return preset
+            finally:
+                await _disconnect_safely(spec)
 
         self._run_async(
-            lambda: connect(),
-            self._handle_connect_done,
-            self._handle_connect_error,
+            lambda: test(),
+            self._handle_connection_test_done,
+            self._handle_connection_error,
         )
 
-    def _handle_connect_done(
-        self,
-        spec: HoribaSpectrometer,
-    ) -> None:
-        """Store a connected spectrometer returned by the worker."""
-        self.spec = spec
-
-        self.connect_button.setEnabled(True)
-        self.acquire_button.setEnabled(True)
-
+    def _handle_connection_test_done(self, preset: str) -> None:
+        self._set_spectrometer_busy(False)
         self.set_status(
-            "Connected to HORIBA spectrometer in preset "
-            f"'{self.preset_combo.currentText()}'."
+            f"HORIBA preset '{preset}' connected and configured successfully; "
+            "the test connection was closed cleanly."
         )
 
-    def _handle_connect_error(
-        self,
-        error: str,
-    ) -> None:
-        """Report a spectrometer connection failure."""
-        self.connect_button.setEnabled(True)
-        self.acquire_button.setEnabled(False)
-
-        self.set_status(
-            f"Spectrometer connection failed: {error}"
-        )
-
-        QMessageBox.critical(
-            self,
-            "Spectrometer connection failed",
-            (
-                "Could not connect to the HORIBA spectrometer.\n\n"
-                f"{error}\n\n"
-                "Check device power, USB connection, ICL, "
-                "and detector preset."
-            ),
-        )
-
-    def load_background_spectrum(
-        self,
-    ) -> Any | None:
-        """Prompt for and parse a background-spectrum CSV file."""
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open background spectrum CSV",
-            str(Path.cwd()),
-            "CSV files (*.csv);;All files (*)",
-        )
-
-        if not path:
-            return None
-
-        try:
-            self.background_spectrum = (
-                parse_background_csv(path)
-            )
-
-            self.background_status.setText(
-                f"Background loaded from "
-                f"{Path(path).name}"
-            )
-
-            self.set_status(
-                "Background spectrum loaded."
-            )
-
-            self.background_mode.setCurrentText(
-                "Load background CSV"
-            )
-
-            return self.background_spectrum
-
-        except Exception as exc:
-            self.background_status.setText(
-                "Background load failed"
-            )
-
-            QMessageBox.critical(
-                self,
-                "Background load failed",
-                str(exc),
-            )
-
-            return None
-
-    def _apply_background_subtraction(
-        self,
-        x_data: Any,
-        y_data: Any,
-    ) -> Any:
-        """Subtract the currently loaded background spectrum."""
-        return apply_background_subtraction(
-            x_data,
-            y_data,
-            self.background_spectrum,
-        )
-
-    def _dark_frame_mode(self) -> str:
-        """Translate the selected timing into an acquisition mode."""
-        if (
-            not self.use_background.isChecked()
-            or self.background_mode.currentText()
-            != "Capture dark frame"
-        ):
-            return "none"
-
-        if (
-            self.background_timing.currentText()
-            == "One dark frame at the start"
-        ):
-            return "single"
-
-        return "per_frame"
-
-    def _uses_loaded_background(self) -> bool:
-        """Return whether subtraction should use a loaded CSV."""
-        return (
-            self.use_background.isChecked()
-            and self.background_mode.currentText()
-            == "Load background CSV"
-        )
+    def _handle_connection_error(self, error: str) -> None:
+        self._set_spectrometer_busy(False)
+        summary = self._exception_summary(error)
+        self.set_status(f"Spectrometer connection failed: {summary}")
+        self._show_error("Spectrometer connection failed", summary, error)
 
     def acquire_spectrum(self) -> None:
-        """Acquire a stitched spectrum using current UI settings."""
-        if self.spec is None:
+        """Connect, configure, acquire one range, and disconnect."""
+        if self._spectrometer_busy:
+            return
+        try:
+            start, end = self._normalised_range()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid range", str(exc))
+            return
+
+        dark_mode = self._selected_dark_mode()
+        if dark_mode == "pre_taken" and self.pre_taken_dark is None:
             QMessageBox.warning(
                 self,
-                "Not connected",
-                "Connect to the spectrometer before acquiring.",
+                "No pre-taken dark",
+                "Load or capture a reusable stitched dark before acquisition.",
             )
             return
 
-        if self.use_background.isChecked():
-            background_mode = (
-                self.background_mode.currentText()
-            )
+        preset = self.preset_combo.currentText()
+        exposure = float(self.exposure_box.value())
+        n_frames = int(self.frames_box.value())
+        combine_mode = self.mode_combo.currentText()
+        overlap = int(self.overlap_box.value())
+        pre_taken_dark = self.pre_taken_dark if dark_mode == "pre_taken" else None
 
-            if background_mode == "No background":
-                QMessageBox.warning(
-                    self,
-                    "No background selected",
-                    (
-                        "Choose a background source before "
-                        "enabling subtraction."
-                    ),
-                )
-                return
-
-            if background_mode == "Capture dark frame":
-                self.background_spectrum = None
-                self.set_status(
-                    "Dark frames will be captured automatically "
-                    "during acquisition."
-                )
-
-            elif self.load_background_spectrum() is None:
-                return
-
-        start = float(
-            self.start_wl.value()
-        )
-        end = float(
-            self.end_wl.value()
-        )
-
-        if end < start:
-            start, end = end, start
-
-            self.start_wl.setValue(start)
-            self.end_wl.setValue(end)
-
+        self._set_spectrometer_busy(True)
         self.set_status(
-            f"Acquiring spectrum "
-            f"{start:.2f}-{end:.2f} nm..."
+            f"Connecting and acquiring {start:.2f}-{end:.2f} nm; "
+            f"dark mode: {dark_mode}..."
         )
 
-        self.acquire_button.setEnabled(False)
-
-        background_subtract = (
-            self.use_background.isChecked()
-            and self.background_mode.currentText()
-            == "Capture dark frame"
-        )
-
-        dark_frame_mode = (
-            self._dark_frame_mode()
-            if background_subtract
-            else "none"
-        )
-
-        n_frames = int(
-            self.frames_box.value()
-        )
-
-        combine_mode = (
-            self.mode_combo.currentText()
-        )
-
-        async def acquire() -> tuple[Any, Any]:
-            """Acquire one stitched range spectrum."""
-            return await get_range_spectrum(
-                self.spec,
-                start,
-                end,
-                n_frames=n_frames,
-                mode=combine_mode,
-                background_subtract=background_subtract,
-                dark_frame_mode=dark_frame_mode,
-            )
+        async def acquire() -> tuple[np.ndarray, np.ndarray]:
+            spec = HoribaSpectrometer(preset=preset)
+            try:
+                await spec.connect()
+                await spec.configure(
+                    gain=2,
+                    speed=0,
+                    exposure_time=exposure,
+                    roi={},
+                )
+                return await get_range_spectrum(
+                    spec,
+                    start,
+                    end,
+                    stitch_pixel_overlap=overlap,
+                    n_frames=n_frames,
+                    mode=combine_mode,
+                    dark_mode=dark_mode,
+                    pre_taken_dark=pre_taken_dark,
+                )
+            finally:
+                await _disconnect_safely(spec)
 
         self._run_async(
             lambda: acquire(),
@@ -773,461 +656,311 @@ class HoribaRangeWindow(QMainWindow):
             self._handle_acquire_error,
         )
 
-    def _handle_acquire_done(
-        self,
-        result: tuple[Any, Any],
-    ) -> None:
-        """Plot and optionally save a completed spectrum."""
-        self.acquire_button.setEnabled(True)
-
+    def _handle_acquire_done(self, result: tuple[Any, Any]) -> None:
+        self._set_spectrometer_busy(False)
         x_data, y_data = result
 
-        try:
-            if self._uses_loaded_background():
-                y_data = (
-                    self._apply_background_subtraction(
-                        x_data,
-                        y_data,
-                    )
-                )
-
-        except Exception as exc:
-            self.set_status(
-                f"Background subtraction failed: {exc}"
-            )
-
-            QMessageBox.critical(
-                self,
-                "Background subtraction failed",
-                str(exc),
-            )
-
-            return
-
         self.ax.clear()
-
         self.ax.plot(
             x_data,
             y_data,
-            color="tab:blue",
+            color="#0b6fa4",
+            linewidth=1.35,
+            label="Measured spectrum",
         )
-
-        self.ax.set_xlabel(
-            "Wavelength (nm)"
-        )
-        self.ax.set_ylabel(
-            "Intensity"
-        )
-        self.ax.set_title(
-            "HORIBA spectrum"
-        )
-        self.ax.grid(
-            True,
-            alpha=0.3,
-        )
-
+        self.ax.set_xlabel("Wavelength (nm)", fontsize=11)
+        self.ax.set_ylabel("Intensity (counts)", fontsize=11)
+        self.ax.set_title("HORIBA range spectrum", fontsize=14, pad=12)
+        self.ax.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.85)
+        self.ax.set_facecolor("#fbfcfd")
+        self.ax.margins(x=0.01, y=0.08)
         self.figure.tight_layout()
         self.canvas.draw_idle()
-
-        self._maybe_save_result(
-            x_data,
-            y_data,
+        wavelength_min = float(np.min(x_data))
+        wavelength_max = float(np.max(x_data))
+        self.plot_meta.setText(
+            f"{wavelength_min:.2f}-{wavelength_max:.2f} nm  |  {len(x_data)} points"
         )
-
-        self.set_status(
-            "Spectrum acquired successfully."
-        )
-
-    def _handle_acquire_error(
-        self,
-        error: str,
-    ) -> None:
-        """Report a failed range acquisition."""
-        self.acquire_button.setEnabled(True)
-
-        self.set_status(
-            f"Acquisition failed: {error}"
-        )
-
-        QMessageBox.critical(
-            self,
-            "Acquisition failed",
-            error,
-        )
-
-    def _maybe_save_result(
-        self,
-        x_data: Any,
-        y_data: Any,
-    ) -> None:
-        """Save selected CSV and PNG output files."""
-        if not (
-            self.save_csv.isChecked()
-            or self.save_png.isChecked()
-        ):
-            return
-
-        output_dir = (
-            Path.cwd() / "spectra"
-        )
-        output_dir.mkdir(
-            exist_ok=True
-        )
-
-        stem = (
-            f"horiba_"
-            f"{float(self.start_wl.value()):.0f}_"
-            f"{float(self.end_wl.value()):.0f}nm"
-        )
-
-        if self.save_csv.isChecked():
-            csv_path = (
-                output_dir / f"{stem}.csv"
-            )
-
-            with csv_path.open(
-                "w",
-                newline="",
-            ) as handle:
-                writer = csv.writer(handle)
-
-                writer.writerow(
-                    [
-                        "wavelength_nm",
-                        "intensity",
-                    ]
-                )
-
-                for wavelength, intensity in zip(
-                    x_data,
-                    y_data,
-                ):
-                    writer.writerow(
-                        [
-                            float(wavelength),
-                            float(intensity),
-                        ]
-                    )
-
-        if self.save_png.isChecked():
-            png_path = (
-                output_dir / f"{stem}.png"
-            )
-
-            self.figure.savefig(
-                png_path,
-                dpi=200,
-            )
-
-    # ------------------------------------------------------------------
-    # ITC4000 laser control
-    # ------------------------------------------------------------------
-    def connect_laser(self) -> None:
-        """Connect, query identity/state, and retain the live session.
-
-        The following operations are performed using the same session that
-        will later receive the output and setpoint commands:
-
-        1. Open the VISA resource.
-        2. Query ``*IDN?``.
-        3. Query the laser-current setpoint.
-        4. Query laser-diode output state.
-        5. Query TEC output state.
-        6. Retain the connection if all queries succeed.
-        """
-        address = (
-            self.laser_address.text().strip()
-            or ITC4000.DEFAULT_ADDRESS
-        )
-
-        self.set_status(
-            f"Connecting to laser at {address}..."
-        )
-
-        self.laser_connect.setEnabled(False)
 
         try:
-            # Explicitly close an earlier connection before reconnecting.
+            saved = self._maybe_save_result(x_data, y_data)
+        except Exception as exc:  # noqa: BLE001
+            self.set_status(f"Acquisition succeeded, but saving failed: {exc}")
+            self._show_error("Save failed", str(exc), traceback.format_exc())
+            return
+
+        suffix = f" Saved to {saved}." if saved else ""
+        wavelength_min = float(np.min(x_data))
+        wavelength_max = float(np.max(x_data))
+        self.set_status(
+            f"Spectrum acquired successfully: {wavelength_min:.2f}-"
+            f"{wavelength_max:.2f} nm, {len(x_data)} points.{suffix}"
+        )
+
+    def _handle_acquire_error(self, error: str) -> None:
+        self._set_spectrometer_busy(False)
+        summary = self._exception_summary(error)
+        self.set_status(f"Acquisition failed: {summary}")
+        self._show_error("Acquisition failed", summary, error)
+
+    def capture_reusable_dark(self) -> None:
+        """Connect, capture a stitched range dark, and disconnect."""
+        if self._spectrometer_busy:
+            return
+        try:
+            start, end = self._normalised_range()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid range", str(exc))
+            return
+
+        preset = self.preset_combo.currentText()
+        exposure = float(self.exposure_box.value())
+        n_frames = int(self.frames_box.value())
+        mode = self.mode_combo.currentText()
+        overlap = int(self.overlap_box.value())
+
+        self._set_spectrometer_busy(True)
+        self.set_status(
+            f"Connecting and capturing reusable dark over {start:.2f}-{end:.2f} nm..."
+        )
+
+        async def capture() -> DarkSpectrum:
+            spec = HoribaSpectrometer(preset=preset)
+            try:
+                await spec.connect()
+                await spec.configure(
+                    gain=2,
+                    speed=0,
+                    exposure_time=exposure,
+                    roi={},
+                )
+                return await capture_range_dark(
+                    spec,
+                    start,
+                    end,
+                    stitch_pixel_overlap=overlap,
+                    n_frames=n_frames,
+                    mode=mode,
+                )
+            finally:
+                await _disconnect_safely(spec)
+
+        self._run_async(
+            lambda: capture(),
+            self._handle_dark_capture_done,
+            self._handle_dark_capture_error,
+        )
+
+    def _handle_dark_capture_done(self, dark: DarkSpectrum) -> None:
+        self._set_spectrometer_busy(False)
+        self.pre_taken_dark = dark
+        self.use_background.setChecked(True)
+        self.background_mode.setCurrentText("Use pre-taken stitched dark")
+        self._update_background_controls()
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save reusable range dark",
+            str(Path.cwd() / "range_dark.csv"),
+            "CSV files (*.csv)",
+        )
+        if path:
+            try:
+                dark.save_csv(path)
+                self.set_status(f"Reusable dark captured and saved to {path}.")
+            except Exception as exc:  # noqa: BLE001
+                self.set_status(f"Dark captured, but saving failed: {exc}")
+                self._show_error("Save dark failed", str(exc), traceback.format_exc())
+        else:
+            self.set_status("Reusable dark captured and retained in memory.")
+
+    def _handle_dark_capture_error(self, error: str) -> None:
+        self._set_spectrometer_busy(False)
+        summary = self._exception_summary(error)
+        self.set_status(f"Reusable dark capture failed: {summary}")
+        self._show_error("Dark capture failed", summary, error)
+
+    def load_pre_taken_dark(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load reusable range dark",
+            str(Path.cwd()),
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            self.pre_taken_dark = DarkSpectrum.load_csv(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Load dark failed", str(exc), traceback.format_exc())
+            return
+
+        self.use_background.setChecked(True)
+        self.background_mode.setCurrentText("Use pre-taken stitched dark")
+        self._update_background_controls()
+        self.set_status(f"Loaded reusable range dark from {path}.")
+
+    def clear_pre_taken_dark(self) -> None:
+        self.pre_taken_dark = None
+        self._update_background_controls()
+        self.set_status("Cleared the pre-taken range dark.")
+
+    def _maybe_save_result(self, x_data: Any, y_data: Any) -> Path | None:
+        if not (self.save_csv.isChecked() or self.save_png.isChecked()):
+            return None
+
+        output_dir = Path.cwd() / "spectra"
+        output_dir.mkdir(exist_ok=True)
+        start, end = self._normalised_range()
+        stem = f"horiba_{start:.0f}_{end:.0f}nm"
+
+        if self.save_csv.isChecked():
+            with (output_dir / f"{stem}.csv").open("w", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["wavelength_nm", "intensity"])
+                writer.writerows(
+                    (float(wavelength), float(intensity))
+                    for wavelength, intensity in zip(x_data, y_data, strict=True)
+                )
+        if self.save_png.isChecked():
+            self.figure.savefig(output_dir / f"{stem}.png", dpi=200)
+        return output_dir
+
+    # ------------------------------------------------------------------
+    # Laser control
+    # ------------------------------------------------------------------
+    def set_laser_indicator(self, on: bool) -> None:
+        if on:
+            self.laser_light.setText("Laser output: ON")
+            color, border = "#1f5a2a", "#5fd17a"
+        else:
+            self.laser_light.setText("Laser output: OFF")
+            color, border = "#3a3a3a", "#666"
+        self.laser_light.setStyleSheet(
+            "QLabel { "
+            f"background-color: {color}; color: white; border: 1px solid {border}; "
+            "border-radius: 8px; padding: 6px; }"
+        )
+
+    def _toggle_laser_controls(self, enabled: bool) -> None:
+        connected = self.laser is not None
+        self.laser_address.setEnabled(enabled and not connected)
+        self.laser_current.setEnabled(enabled)
+        self.laser_connect.setEnabled(enabled)
+        self.laser_on.setEnabled(enabled and connected)
+        self.laser_off.setEnabled(enabled and connected)
+        self.laser_set.setEnabled(enabled and connected)
+
+    def connect_laser(self) -> None:
+        address = self.laser_address.text().strip() or ITC4000.DEFAULT_ADDRESS
+        self.laser_connect.setEnabled(False)
+        self.set_status(f"Connecting to laser at {address}...")
+        try:
             if self.laser is not None:
                 self.laser.close()
-                self.laser = None
 
             laser = ITC4000(
                 address,
-                threshold_current=(
-                    LASER_THRESHOLD_CURRENT_A
-                ),
+                threshold_current=LASER_THRESHOLD_CURRENT_A,
                 max_current=MAX_LASER_CURRENT_A,
             )
-
-            # Validate the exact persistent session that the GUI will use.
             try:
                 identity = laser.identify()
                 current = laser.get_current()
-                diode_on = (
-                    laser.get_diode_output()
-                )
-                tec_on = (
-                    laser.get_tec_output()
-                )
-
+                diode_on = laser.get_diode_output()
+                tec_on = laser.get_tec_output()
             except Exception:
                 laser.close()
                 raise
 
             self.laser = laser
-
-            self.laser_address.setEnabled(False)
-            self.laser_on.setEnabled(True)
-            self.laser_off.setEnabled(True)
-            self.laser_set.setEnabled(True)
-
-            # Display the real controller setpoint rather than retaining
-            # a potentially stale value from the GUI.
-            self.laser_current.setValue(
-                current
-            )
-
-            self.set_laser_indicator(
-                diode_on
-            )
-
-            diode_text = (
-                "ON" if diode_on else "OFF"
-            )
-            tec_text = (
-                "ON" if tec_on else "OFF"
-            )
-
+            self.laser_current.setValue(current)
+            self.set_laser_indicator(diode_on)
+            self._toggle_laser_controls(True)
             self.set_status(
-                f"Connected: {identity} | "
-                f"Current: {current:.3f} A | "
-                f"LD: {diode_text} | "
-                f"TEC: {tec_text}"
+                f"Connected: {identity} | Current: {current:.3f} A | "
+                f"LD: {'ON' if diode_on else 'OFF'} | TEC: {'ON' if tec_on else 'OFF'}"
             )
-
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self.laser = None
-
-            self.laser_address.setEnabled(True)
-            self.laser_on.setEnabled(False)
-            self.laser_off.setEnabled(False)
-            self.laser_set.setEnabled(False)
-
             self.set_laser_indicator(False)
-
-            self.set_status(
-                f"Laser connection failed: {exc}"
+            self._toggle_laser_controls(True)
+            self.set_status(f"Laser connection failed: {exc}")
+            self._show_error(
+                "Laser connection failed", str(exc), traceback.format_exc()
             )
-
-            QMessageBox.critical(
-                self,
-                "Laser connection failed",
-                (
-                    f"Could not connect to the ITC4000 "
-                    f"at {address}.\n\n{exc}"
-                ),
-            )
-
         finally:
             self.laser_connect.setEnabled(True)
 
     def turn_laser_on(self) -> None:
-        """Apply the selected current and enable diode output."""
         if self.laser is None:
-            QMessageBox.warning(
-                self,
-                "No laser",
-                "Connect the laser first.",
-            )
+            QMessageBox.warning(self, "No laser", "Connect the laser first.")
             return
-
-        current = float(
-            self.laser_current.value()
-        )
-
-        self.set_status(
-            f"Turning laser on at {current:.3f} A..."
-        )
-
-        # Make the status update visible before any TEC stabilisation delay.
+        current = float(self.laser_current.value())
+        self.set_status(f"Turning laser on at {current:.3f} A...")
         QApplication.processEvents()
-
         try:
-            self.laser.enable(
-                current=current
-            )
-
-            diode_on = (
-                self.laser.get_diode_output()
-            )
-            current_readback = (
-                self.laser.get_current()
-            )
-
-            self.set_laser_indicator(
-                diode_on
-            )
-
-            output_text = (
-                "ON" if diode_on else "OFF"
-            )
-
+            self.laser.enable(current=current)
+            on = self.laser.get_diode_output()
+            readback = self.laser.get_current()
+            self.set_laser_indicator(on)
             self.set_status(
-                f"Laser output confirmed {output_text}; "
-                f"current setpoint "
-                f"{current_readback:.3f} A."
+                f"Laser output {'ON' if on else 'OFF'}; current {readback:.3f} A."
             )
-
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self.set_laser_indicator(False)
-
-            self.set_status(
-                f"Laser enable failed: {exc}"
-            )
-
-            QMessageBox.critical(
-                self,
-                "Laser enable failed",
-                str(exc),
-            )
+            self._show_error("Laser enable failed", str(exc), traceback.format_exc())
 
     def turn_laser_off(self) -> None:
-        """Disable diode output and confirm controller readback."""
         if self.laser is None:
-            QMessageBox.warning(
-                self,
-                "No laser",
-                "Connect the laser first.",
-            )
+            QMessageBox.warning(self, "No laser", "Connect the laser first.")
             return
-
-        self.set_status(
-            "Turning laser off..."
-        )
-
-        QApplication.processEvents()
-
         try:
             self.laser.disable()
-
-            diode_on = (
-                self.laser.get_diode_output()
-            )
-            current_readback = (
-                self.laser.get_current()
-            )
-
-            self.laser_current.setValue(
-                current_readback
-            )
-
-            self.set_laser_indicator(
-                diode_on
-            )
-
-            output_text = (
-                "ON" if diode_on else "OFF"
-            )
-
+            on = self.laser.get_diode_output()
+            readback = self.laser.get_current()
+            self.laser_current.setValue(readback)
+            self.set_laser_indicator(on)
             self.set_status(
-                f"Laser output confirmed {output_text}; "
-                f"current setpoint "
-                f"{current_readback:.3f} A."
+                f"Laser output {'ON' if on else 'OFF'}; current {readback:.3f} A."
             )
-
-        except Exception as exc:
-            self.set_status(
-                f"Laser shutdown failed: {exc}"
-            )
-
-            QMessageBox.critical(
-                self,
-                "Laser shutdown failed",
-                str(exc),
-            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Laser shutdown failed", str(exc), traceback.format_exc())
 
     def set_laser_current(self) -> None:
-        """Set current and display the actual controller readback."""
         if self.laser is None:
+            QMessageBox.warning(self, "No laser", "Connect the laser first.")
+            return
+        requested = float(self.laser_current.value())
+        try:
+            self.laser.set_current(requested)
+            readback = self.laser.get_current()
+            self.laser_current.setValue(readback)
+            self.set_status(
+                f"Requested {requested:.3f} A; controller readback {readback:.3f} A."
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Set current failed", str(exc), traceback.format_exc())
+
+    def closeEvent(self, event: Any) -> None:
+        """Close the persistent laser session; HORIBA sessions are task-local."""
+        if self._spectrometer_busy:
             QMessageBox.warning(
                 self,
-                "No laser",
-                "Connect the laser first.",
+                "Operation in progress",
+                "Wait for the spectrometer operation to finish before closing.",
             )
+            event.ignore()
             return
 
-        requested = float(
-            self.laser_current.value()
-        )
-
-        self.set_status(
-            f"Setting laser current to "
-            f"{requested:.3f} A..."
-        )
-
-        try:
-            self.laser.set_current(
-                requested
-            )
-
-            readback = (
-                self.laser.get_current()
-            )
-
-            self.laser_current.setValue(
-                readback
-            )
-
-            self.set_status(
-                f"Requested {requested:.3f} A; "
-                f"controller readback "
-                f"{readback:.3f} A."
-            )
-
-        except Exception as exc:
-            self.set_status(
-                f"Set current failed: {exc}"
-            )
-
-            QMessageBox.critical(
-                self,
-                "Set current failed",
-                str(exc),
-            )
-
-    # ------------------------------------------------------------------
-    # Application lifecycle
-    # ------------------------------------------------------------------
-    def closeEvent(
-        self,
-        event: Any,
-    ) -> None:
-        """Release connected hardware when the window closes."""
-        try:
-            if self.laser is not None:
-                try:
-                    self.laser.disable(
-                        disable_tec=True
-                    )
-                finally:
-                    self.laser.close()
-                    self.laser = None
-
-        except Exception:
-            # Window shutdown must still continue if hardware disappears.
-            pass
-
-        try:
-            if self.spec is not None:
-                asyncio.run(
-                    self.spec.disconnect()
-                )
-                self.spec = None
-
-        except Exception:
-            pass
-
+        if self.laser is not None:
+            try:
+                self.laser.disable(disable_tec=True)
+            except Exception:  # noqa: BLE001
+                logger.warning("Laser shutdown failed while closing the GUI")
+            finally:
+                self.laser.close()
+                self.laser = None
         super().closeEvent(event)
 
 
@@ -1236,10 +969,8 @@ def main() -> None:
     import sys
 
     app = QApplication(sys.argv)
-
     window = HoribaRangeWindow()
     window.show()
-
     sys.exit(app.exec())
 
 
