@@ -262,6 +262,11 @@ class HoribaRangeWindow(QMainWindow):
 
         self.preset_combo = QComboBox()
         self.preset_combo.addItems(["syncerity", "symphony"])
+        self.preset_combo.setToolTip(
+            "Select the detector preset. "
+            "The grating turret position is read from the instrument; "
+            "the GUI does not force a grating movement."
+        )
         form.addRow("Detector preset", self.preset_combo)
 
         range_widget = QWidget()
@@ -312,6 +317,26 @@ class HoribaRangeWindow(QMainWindow):
         self.overlap_box.setValue(DEFAULT_STITCH_OVERLAP_PIXELS)
         self.overlap_box.setSuffix(" pixels")
         form.addRow("Stitch overlap", self.overlap_box)
+
+        self.slit_width_box = QDoubleSpinBox()
+        self.slit_width_box.setRange(
+            0.001,
+            10.000,
+        )
+        self.slit_width_box.setDecimals(3)
+        self.slit_width_box.setSingleStep(0.050)
+        self.slit_width_box.setValue(0.500)
+        self.slit_width_box.setSuffix(" mm")
+        self.slit_width_box.setToolTip(
+            "Set the width of monochromator slit A. "
+            "Use values supported by the spectrometer "
+            "configuration and firmware."
+        )
+
+        form.addRow(
+            "Slit A width",
+            self.slit_width_box,
+        )
 
         hint = QLabel(
             "Required: detector, wavelength range, exposure, and frame combination."
@@ -474,6 +499,7 @@ class HoribaRangeWindow(QMainWindow):
         self.preset_combo.setEnabled(idle)
         self.exposure_box.setEnabled(idle)
         self.overlap_box.setEnabled(idle)
+        self.slit_width_box.setEnabled(idle)
 
     def _update_frame_controls(self) -> None:
         mode = self.mode_combo.currentText()
@@ -561,6 +587,8 @@ class HoribaRangeWindow(QMainWindow):
         self.set_status("Testing HORIBA connection and configuration...")
         preset = self.preset_combo.currentText()
         exposure = float(self.exposure_box.value())
+        slit_name = "A"
+        slit_width_mm = float(self.slit_width_box.value())
 
         async def test() -> str:
             spec = HoribaSpectrometer(preset=preset)
@@ -572,7 +600,17 @@ class HoribaRangeWindow(QMainWindow):
                     exposure_time=exposure,
                     roi={},
                 )
-                return preset
+
+                reported_slit_width_mm = await spec.set_slit_width(
+                    slit_name,
+                    slit_width_mm,
+                )
+
+                return (
+                    f"{preset}; slit {slit_name} "
+                    f"reported "
+                    f"{reported_slit_width_mm:.3f} mm"
+                )
             finally:
                 await _disconnect_safely(spec)
 
@@ -619,6 +657,8 @@ class HoribaRangeWindow(QMainWindow):
         n_frames = int(self.frames_box.value())
         combine_mode = self.mode_combo.currentText()
         overlap = int(self.overlap_box.value())
+        slit_name = "A"
+        slit_width_mm = float(self.slit_width_box.value())
         pre_taken_dark = self.pre_taken_dark if dark_mode == "pre_taken" else None
 
         self._set_spectrometer_busy(True)
@@ -637,6 +677,18 @@ class HoribaRangeWindow(QMainWindow):
                     exposure_time=exposure,
                     roi={},
                 )
+
+                reported_slit_width_mm = await spec.set_slit_width(
+                    slit_name,
+                    slit_width_mm,
+                )
+
+                logger.info(
+                    "Acquiring with slit {} at {:.3f} mm",
+                    slit_name,
+                    reported_slit_width_mm,
+                )
+
                 return await get_range_spectrum(
                     spec,
                     start,
@@ -718,6 +770,8 @@ class HoribaRangeWindow(QMainWindow):
         n_frames = int(self.frames_box.value())
         mode = self.mode_combo.currentText()
         overlap = int(self.overlap_box.value())
+        slit_name = "A"
+        slit_width_mm = float(self.slit_width_box.value())
 
         self._set_spectrometer_busy(True)
         self.set_status(
@@ -734,6 +788,18 @@ class HoribaRangeWindow(QMainWindow):
                     exposure_time=exposure,
                     roi={},
                 )
+
+                reported_slit_width_mm = await spec.set_slit_width(
+                    slit_name,
+                    slit_width_mm,
+                )
+
+                logger.info(
+                    "Capturing reusable dark with slit {} at {:.3f} mm",
+                    slit_name,
+                    reported_slit_width_mm,
+                )
+
                 return await capture_range_dark(
                     spec,
                     start,
