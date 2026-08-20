@@ -35,3 +35,9 @@ Thumbs.db
 
 # horiba repo
 vendor/Horiba/python-sdk
+
+*.bak
+*.pyc
+*.pyo
+__pycache__/
+scratch/

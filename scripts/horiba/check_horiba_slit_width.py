@@ -30,7 +30,7 @@ PRESET = "syncerity"
 TEST_WAVELENGTH_NM = 690
 
 # Start conservatively to avoid saturation at wider slit positions.
-EXPOSURE_TIME_S = 0.01
+EXPOSURE_TIME_S = 0.05
 
 GAIN = 2
 SPEED = 0
