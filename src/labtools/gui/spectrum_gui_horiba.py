@@ -57,6 +57,7 @@ MAX_LASER_CURRENT_A = 0.100
 DEFAULT_LASER_CURRENT_A = 0.080
 LASER_THRESHOLD_CURRENT_A = 0.049
 DEFAULT_STITCH_OVERLAP_PIXELS = 20
+DEFAULT_OUTPUT_DIRECTORY = Path.cwd() / "spectra"
 
 
 async def _disconnect_safely(spec: HoribaSpectrometer) -> None:
@@ -263,9 +264,8 @@ class HoribaRangeWindow(QMainWindow):
         self.preset_combo = QComboBox()
         self.preset_combo.addItems(["syncerity", "symphony"])
         self.preset_combo.setToolTip(
-            "Select the detector preset. "
-            "The grating turret position is read from the instrument; "
-            "the GUI does not force a grating movement."
+            "The selected preset verifies detector identity, grating, exit "
+            "mirror and detector settings before acquisition."
         )
         form.addRow("Detector preset", self.preset_combo)
 
@@ -274,12 +274,12 @@ class HoribaRangeWindow(QMainWindow):
         range_layout.setContentsMargins(0, 0, 0, 0)
         range_layout.setHorizontalSpacing(8)
         self.start_wl = QDoubleSpinBox()
-        self.start_wl.setRange(0.0, 2000.0)
+        self.start_wl.setRange(0.0, 2200.0)
         self.start_wl.setDecimals(2)
         self.start_wl.setValue(600.0)
         self.start_wl.setSuffix(" nm")
         self.end_wl = QDoubleSpinBox()
-        self.end_wl.setRange(0.0, 2000.0)
+        self.end_wl.setRange(0.0, 2200.0)
         self.end_wl.setDecimals(2)
         self.end_wl.setValue(900.0)
         self.end_wl.setSuffix(" nm")
@@ -290,7 +290,7 @@ class HoribaRangeWindow(QMainWindow):
         form.addRow("Spectral range", range_widget)
 
         self.exposure_box = QDoubleSpinBox()
-        self.exposure_box.setRange(0.001, 1000.0)
+        self.exposure_box.setRange(0.065, 1000.0)
         self.exposure_box.setDecimals(3)
         self.exposure_box.setSingleStep(0.1)
         self.exposure_box.setValue(0.5)
@@ -312,64 +312,64 @@ class HoribaRangeWindow(QMainWindow):
         repeat_layout.addWidget(self.mode_combo, 1, 1)
         form.addRow("Repeats", repeat_widget)
 
-        self.overlap_box = QSpinBox()
-        self.overlap_box.setRange(0, 1000)
-        self.overlap_box.setValue(DEFAULT_STITCH_OVERLAP_PIXELS)
-        self.overlap_box.setSuffix(" pixels")
-        form.addRow("Stitch overlap", self.overlap_box)
-
-        self.slit_width_box = QDoubleSpinBox()
-        self.slit_width_box.setRange(
-            0.001,
-            10.000,
-        )
-        self.slit_width_box.setDecimals(3)
-        self.slit_width_box.setSingleStep(0.050)
-        self.slit_width_box.setValue(0.500)
-        self.slit_width_box.setSuffix(" mm")
-        self.slit_width_box.setToolTip(
-            "Set the width of monochromator slit A. "
-            "Use values supported by the spectrometer "
-            "configuration and firmware."
-        )
-
-        form.addRow(
-            "Slit A width",
-            self.slit_width_box,
-        )
-
         hint = QLabel(
-            "Required: detector, wavelength range, exposure, and frame combination."
+            "The selected preset is checked and applied when connecting or acquiring."
         )
         hint.setObjectName("hintText")
         hint.setWordWrap(True)
         form.addRow("", hint)
         root.addWidget(acquisition)
 
+        self.advanced_group = QGroupBox("Advanced detector settings")
+        self.advanced_group.setCheckable(True)
+        self.advanced_group.setChecked(False)
+        advanced_layout = QVBoxLayout(self.advanced_group)
+        advanced_layout.setContentsMargins(12, 8, 12, 12)
+
+        self.advanced_content = QWidget()
+        advanced_form = QFormLayout(self.advanced_content)
+        advanced_form.setContentsMargins(0, 0, 0, 0)
+        advanced_form.setVerticalSpacing(9)
+
+        self.gain_combo = QComboBox()
+        self.speed_combo = QComboBox()
+        advanced_form.addRow("Gain", self.gain_combo)
+        advanced_form.addRow("Readout speed", self.speed_combo)
+
+        self.overlap_box = QSpinBox()
+        self.overlap_box.setRange(0, 1000)
+        self.overlap_box.setValue(DEFAULT_STITCH_OVERLAP_PIXELS)
+        self.overlap_box.setSuffix(" pixels")
+        advanced_form.addRow("Stitch overlap", self.overlap_box)
+
+        self.slit_width_box = QDoubleSpinBox()
+        self.slit_width_box.setRange(0.001, 10.000)
+        self.slit_width_box.setDecimals(3)
+        self.slit_width_box.setSingleStep(0.050)
+        self.slit_width_box.setValue(0.500)
+        self.slit_width_box.setSuffix(" mm")
+        self.slit_width_box.setToolTip("Set and verify monochromator entrance Slit A.")
+        advanced_form.addRow("Entrance slit width", self.slit_width_box)
+
+        advanced_layout.addWidget(self.advanced_content)
+        self.advanced_content.setVisible(False)
+        root.addWidget(self.advanced_group)
+
         dark_group = QGroupBox("2  Dark correction")
         dark_form = QFormLayout(dark_group)
         dark_form.setVerticalSpacing(9)
         self.use_background = QCheckBox("Enable dark subtraction")
         dark_form.addRow("", self.use_background)
-
         self.background_mode = QComboBox()
         self.background_mode.addItems(
-            [
-                "Capture during acquisition",
-                "Use pre-taken stitched dark",
-            ]
+            ["Capture during acquisition", "Use pre-taken stitched dark"]
         )
         dark_form.addRow("Source", self.background_mode)
-
         self.background_timing = QComboBox()
         self.background_timing.addItems(
-            [
-                "One dark per centre wavelength",
-                "One dark per repeated frame",
-            ]
+            ["One dark per centre wavelength", "One dark per repeated frame"]
         )
         dark_form.addRow("Timing", self.background_timing)
-
         self.capture_dark_button = QPushButton("Capture reusable dark")
         self.load_dark_button = QPushButton("Load dark CSV")
         self.clear_dark_button = QPushButton("Clear")
@@ -379,7 +379,6 @@ class HoribaRangeWindow(QMainWindow):
         dark_buttons.addWidget(self.load_dark_button, 1, 0)
         dark_buttons.addWidget(self.clear_dark_button, 1, 1)
         dark_form.addRow("Pre-taken dark", dark_buttons)
-
         self.background_status = QLabel("Dark subtraction disabled")
         self.background_status.setObjectName("hintText")
         self.background_status.setWordWrap(True)
@@ -387,14 +386,26 @@ class HoribaRangeWindow(QMainWindow):
         root.addWidget(dark_group)
 
         output_group = QGroupBox("3  Output")
-        output_layout = QVBoxLayout(output_group)
+        output_form = QFormLayout(output_group)
+        output_form.setVerticalSpacing(9)
         save_row = QHBoxLayout()
         self.save_csv = QCheckBox("Save CSV")
         self.save_png = QCheckBox("Save PNG")
         save_row.addWidget(self.save_csv)
         save_row.addWidget(self.save_png)
         save_row.addStretch(1)
-        output_layout.addLayout(save_row)
+        output_form.addRow("Formats", save_row)
+
+        output_path_widget = QWidget()
+        output_path_layout = QHBoxLayout(output_path_widget)
+        output_path_layout.setContentsMargins(0, 0, 0, 0)
+        output_path_layout.setSpacing(6)
+        self.output_directory = QLineEdit(str(DEFAULT_OUTPUT_DIRECTORY))
+        self.output_directory.setToolTip("Directory used for CSV, PNG and dark files.")
+        self.output_browse_button = QPushButton("Browse...")
+        output_path_layout.addWidget(self.output_directory, 1)
+        output_path_layout.addWidget(self.output_browse_button)
+        output_form.addRow("Output folder", output_path_widget)
         root.addWidget(output_group)
 
         self.connect_button = QPushButton("Test connection")
@@ -402,6 +413,8 @@ class HoribaRangeWindow(QMainWindow):
         self.acquire_button.setObjectName("primaryButton")
         root.addWidget(self.connect_button)
         root.addWidget(self.acquire_button)
+
+        self._update_preset_controls()
 
     def _build_laser_controls(self, root: QVBoxLayout) -> None:
         self.laser_group = QGroupBox("Laser control  (optional)")
@@ -446,6 +459,9 @@ class HoribaRangeWindow(QMainWindow):
         self.load_dark_button.clicked.connect(self.load_pre_taken_dark)
         self.clear_dark_button.clicked.connect(self.clear_pre_taken_dark)
         self.mode_combo.currentTextChanged.connect(self._update_frame_controls)
+        self.preset_combo.currentTextChanged.connect(self._update_preset_controls)
+        self.advanced_group.toggled.connect(self._update_advanced_controls)
+        self.output_browse_button.clicked.connect(self._browse_output_directory)
         self.use_background.toggled.connect(self._update_background_controls)
         self.background_mode.currentTextChanged.connect(
             self._update_background_controls
@@ -487,6 +503,61 @@ class HoribaRangeWindow(QMainWindow):
             self.end_wl.setValue(end)
         return start, end
 
+    def _update_preset_controls(self) -> None:
+        """Populate detector-specific gain and speed descriptions."""
+        preset = self.preset_combo.currentText()
+        options = HoribaSpectrometer.preset_options(preset)
+
+        self.gain_combo.clear()
+        for label, token in options["gains"]:
+            self.gain_combo.addItem(label, token)
+        gain_index = self.gain_combo.findData(options["default_gain"])
+        self.gain_combo.setCurrentIndex(max(0, gain_index))
+
+        self.speed_combo.clear()
+        for label, token in options["speeds"]:
+            self.speed_combo.addItem(label, token)
+        speed_index = self.speed_combo.findData(options["default_speed"])
+        self.speed_combo.setCurrentIndex(max(0, speed_index))
+
+        self.exposure_box.setMinimum(options["minimum_exposure_s"])
+        if self.exposure_box.value() < options["minimum_exposure_s"]:
+            self.exposure_box.setValue(options["minimum_exposure_s"])
+        self._update_advanced_controls()
+
+    def _update_advanced_controls(self) -> None:
+        """Expand advanced controls only while the group is checked."""
+        checked = self.advanced_group.isChecked()
+        self.advanced_content.setVisible(checked)
+
+        enabled = checked and not self._spectrometer_busy
+        self.gain_combo.setEnabled(enabled)
+        self.speed_combo.setEnabled(enabled)
+        self.overlap_box.setEnabled(enabled)
+        self.slit_width_box.setEnabled(enabled)
+
+    def _selected_detector_settings(self) -> tuple[int, int]:
+        """Return preset defaults or explicit advanced overrides."""
+        preset = self.preset_combo.currentText()
+        options = HoribaSpectrometer.preset_options(preset)
+        if not self.advanced_group.isChecked():
+            return int(options["default_gain"]), int(options["default_speed"])
+        return int(self.gain_combo.currentData()), int(self.speed_combo.currentData())
+
+    def _selected_output_directory(self) -> Path:
+        text = self.output_directory.text().strip()
+        output_dir = Path(text).expanduser() if text else DEFAULT_OUTPUT_DIRECTORY
+        return output_dir.resolve()
+
+    def _browse_output_directory(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Select spectrum output folder",
+            str(self._selected_output_directory()),
+        )
+        if selected:
+            self.output_directory.setText(selected)
+
     def _set_spectrometer_busy(self, busy: bool) -> None:
         self._spectrometer_busy = busy
         self._update_spectrometer_buttons()
@@ -498,8 +569,10 @@ class HoribaRangeWindow(QMainWindow):
         self.capture_dark_button.setEnabled(idle)
         self.preset_combo.setEnabled(idle)
         self.exposure_box.setEnabled(idle)
-        self.overlap_box.setEnabled(idle)
-        self.slit_width_box.setEnabled(idle)
+        self.advanced_group.setEnabled(idle)
+        self.output_directory.setEnabled(idle)
+        self.output_browse_button.setEnabled(idle)
+        self._update_advanced_controls()
 
     def _update_frame_controls(self) -> None:
         mode = self.mode_combo.currentText()
@@ -580,14 +653,15 @@ class HoribaRangeWindow(QMainWindow):
     # HORIBA operations: each owns connect/configure/work/disconnect
     # ------------------------------------------------------------------
     def test_spectrometer_connection(self) -> None:
-        """Connect, configure, then disconnect within one event loop."""
+        """Connect, apply and verify the selected preset, then disconnect."""
         if self._spectrometer_busy:
             return
         self._set_spectrometer_busy(True)
-        self.set_status("Testing HORIBA connection and configuration...")
+        self.set_status("Testing HORIBA preset and hardware configuration...")
+
         preset = self.preset_combo.currentText()
         exposure = float(self.exposure_box.value())
-        slit_name = "A"
+        gain, speed = self._selected_detector_settings()
         slit_width_mm = float(self.slit_width_box.value())
 
         async def test() -> str:
@@ -595,22 +669,13 @@ class HoribaRangeWindow(QMainWindow):
             try:
                 await spec.connect()
                 await spec.configure(
-                    gain=2,
-                    speed=0,
+                    gain=gain,
+                    speed=speed,
                     exposure_time=exposure,
-                    roi={},
+                    roi=None,
+                    entrance_slit_width_mm=slit_width_mm,
                 )
-
-                reported_slit_width_mm = await spec.set_slit_width(
-                    slit_name,
-                    slit_width_mm,
-                )
-
-                return (
-                    f"{preset}; slit {slit_name} "
-                    f"reported "
-                    f"{reported_slit_width_mm:.3f} mm"
-                )
+                return spec.configuration_summary()
             finally:
                 await _disconnect_safely(spec)
 
@@ -634,7 +699,7 @@ class HoribaRangeWindow(QMainWindow):
         self._show_error("Spectrometer connection failed", summary, error)
 
     def acquire_spectrum(self) -> None:
-        """Connect, configure, acquire one range, and disconnect."""
+        """Apply the selected preset, acquire one range, and disconnect."""
         if self._spectrometer_busy:
             return
         try:
@@ -656,14 +721,14 @@ class HoribaRangeWindow(QMainWindow):
         exposure = float(self.exposure_box.value())
         n_frames = int(self.frames_box.value())
         combine_mode = self.mode_combo.currentText()
+        gain, speed = self._selected_detector_settings()
         overlap = int(self.overlap_box.value())
-        slit_name = "A"
         slit_width_mm = float(self.slit_width_box.value())
         pre_taken_dark = self.pre_taken_dark if dark_mode == "pre_taken" else None
 
         self._set_spectrometer_busy(True)
         self.set_status(
-            f"Connecting and acquiring {start:.2f}-{end:.2f} nm; "
+            f"Applying {preset} preset and acquiring {start:.2f}-{end:.2f} nm; "
             f"dark mode: {dark_mode}..."
         )
 
@@ -672,23 +737,13 @@ class HoribaRangeWindow(QMainWindow):
             try:
                 await spec.connect()
                 await spec.configure(
-                    gain=2,
-                    speed=0,
+                    gain=gain,
+                    speed=speed,
                     exposure_time=exposure,
-                    roi={},
+                    roi=None,
+                    entrance_slit_width_mm=slit_width_mm,
                 )
-
-                reported_slit_width_mm = await spec.set_slit_width(
-                    slit_name,
-                    slit_width_mm,
-                )
-
-                logger.info(
-                    "Acquiring with slit {} at {:.3f} mm",
-                    slit_name,
-                    reported_slit_width_mm,
-                )
-
+                logger.info("Acquiring with {}", spec.configuration_summary())
                 return await get_range_spectrum(
                     spec,
                     start,
@@ -756,7 +811,7 @@ class HoribaRangeWindow(QMainWindow):
         self._show_error("Acquisition failed", summary, error)
 
     def capture_reusable_dark(self) -> None:
-        """Connect, capture a stitched range dark, and disconnect."""
+        """Apply the selected preset, capture a stitched dark, and disconnect."""
         if self._spectrometer_busy:
             return
         try:
@@ -769,13 +824,14 @@ class HoribaRangeWindow(QMainWindow):
         exposure = float(self.exposure_box.value())
         n_frames = int(self.frames_box.value())
         mode = self.mode_combo.currentText()
+        gain, speed = self._selected_detector_settings()
         overlap = int(self.overlap_box.value())
-        slit_name = "A"
         slit_width_mm = float(self.slit_width_box.value())
 
         self._set_spectrometer_busy(True)
         self.set_status(
-            f"Connecting and capturing reusable dark over {start:.2f}-{end:.2f} nm..."
+            f"Applying {preset} preset and capturing reusable dark over "
+            f"{start:.2f}-{end:.2f} nm..."
         )
 
         async def capture() -> DarkSpectrum:
@@ -783,23 +839,15 @@ class HoribaRangeWindow(QMainWindow):
             try:
                 await spec.connect()
                 await spec.configure(
-                    gain=2,
-                    speed=0,
+                    gain=gain,
+                    speed=speed,
                     exposure_time=exposure,
-                    roi={},
+                    roi=None,
+                    entrance_slit_width_mm=slit_width_mm,
                 )
-
-                reported_slit_width_mm = await spec.set_slit_width(
-                    slit_name,
-                    slit_width_mm,
-                )
-
                 logger.info(
-                    "Capturing reusable dark with slit {} at {:.3f} mm",
-                    slit_name,
-                    reported_slit_width_mm,
+                    "Capturing reusable dark with {}", spec.configuration_summary()
                 )
-
                 return await capture_range_dark(
                     spec,
                     start,
@@ -827,7 +875,7 @@ class HoribaRangeWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save reusable range dark",
-            str(Path.cwd() / "range_dark.csv"),
+            str(self._selected_output_directory() / "range_dark.csv"),
             "CSV files (*.csv)",
         )
         if path:
@@ -850,7 +898,7 @@ class HoribaRangeWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Load reusable range dark",
-            str(Path.cwd()),
+            str(self._selected_output_directory()),
             "CSV files (*.csv);;All files (*)",
         )
         if not path:
@@ -875,8 +923,8 @@ class HoribaRangeWindow(QMainWindow):
         if not (self.save_csv.isChecked() or self.save_png.isChecked()):
             return None
 
-        output_dir = Path.cwd() / "spectra"
-        output_dir.mkdir(exist_ok=True)
+        output_dir = self._selected_output_directory()
+        output_dir.mkdir(parents=True, exist_ok=True)
         start, end = self._normalised_range()
         stem = f"horiba_{start:.0f}_{end:.0f}nm"
 
