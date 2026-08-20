@@ -27,12 +27,12 @@ from horiba_sdk.devices.single_devices.monochromator import Monochromator
 from labtools.devices.horiba_spectrometer import HoribaSpectrometer
 
 
-PRESET = "syncerity"
+PRESET = "symphony"
 
 # Edit these three values before running the script.
 TARGET_SLIT_A_WIDTH_MM = 0.500
-TARGET_EXIT_MIRROR = Monochromator.MirrorPosition.AXIAL
-TARGET_GRATING = Monochromator.Grating.FIRST
+TARGET_EXIT_MIRROR = Monochromator.MirrorPosition.LATERAL
+TARGET_GRATING = Monochromator.Grating.THIRD
 
 COMMAND_REGISTRATION_DELAY_S = 0.5
 POLL_INTERVAL_S = 0.2
