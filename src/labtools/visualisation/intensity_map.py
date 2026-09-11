@@ -53,7 +53,7 @@ def plot_intensity_map(
     axes.set_xlabel("Mirror X voltage (V)")
     axes.set_ylabel("Mirror Y voltage (V)")
     axes.set_title(title)
-    figure.tight_layout()
+    figure.subplots_adjust(left=0.15, right=0.87, bottom=0.13, top=0.90)
 
     if output_path is not None:
         path = Path(output_path)

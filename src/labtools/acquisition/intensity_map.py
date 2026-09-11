@@ -50,12 +50,13 @@ class IntensityMapConfig:
     channels: tuple[int, ...] = (1,)
     settle_time_s: float = 0.010
     time_controller_address: str = "169.254.99.159"
-    channel_threshold_v: float = 0.1
-    channel_edge: str = "rising"
+    channel_thresholds_v: tuple[float, ...] = (0.1,)
+    channel_edges: tuple[str, ...] = ("rising",)
     mirror_dio_pin: int = 2
     spad_gate_pin: int = 0
     serpentine: bool = True
     output_root: Path = Path("C:/LabData/IntensityMaps")
+    save_results: bool = True
     safe_voltage_min_v: float = -10.0
     safe_voltage_max_v: float = 10.0
     checkpoint_every_points: int = 10
@@ -73,8 +74,14 @@ class IntensityMapConfig:
             raise ValueError("Time Controller channels must be unique.")
         if any(channel not in {1, 2, 3, 4} for channel in self.channels):
             raise ValueError("Time Controller channels must be in the range 1 to 4.")
-        if self.channel_edge not in {"rising", "falling"}:
-            raise ValueError("channel_edge must be 'rising' or 'falling'.")
+        if len(self.channel_thresholds_v) != len(self.channels):
+            raise ValueError("Provide one threshold for each selected channel.")
+        if len(self.channel_edges) != len(self.channels):
+            raise ValueError("Provide one slope orientation for each selected channel.")
+        if any(not np.isfinite(value) for value in self.channel_thresholds_v):
+            raise ValueError("All channel thresholds must be finite.")
+        if any(edge not in {"rising", "falling"} for edge in self.channel_edges):
+            raise ValueError("Channel slopes must be 'rising' or 'falling'.")
         if self.safe_voltage_min_v >= self.safe_voltage_max_v:
             raise ValueError("safe_voltage_min_v must be below safe_voltage_max_v.")
         for name, value in {
@@ -105,8 +112,8 @@ class IntensityMapConfig:
             "channels": list(self.channels),
             "settle_time_s": self.settle_time_s,
             "time_controller_address": self.time_controller_address,
-            "channel_threshold_v": self.channel_threshold_v,
-            "channel_edge": self.channel_edge,
+            "channel_thresholds_v": list(self.channel_thresholds_v),
+            "channel_edges": list(self.channel_edges),
             "mirror_dio_pin": self.mirror_dio_pin,
             "spad_gate_pin": self.spad_gate_pin,
             "serpentine": self.serpentine,
@@ -518,11 +525,16 @@ def acquire_intensity_map(
             mirror = ScanningMirror(labjack, dio_pin=config.mirror_dio_pin)
             gate = SPADGate(labjack, pin=config.spad_gate_pin)
 
-            for channel in config.channels:
+            for channel, threshold_v, edge in zip(
+                config.channels,
+                config.channel_thresholds_v,
+                config.channel_edges,
+                strict=True,
+            ):
                 controller.configure_channel(
                     channel,
-                    threshold_v=config.channel_threshold_v,
-                    edge=config.channel_edge,
+                    threshold_v=threshold_v,
+                    edge=edge,
                     enabled=True,
                 )
 
@@ -642,7 +654,8 @@ def acquire_intensity_map(
         complete=complete,
         resumed=resumed,
     )
-    _save_final_outputs(result, config)
+    if config.save_results:
+        _save_final_outputs(result, config)
     _write_metadata(
         output_directory,
         config,
@@ -668,6 +681,10 @@ def config_from_resume_directory(path: str | Path) -> IntensityMapConfig:
     }
     values = {field: metadata[field] for field in known}
     values["channels"] = tuple(int(channel) for channel in metadata["channels"])
+    values["channel_thresholds_v"] = tuple(
+        float(value) for value in metadata["channel_thresholds_v"]
+    )
+    values["channel_edges"] = tuple(str(value) for value in metadata["channel_edges"])
     values["output_root"] = Path(metadata["output_root"])
     return IntensityMapConfig(**values)
 
@@ -689,6 +706,8 @@ def main() -> None:
         y_points=3,
         integration_time_s=0.100,
         channels=(1,),
+        channel_thresholds_v=(0.1,),
+        channel_edges=("rising",),
         time_controller_address="169.254.99.159",
     )
     result = acquire_intensity_map(config)
