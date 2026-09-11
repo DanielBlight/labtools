@@ -1,0 +1,21 @@
+{
+  "x_start_v": -3,
+  "x_stop_v": 3,
+  "x_points": 40,
+  "y_start_v": -3,
+  "y_stop_v": 3,
+  "y_points": 40,
+  "integration_time_s": 0.1,
+  "settle_time_s": 0.01,
+  "time_controller_address": "169.254.99.159",
+  "channel": 1,
+  "channel_threshold_v": 0.1,
+  "channel_edge": "rising",
+  "mirror_dio_pin": 2,
+  "spad_gate_pin": 0,
+  "serpentine": true,
+  "live_plot": true,
+  "output_root": "data\\intensity_maps",
+  "elapsed_s": 261.0620000001509,
+  "created": "2026-09-11T14:03:08"
+}
