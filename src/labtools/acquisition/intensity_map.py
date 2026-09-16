@@ -8,12 +8,11 @@ from __future__ import annotations
 import csv
 import json
 import os
-import re
 import shutil
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, replace
-from datetime import datetime
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -149,6 +148,7 @@ class IntensityMapResult:
     summed_count_rate_cps: FloatArray
     completed_mask: BoolArray
     timestamps_unix_s: FloatArray
+    session_ids: NDArray[np.int32]
     elapsed_s: float
     output_directory: Path
     complete: bool
@@ -165,7 +165,7 @@ def _scan_indices(config: IntensityMapConfig):
 
 
 def _new_output_directory(root: Path) -> Path:
-    path = Path(root) / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    path = Path(root) / datetime.now(UTC).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
     path.mkdir(parents=True, exist_ok=False)
     return path
 
@@ -198,7 +198,7 @@ def _atomic_savez(path: Path, **arrays: Any) -> None:
                 time.sleep(0.05 * (attempt + 1))
 
         recovery = path.with_name(
-            f"{path.stem}.recovery-{datetime.now():%Y%m%d-%H%M%S-%f}{path.suffix}"
+            f"{path.stem}.recovery-{datetime.now(UTC).astimezone():%Y%m%d-%H%M%S-%f}{path.suffix}"
         )
         shutil.move(str(temporary), str(recovery))
         logger.error(
@@ -236,9 +236,30 @@ def _write_metadata(
         }
     )
     target = output_directory / METADATA_FILENAME
-    temporary = target.with_suffix(".json.tmp")
+    temporary = target.with_name(f".{target.stem}.{os.getpid()}.tmp.json")
     temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(temporary, target)
+    last_error: PermissionError | None = None
+    try:
+        for attempt in range(10):
+            try:
+                os.replace(temporary, target)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                logger.warning(
+                    "Metadata file is temporarily locked; retrying ({}/10).",
+                    attempt + 1,
+                )
+                time.sleep(0.05 * (attempt + 1))
+        recovery = target.with_name(
+            f"{target.stem}.recovery-{datetime.now(UTC).astimezone():%Y%m%d-%H%M%S-%f}.json"
+        )
+        shutil.move(str(temporary), str(recovery))
+        raise PermissionError(
+            f"Windows kept {target} locked; current metadata was preserved as {recovery}."
+        ) from last_error
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _load_metadata(output_directory: Path) -> dict[str, Any]:
@@ -276,6 +297,7 @@ def _save_checkpoint(
     count_rates_cps: FloatArray,
     completed_mask: BoolArray,
     timestamps_unix_s: FloatArray,
+    session_ids: NDArray[np.int32],
 ) -> None:
     _atomic_savez(
         output_directory / CHECKPOINT_FILENAME,
@@ -286,6 +308,7 @@ def _save_checkpoint(
         count_rates_cps=count_rates_cps,
         completed_mask=completed_mask,
         timestamps_unix_s=timestamps_unix_s,
+        session_ids=session_ids,
     )
 
 
@@ -311,6 +334,12 @@ def _load_checkpoint(output_directory: Path, config: IntensityMapConfig):
         rates = np.asarray(data["count_rates_cps"], dtype=float)
         completed = np.asarray(data["completed_mask"], dtype=bool)
         timestamps = np.asarray(data["timestamps_unix_s"], dtype=float)
+        session_ids = np.asarray(
+            data["session_ids"]
+            if "session_ids" in data
+            else np.full(completed.shape, -1),
+            dtype=np.int32,
+        )
 
     expected_map_shape = (config.y_points, config.x_points)
     expected_channel_shape = (len(config.channels), *expected_map_shape)
@@ -322,32 +351,7 @@ def _load_checkpoint(output_directory: Path, config: IntensityMapConfig):
         raise ValueError("Checkpoint channel arrays have unexpected dimensions.")
     if completed.shape != expected_map_shape or timestamps.shape != expected_map_shape:
         raise ValueError("Checkpoint completion arrays have unexpected dimensions.")
-    return x_values, y_values, counts, rates, completed, timestamps
-
-
-def _get_simultaneous_counts(
-    controller: IDQTimeController,
-    channels: Sequence[int],
-    duration_s: float,
-) -> dict[int, int]:
-    """Acquire all selected channel counters during one shared record window.
-
-    This uses the controller wrapper's SCPI helpers so two channels are sampled
-    over the same acquisition interval instead of in consecutive intervals.
-    """
-    for channel in channels:
-        controller._cmd(f"INPU{channel}:COUN:MODE ACCU;RESEt")  # noqa: SLF001
-    controller._run_record(int(duration_s * 1e12))  # noqa: SLF001
-    values: dict[int, int] = {}
-    for channel in channels:
-        response = controller._query(f"INPU{channel}:COUNter?")  # noqa: SLF001
-        match = re.match(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", response.strip())
-        if match is None:
-            raise ValueError(
-                f"Could not parse channel {channel} count response {response!r}."
-            )
-        values[channel] = int(float(match.group(0)))
-    return values
+    return x_values, y_values, counts, rates, completed, timestamps, session_ids
 
 
 def _snapshot(
@@ -399,7 +403,7 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         header = ["x_index", "y_index", "x_voltage_v", "y_voltage_v"]
         for channel in result.channels:
             header.extend([f"channel_{channel}_counts", f"channel_{channel}_cps"])
-        header.extend(["summed_cps", "timestamp_unix_s", "complete"])
+        header.extend(["summed_cps", "timestamp_unix_s", "session_id", "complete"])
         writer.writerow(header)
         for y_index, y_value in enumerate(result.y_values_v):
             for x_index, x_value in enumerate(result.x_values_v):
@@ -409,9 +413,7 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
                         [
                             int(result.counts[channel_index, y_index, x_index]),
                             float(
-                                result.count_rates_cps[
-                                    channel_index, y_index, x_index
-                                ]
+                                result.count_rates_cps[channel_index, y_index, x_index]
                             ),
                         ]
                     )
@@ -419,6 +421,7 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
                     [
                         float(result.summed_count_rate_cps[y_index, x_index]),
                         float(result.timestamps_unix_s[y_index, x_index]),
+                        int(result.session_ids[y_index, x_index]),
                         bool(result.completed_mask[y_index, x_index]),
                     ]
                 )
@@ -434,6 +437,7 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         summed_count_rate_cps=result.summed_count_rate_cps,
         completed_mask=result.completed_mask,
         timestamps_unix_s=result.timestamps_unix_s,
+        session_ids=result.session_ids,
     )
 
     from labtools.visualisation.intensity_map import plot_intensity_map
@@ -467,7 +471,7 @@ def acquire_intensity_map(
     """Acquire a new map or resume unfinished positions from a checkpoint."""
     config.validate()
     resumed = resume_directory is not None
-    session_started_at = datetime.now().isoformat(timespec="seconds")
+    session_started_at = datetime.now(UTC).astimezone().isoformat(timespec="seconds")
 
     if resumed:
         output_directory = Path(resume_directory).expanduser().resolve()
@@ -480,6 +484,7 @@ def acquire_intensity_map(
             rates,
             completed,
             timestamps,
+            session_ids,
         ) = _load_checkpoint(output_directory, config)
         initial_started_at = str(metadata["initial_started_at"])
         resume_sessions = int(metadata.get("resume_sessions", 0)) + 1
@@ -492,6 +497,7 @@ def acquire_intensity_map(
         rates = np.full(shape, np.nan, dtype=float)
         completed = np.zeros((config.y_points, config.x_points), dtype=bool)
         timestamps = np.full((config.y_points, config.x_points), np.nan, dtype=float)
+        session_ids = np.full((config.y_points, config.x_points), -1, dtype=np.int32)
         initial_started_at = session_started_at
         resume_sessions = 0
         _save_checkpoint(
@@ -503,6 +509,7 @@ def acquire_intensity_map(
             count_rates_cps=rates,
             completed_mask=completed,
             timestamps_unix_s=timestamps,
+            session_ids=session_ids,
         )
 
     _write_metadata(
@@ -519,9 +526,10 @@ def acquire_intensity_map(
     interrupted = False
 
     try:
-        with LabJackU6() as labjack, IDQTimeController(
-            config.time_controller_address
-        ) as controller:
+        with (
+            LabJackU6() as labjack,
+            IDQTimeController(config.time_controller_address) as controller,
+        ):
             mirror = ScanningMirror(labjack, dio_pin=config.mirror_dio_pin)
             gate = SPADGate(labjack, pin=config.spad_gate_pin)
 
@@ -554,8 +562,7 @@ def acquire_intensity_map(
                     if config.settle_time_s:
                         time.sleep(config.settle_time_s)
 
-                    measured = _get_simultaneous_counts(
-                        controller,
+                    measured = controller.get_simultaneous_counts(
                         config.channels,
                         config.integration_time_s,
                     )
@@ -567,11 +574,10 @@ def acquire_intensity_map(
                         )
                     completed[y_index, x_index] = True
                     timestamps[y_index, x_index] = time.time()
+                    session_ids[y_index, x_index] = resume_sessions
                     acquired_this_session += 1
 
-                    if (
-                        acquired_this_session % config.checkpoint_every_points == 0
-                    ):
+                    if acquired_this_session % config.checkpoint_every_points == 0:
                         _save_checkpoint(
                             output_directory,
                             x_values_v=x_values,
@@ -581,6 +587,7 @@ def acquire_intensity_map(
                             count_rates_cps=rates,
                             completed_mask=completed,
                             timestamps_unix_s=timestamps,
+                            session_ids=session_ids,
                         )
 
                     snap = _snapshot(
@@ -616,6 +623,7 @@ def acquire_intensity_map(
                     count_rates_cps=rates,
                     completed_mask=completed,
                     timestamps_unix_s=timestamps,
+                    session_ids=session_ids,
                 )
                 mirror.home()
                 gate.close()
@@ -629,6 +637,7 @@ def acquire_intensity_map(
             count_rates_cps=rates,
             completed_mask=completed,
             timestamps_unix_s=timestamps,
+            session_ids=session_ids,
         )
         logger.exception(
             "Intensity-map acquisition failed; partial data are saved in {}",
@@ -649,6 +658,7 @@ def acquire_intensity_map(
         summed_count_rate_cps=summed,
         completed_mask=completed,
         timestamps_unix_s=timestamps,
+        session_ids=session_ids,
         elapsed_s=elapsed_s,
         output_directory=output_directory,
         complete=complete,
@@ -675,9 +685,7 @@ def config_from_resume_directory(path: str | Path) -> IntensityMapConfig:
     directory = Path(path).expanduser().resolve()
     metadata = _load_metadata(directory)
     known = {
-        field
-        for field in IntensityMapConfig.__dataclass_fields__
-        if field in metadata
+        field for field in IntensityMapConfig.__dataclass_fields__ if field in metadata
     }
     values = {field: metadata[field] for field in known}
     values["channels"] = tuple(int(channel) for channel in metadata["channels"])
@@ -691,8 +699,10 @@ def config_from_resume_directory(path: str | Path) -> IntensityMapConfig:
 
 def estimated_minimum_duration_s(config: IntensityMapConfig) -> float:
     """Return integration-plus-settling time, excluding communication overhead."""
-    return config.x_points * config.y_points * (
-        config.integration_time_s + config.settle_time_s
+    return (
+        config.x_points
+        * config.y_points
+        * (config.integration_time_s + config.settle_time_s)
     )
 
 

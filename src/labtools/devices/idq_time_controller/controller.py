@@ -49,8 +49,9 @@ import re
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Optional
+from typing import Self
 
 import numpy as np
 import zmq
@@ -88,6 +89,7 @@ _STREAM_BASE_PORT = 4241
 # Main class
 # ------------------------------------------------------------------
 
+
 class IDQTimeController:
     """Control an IDQuantique Time Controller over its SCPI/ZMQ interface.
 
@@ -108,13 +110,13 @@ class IDQTimeController:
         self.address = address
         self.dlt_path = dlt_path
 
-        self._context: Optional[zmq.Context] = None
-        self._tc: Optional[zmq.Socket] = None          # SCPI socket
-        self._dlt: Optional[zmq.Socket] = None         # DataLink socket
+        self._context: zmq.Context | None = None
+        self._tc: zmq.Socket | None = None  # SCPI socket
+        self._dlt: zmq.Socket | None = None  # DataLink socket
         self._dlt_process = None
-        self._stream_clients: Dict[int, dlt.StreamClient] = {}
-        self._stream_ports: Dict[int, int] = {}
-        self._stream_ids: Dict[int, str] = {}
+        self._stream_clients: dict[int, dlt.StreamClient] = {}
+        self._stream_ports: dict[int, int] = {}
+        self._stream_ids: dict[int, str] = {}
 
     # ------------------------------------------------------------------
     # Context manager
@@ -140,35 +142,35 @@ class IDQTimeController:
         if self._dlt is not None:
             try:
                 self._dlt.close()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Best-effort cleanup failed: %s", exc)
             self._dlt = None
         if self._dlt_process is not None and self._dlt_process.poll() is None:
             try:
                 self._dlt_process.terminate()
                 self._dlt_process.wait(timeout=2.0)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 try:
                     self._dlt_process.kill()
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Best-effort cleanup failed: %s", exc)
             finally:
                 self._dlt_process = None
         if self._tc is not None:
             try:
                 self._tc.close()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Best-effort cleanup failed: %s", exc)
             self._tc = None
         if self._context is not None:
             try:
                 self._context.term()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Best-effort cleanup failed: %s", exc)
             self._context = None
         logger.info("Disconnected from Time Controller")
 
-    def __enter__(self) -> IDQTimeController:
+    def __enter__(self) -> Self:
         self.connect()
         return self
 
@@ -235,7 +237,7 @@ class IDQTimeController:
         *,
         stop_channel: int,
         ref_channel,
-        bin_width_ps: Optional[int] = None,
+        bin_width_ps: int | None = None,
         bin_count: int = 1024,
     ):
         """Configure a histogram block.
@@ -257,12 +259,18 @@ class IDQTimeController:
         """
         # TSCO5–8 forward DELA1–4 (one per input channel)
         stop_tsco = f"TSCO{stop_channel + 4}"
-        ref_block = "STAR" if str(ref_channel).lower() == "start" else f"TSCO{ref_channel + 4}"
+        ref_block = (
+            "STAR" if str(ref_channel).lower() == "start" else f"TSCO{ref_channel + 4}"
+        )
 
         if bin_width_ps is None:
-            bin_width_ps = _parse_numeric_response(self._query("DEVI:RES:BWID?"), cast=int)
+            bin_width_ps = _parse_numeric_response(
+                self._query("DEVI:RES:BWID?"), cast=int
+            )
         else:
-            resolution = _parse_numeric_response(self._query("DEVI:RES:BWID?"), cast=int)
+            resolution = _parse_numeric_response(
+                self._query("DEVI:RES:BWID?"), cast=int
+            )
             if bin_width_ps % resolution != 0:
                 bin_width_ps = ((bin_width_ps // resolution) + 1) * resolution
                 logger.warning(
@@ -312,6 +320,40 @@ class IDQTimeController:
 
         return _parse_numeric_response(self._query(f"{block}:COUNter?"), cast=int)
 
+    def get_simultaneous_counts(
+        self,
+        channels: Iterable[int],
+        duration_s: float,
+    ) -> dict[int, int]:
+        """Count one or more inputs over one shared record window.
+
+        Every selected counter is reset before the record starts, so returned
+        values describe the same integration interval.
+        """
+        selected = tuple(int(channel) for channel in channels)
+        if not selected:
+            raise ValueError("Select at least one Time Controller channel.")
+        if len(set(selected)) != len(selected):
+            raise ValueError("Time Controller channels must be unique.")
+        if any(channel not in {0, 1, 2, 3, 4} for channel in selected):
+            raise ValueError("Time Controller channels must be in the range 0 to 4.")
+        if duration_s <= 0:
+            raise ValueError("duration_s must be greater than zero.")
+
+        for channel in selected:
+            block = "STARt" if channel == 0 else f"INPU{channel}"
+            self._cmd(f"{block}:COUN:MODE ACCU;RESEt")
+        self._run_record(int(duration_s * 1e12))
+
+        values: dict[int, int] = {}
+        for channel in selected:
+            block = "STARt" if channel == 0 else f"INPU{channel}"
+            values[channel] = _parse_numeric_response(
+                self._query(f"{block}:COUNter?"),
+                cast=int,
+            )
+        return values
+
     def get_count_rate(self, channel: int, integration_s: float = 0.1) -> float:
         """Return events per second on a channel.
 
@@ -359,8 +401,9 @@ class IDQTimeController:
             Counts per bin.
         """
         duration_ps = int(duration_s * 1e12)
-        bin_width_ps = _parse_numeric_response(self._query(f"HIST{hist}:BWID?"), cast=int)
-        bin_count = _parse_numeric_response(self._query(f"HIST{hist}:BCOU?"), cast=int)
+        bin_width_ps = _parse_numeric_response(
+            self._query(f"HIST{hist}:BWID?"), cast=int
+        )
 
         self._cmd(f"HIST{hist}:FLUS")
         self._run_record(duration_ps)
@@ -379,7 +422,7 @@ class IDQTimeController:
         self,
         channels: Iterable[int],
         callback: Callable[[int, np.ndarray], None],
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
     ):
         """Start streaming raw timestamps from one or more channels.
 
@@ -414,7 +457,9 @@ class IDQTimeController:
             except (ConnectionError, TimeoutError, RuntimeError):
                 if attempt == 1:
                     raise
-                logger.warning("DataLinkTarget did not respond; restarting it and retrying.")
+                logger.warning(
+                    "DataLinkTarget did not respond; restarting it and retrying."
+                )
                 self._restart_dlt_service(output_dir)
 
         channels = list(channels)
@@ -438,7 +483,7 @@ class IDQTimeController:
         channels: Iterable[int],
         callback: Callable[[int, np.ndarray], None],
         duration_s: float,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
         timeout_s: float = 30.0,
     ) -> None:
         """Acquire a timed timestamp stream using the vendor lifecycle.
@@ -479,7 +524,9 @@ class IDQTimeController:
         finally:
             self.stop_timestamp_stream()
 
-        logger.info(f"Timed timestamp stream completed for channels {channels} (duration={duration_s:.3f}s)")
+        logger.info(
+            f"Timed timestamp stream completed for channels {channels} (duration={duration_s:.3f}s)"
+        )
 
     def wait_for_timestamp_stream_idle(self, timeout_s: float = 30.0):
         """Wait until the acquisition has finished and the DLT is quiescent."""
@@ -488,7 +535,7 @@ class IDQTimeController:
             stage = ""
             try:
                 stage = self._query("REC:STAGe?").upper()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 stage = ""
 
             status_ok = False
@@ -497,12 +544,14 @@ class IDQTimeController:
                     continue
                 try:
                     info = dlt.dlt_exec(self._dlt, f"status --id {stream_id}")
-                except Exception:
+                except Exception:  # noqa: BLE001
                     info = {}
                 if not isinstance(info, dict):
                     continue
                 if info.get("error"):
-                    raise RuntimeError(f"timestamp stream error on channel {channel}: {info.get('error')}")
+                    raise RuntimeError(
+                        f"timestamp stream error on channel {channel}: {info.get('error')}"
+                    )
                 inactivity = float(info.get("inactivity", 0.0) or 0.0)
                 acquisitions = int(info.get("acquisitions_count", 0) or 0)
                 if acquisitions > 0 and inactivity >= 1.0:
@@ -532,15 +581,17 @@ class IDQTimeController:
                 self._cmd(f"RAW{ch}:SEND OFF")
             except TimeoutError:
                 logger.warning(f"RAW{ch}:SEND OFF timed out; ignoring")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Best-effort cleanup failed: %s", exc)
 
             stream_id = self._stream_ids.get(ch)
             if stream_id is not None and self._dlt is not None:
                 try:
                     dlt.dlt_exec(self._dlt, f"stop --id {stream_id}")
-                except Exception:
-                    logger.warning(f"Could not stop DLT stream {stream_id} for channel {ch}")
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        f"Could not stop DLT stream {stream_id} for channel {ch}"
+                    )
 
         for client in self._stream_clients.values():
             client.join(timeout=2.0)
@@ -582,7 +633,7 @@ class IDQTimeController:
             while time.time() < deadline:
                 try:
                     active = dlt.dlt_exec(self._dlt, "list") or []
-                except Exception:
+                except Exception:  # noqa: BLE001
                     active = []
                 if self._stream_ids[ch] in active:
                     break
@@ -620,14 +671,14 @@ class IDQTimeController:
             return
         try:
             active = dlt.dlt_exec(self._dlt, "list") or []
-        except Exception:
+        except Exception:  # noqa: BLE001
             return
 
         for acquisition_id in active:
             try:
                 dlt.dlt_exec(self._dlt, f"stop --id {acquisition_id}")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Best-effort cleanup failed: %s", exc)
 
     def _run_record(self, duration_ps: int):
         """Run a single timed acquisition and block until it finishes."""
@@ -649,14 +700,20 @@ class IDQTimeController:
                 self._dlt = dlt.dlt_connect(output_dir, self.dlt_path)
             dlt.dlt_exec(self._dlt, "list")
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     def _launch_dlt_service(self, output_dir: Path):
         """Start the vendor DLT service in a writable working directory."""
-        dlt_bin = self.dlt_path if self.dlt_path.is_file() else self.dlt_path / "DataLinkTargetService.exe"
+        dlt_bin = (
+            self.dlt_path
+            if self.dlt_path.is_file()
+            else self.dlt_path / "DataLinkTargetService.exe"
+        )
         if not dlt_bin.exists():
-            raise FileNotFoundError(f"DataLinkTargetService binary not found: {dlt_bin}")
+            raise FileNotFoundError(
+                f"DataLinkTargetService binary not found: {dlt_bin}"
+            )
 
         dlt_root = self.dlt_path if self.dlt_path.is_dir() else self.dlt_path.parent
         config_template = dlt_root / "config" / "DataLinkTargetService.log.conf"
@@ -690,22 +747,22 @@ class IDQTimeController:
         if self._dlt is not None:
             try:
                 self._dlt.close()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Best-effort cleanup failed: %s", exc)
             self._dlt = None
         if self._dlt_process is not None and self._dlt_process.poll() is None:
             try:
                 self._dlt_process.terminate()
                 self._dlt_process.wait(timeout=2.0)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 try:
                     self._dlt_process.kill()
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Best-effort cleanup failed: %s", exc)
         self._dlt_process = None
         self._launch_dlt_service(output_dir)
 
-    def ensure_dlt_running(self, output_dir: Optional[Path] = None):
+    def ensure_dlt_running(self, output_dir: Path | None = None):
         """Ensure the DataLinkTargetService is running and responsive.
 
         This is useful before starting any streaming or file-based timestamp

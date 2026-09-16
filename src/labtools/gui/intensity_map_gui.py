@@ -149,7 +149,7 @@ class IntensityMapWindow(QMainWindow):
         controls = QWidget()
         controls.setMinimumWidth(410)
         controls_layout = QVBoxLayout(controls)
-        controls_layout.setContentsMargins(8, 4, 8, 8)
+        controls_layout.setContentsMargins(8, 0, 8, 8)
         controls_layout.setSpacing(12)
         self._build_map_controls(controls_layout)
         self._build_laser_controls(controls_layout)
@@ -216,7 +216,7 @@ class IntensityMapWindow(QMainWindow):
             QFrame#plotColourControls {
                 background: #f7fafc; border: 1px solid #d9e2ec; border-radius: 6px;
             }
-            QGroupBox { margin-top: 11px; padding: 10px 8px 8px 8px; }
+            QGroupBox { margin-top: 0px; padding: 7px 8px 8px 8px; }
             QToolButton#sectionToggle {
                 border: none; background: transparent; color: #243b53;
                 font-weight: 650; padding: 1px 2px; text-align: left;
@@ -265,9 +265,7 @@ class IntensityMapWindow(QMainWindow):
         layout.addWidget(self.log_colour_scale)
 
         self.custom_colour_limits = QCheckBox("Manual limits")
-        self.custom_colour_limits.toggled.connect(
-            self._toggle_colour_limit_controls
-        )
+        self.custom_colour_limits.toggled.connect(self._toggle_colour_limit_controls)
         layout.addWidget(self.custom_colour_limits)
 
         self.colour_limits_widget = QWidget()
@@ -318,8 +316,12 @@ class IntensityMapWindow(QMainWindow):
         form.setVerticalSpacing(9)
         self.x_start, self.x_stop, self.x_points = self._axis_controls(-2.2, -1.8, 3)
         self.y_start, self.y_stop, self.y_points = self._axis_controls(-0.7, -0.3, 3)
-        form.addRow("X range", self._axis_widget(self.x_start, self.x_stop, self.x_points))
-        form.addRow("Y range", self._axis_widget(self.y_start, self.y_stop, self.y_points))
+        form.addRow(
+            "X range", self._axis_widget(self.x_start, self.x_stop, self.x_points)
+        )
+        form.addRow(
+            "Y range", self._axis_widget(self.y_start, self.y_stop, self.y_points)
+        )
         self.settle = QDoubleSpinBox()
         self.settle.setRange(0.0, 10.0)
         self.settle.setDecimals(3)
@@ -535,7 +537,9 @@ class IntensityMapWindow(QMainWindow):
         return box
 
     @staticmethod
-    def _channel_settings_widget(channel: QWidget, threshold: QWidget, edge: QWidget) -> QWidget:
+    def _channel_settings_widget(
+        channel: QWidget, threshold: QWidget, edge: QWidget
+    ) -> QWidget:
         widget = QWidget()
         layout = QGridLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -548,7 +552,9 @@ class IntensityMapWindow(QMainWindow):
         return widget
 
     @staticmethod
-    def _axis_controls(start: float, stop: float, points: int) -> tuple[QDoubleSpinBox, QDoubleSpinBox, QSpinBox]:
+    def _axis_controls(
+        start: float, stop: float, points: int
+    ) -> tuple[QDoubleSpinBox, QDoubleSpinBox, QSpinBox]:
         start_box = QDoubleSpinBox()
         stop_box = QDoubleSpinBox()
         points_box = QSpinBox()
@@ -702,7 +708,11 @@ class IntensityMapWindow(QMainWindow):
             seconds = estimated_minimum_duration_s(self._config())
         except (AttributeError, ValueError):
             return
-        save_text = "saving enabled" if self.save_results.isChecked() else "final saving disabled"
+        save_text = (
+            "saving enabled"
+            if self.save_results.isChecked()
+            else "final saving disabled"
+        )
         self.estimate.setText(
             f"Estimated minimum: {seconds:.1f} s plus overhead | {save_text}"
         )
@@ -817,8 +827,7 @@ class IntensityMapWindow(QMainWindow):
             f"{snapshot.points_complete}/{snapshot.total_points} points"
         )
         self.set_status(
-            f"Elapsed: {snapshot.elapsed_s:.1f} s | "
-            f"Output: {snapshot.output_directory}"
+            f"Elapsed: {snapshot.elapsed_s:.1f} s | Output: {snapshot.output_directory}"
         )
 
     @pyqtSlot(object)
@@ -955,7 +964,7 @@ class IntensityMapWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             self._laser_error("Set current failed", exc)
 
-    def closeEvent(self, event: Any) -> None:  # noqa: N802
+    def closeEvent(self, event: Any) -> None:
         if self._thread is not None and self._thread.isRunning():
             QMessageBox.warning(
                 self,
