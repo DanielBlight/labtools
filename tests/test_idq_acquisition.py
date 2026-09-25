@@ -1,6 +1,9 @@
 import numpy as np
+import pytest
 
 from labtools.devices.idq_time_controller import IDQTimeController
+
+pytestmark = pytest.mark.hardware
 
 THRESHOLD_V = 0.1
 HIST_STOP_CHANNEL = 2

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont
+import numpy as np
+from numpy.typing import NDArray
+from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -36,9 +37,12 @@ from labtools.acquisition.laser_anneal import (
     run_laser_anneal,
 )
 from labtools.devices.sc10 import SC10
+from labtools.devices.uc480_camera import ThorlabsUC480Camera
 
 
 class AnnealWorker(QObject):
+    """Run a blocking anneal acquisition in a worker thread."""
+
     progress = pyqtSignal(object)
     completed = pyqtSignal(object)
     failed = pyqtSignal(str)
@@ -64,14 +68,197 @@ class AnnealWorker(QObject):
             self.completed.emit(result)
 
 
+class CameraSettings:
+    """Thread-safe target exposure and master gain settings."""
+
+    def __init__(self, exposure_s: float, master_gain: float) -> None:
+        self._lock = Lock()
+        self._exposure_s = exposure_s
+        self._master_gain = master_gain
+
+    def update(self, exposure_s: float, master_gain: float) -> None:
+        with self._lock:
+            self._exposure_s = exposure_s
+            self._master_gain = master_gain
+
+    def snapshot(self) -> tuple[float, float]:
+        with self._lock:
+            return self._exposure_s, self._master_gain
+
+
+class CameraWorker(QObject):
+    """Acquire UC480 frames continuously in a worker thread."""
+
+    frame_ready = pyqtSignal(object)
+    connected = pyqtSignal(object)
+    failed = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(
+        self,
+        *,
+        settings: CameraSettings,
+        frame_interval_s: float,
+        stop_event: Event,
+    ) -> None:
+        super().__init__()
+        self.settings = settings
+        self.frame_interval_s = frame_interval_s
+        self.stop_event = stop_event
+
+    @pyqtSlot()
+    def run(self) -> None:
+        try:
+            exposure_s, master_gain = self.settings.snapshot()
+            with ThorlabsUC480Camera(exposure_s=exposure_s) as camera:
+                maximum_gain = camera.get_max_gains()[0]
+                applied_gain = camera.set_master_gain(master_gain)
+                self.connected.emit(
+                    {
+                        "device_info": str(camera.get_device_info()),
+                        "maximum_gain": maximum_gain,
+                        "applied_gain": applied_gain,
+                        "exposure_s": camera.get_exposure(),
+                    }
+                )
+                applied_exposure = camera.get_exposure()
+
+                while not self.stop_event.is_set():
+                    requested_exposure, requested_gain = self.settings.snapshot()
+                    settings_changed = False
+
+                    if not np.isclose(requested_exposure, applied_exposure):
+                        applied_exposure = camera.set_exposure(requested_exposure)
+                        settings_changed = True
+
+                    if not np.isclose(requested_gain, applied_gain):
+                        applied_gain = camera.set_master_gain(requested_gain)
+                        settings_changed = True
+
+                    if settings_changed:
+                        # UC480 can return transient or partially updated frames
+                        # immediately after exposure or gain reconfiguration. Keep
+                        # displaying the previous good frame while these settle.
+                        for _ in range(3):
+                            if self.stop_event.is_set():
+                                break
+                            camera.snap()
+
+                    started = time.monotonic()
+                    self.frame_ready.emit(camera.snap())
+                    remaining = self.frame_interval_s - (time.monotonic() - started)
+                    if remaining > 0:
+                        self.stop_event.wait(remaining)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+        finally:
+            self.finished.emit()
+
+
+class CameraDisplay(QLabel):
+    """Aspect-ratio-preserving UC480 camera display."""
+
+    def __init__(self) -> None:
+        super().__init__("Camera preview stopped")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setMinimumSize(640, 480)
+        self.setObjectName("cameraDisplay")
+        self._pixmap: QPixmap | None = None
+
+    def set_frame(self, frame: NDArray[np.generic]) -> None:
+        """Display a frame using ThorCam-compatible BGR-to-RGB ordering."""
+        self._pixmap = QPixmap.fromImage(self._to_qimage(frame))
+        self._refresh()
+
+    def clear_frame(self, message: str = "Camera preview stopped") -> None:
+        self._pixmap = None
+        self.clear()
+        self.setText(message)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        if self._pixmap is None:
+            return
+        self.setPixmap(
+            self._pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    @staticmethod
+    def _display_uint8(values: NDArray[np.generic]) -> NDArray[np.uint8]:
+        """Convert to 8-bit using one shared scale, never per-channel scales."""
+        data = np.asarray(values)
+        if data.dtype == np.uint8:
+            return np.ascontiguousarray(data)
+
+        floating = np.asarray(data, dtype=float)
+        finite = floating[np.isfinite(floating)]
+        if finite.size == 0:
+            return np.zeros(floating.shape, dtype=np.uint8)
+
+        lower, upper = np.percentile(finite, (0.1, 99.9))
+        if upper <= lower:
+            lower = float(np.min(finite))
+            upper = float(np.max(finite))
+        if upper <= lower:
+            return np.zeros(floating.shape, dtype=np.uint8)
+
+        scaled = (floating - lower) * (255.0 / (upper - lower))
+        return np.ascontiguousarray(np.clip(scaled, 0, 255).astype(np.uint8))
+
+    @classmethod
+    def _to_qimage(cls, frame: NDArray[np.generic]) -> QImage:
+        array = np.asarray(frame)
+
+        if array.ndim == 2:
+            grey = cls._display_uint8(array)
+            height, width = grey.shape
+            return QImage(
+                grey.data,
+                width,
+                height,
+                grey.strides[0],
+                QImage.Format.Format_Grayscale8,
+            ).copy()
+
+        if array.ndim == 3 and array.shape[2] in {3, 4}:
+            # UC480 colour buffers are delivered in BGR/BGRA order. Interpret
+            # them as such before handing RGB data to Qt. A single shared
+            # display transform preserves the camera's channel balance.
+            bgr = array[..., :3]
+            rgb = cls._display_uint8(bgr[..., ::-1])
+            height, width, _ = rgb.shape
+            return QImage(
+                rgb.data,
+                width,
+                height,
+                rgb.strides[0],
+                QImage.Format.Format_RGB888,
+            ).copy()
+
+        raise ValueError(f"Unsupported camera frame shape: {array.shape}")
+
+
 class LaserAnnealWindow(QMainWindow):
+    """Laser anneal controls with a live Thorlabs UC480 camera preview."""
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Laser Anneal")
-        self.resize(1280, 820)
+        self.resize(1440, 900)
         self._thread: QThread | None = None
         self._worker: AnnealWorker | None = None
         self._stop_event = Event()
+        self._camera_thread: QThread | None = None
+        self._camera_worker: CameraWorker | None = None
+        self._camera_stop_event = Event()
+        self._camera_settings = CameraSettings(0.020, 1.0)
 
         root_widget = QWidget()
         self.setCentralWidget(root_widget)
@@ -90,7 +277,7 @@ class LaserAnnealWindow(QMainWindow):
         main_row = QHBoxLayout()
         root.addLayout(main_row, 1)
         controls = QWidget()
-        controls.setMaximumWidth(430)
+        controls.setMaximumWidth(440)
         control_layout = QVBoxLayout(controls)
         main_row.addWidget(controls)
 
@@ -128,6 +315,46 @@ class LaserAnnealWindow(QMainWindow):
         self.test_sc10.clicked.connect(self._test_sc10)
         hardware_form.addRow(self.test_sc10)
 
+        camera_group = QGroupBox("UC480 camera")
+        camera_form = QFormLayout(camera_group)
+        control_layout.addWidget(camera_group)
+        camera_note = QLabel("First available Thorlabs UC480 camera")
+        camera_note.setWordWrap(True)
+        camera_form.addRow("Camera", camera_note)
+        self.camera_exposure_ms = QDoubleSpinBox()
+        self.camera_exposure_ms.setRange(0.01, 10000.0)
+        self.camera_exposure_ms.setDecimals(3)
+        self.camera_exposure_ms.setValue(20.0)
+        self.camera_exposure_ms.setSuffix(" ms")
+        camera_form.addRow("Exposure", self.camera_exposure_ms)
+
+        self.camera_gain = QDoubleSpinBox()
+        self.camera_gain.setRange(1.0, 100.0)
+        self.camera_gain.setDecimals(2)
+        self.camera_gain.setSingleStep(0.25)
+        self.camera_gain.setValue(1.0)
+        self.camera_gain.setSuffix(" x")
+        self.camera_gain.setToolTip(
+            "Master hardware gain factor. The camera clamps this to its supported maximum."
+        )
+        camera_form.addRow("Master gain", self.camera_gain)
+
+        self.camera_interval_ms = QDoubleSpinBox()
+        self.camera_interval_ms.setRange(10.0, 10000.0)
+        self.camera_interval_ms.setDecimals(0)
+        self.camera_interval_ms.setValue(100.0)
+        self.camera_interval_ms.setSuffix(" ms")
+        camera_form.addRow("Display interval", self.camera_interval_ms)
+        camera_buttons = QHBoxLayout()
+        self.start_camera_button = QPushButton("Start camera")
+        self.start_camera_button.clicked.connect(self._start_camera)
+        self.stop_camera_button = QPushButton("Stop camera")
+        self.stop_camera_button.clicked.connect(self._stop_camera)
+        self.stop_camera_button.setEnabled(False)
+        camera_buttons.addWidget(self.start_camera_button)
+        camera_buttons.addWidget(self.stop_camera_button)
+        camera_form.addRow(camera_buttons)
+
         output_group = QGroupBox("Output and confirmation")
         output_form = QFormLayout(output_group)
         control_layout.addWidget(output_group)
@@ -163,15 +390,15 @@ class LaserAnnealWindow(QMainWindow):
         control_layout.addWidget(self.stop_button)
         control_layout.addStretch(1)
 
-        plot_group = QGroupBox("Anneal path")
-        plot_layout = QVBoxLayout(plot_group)
-        main_row.addWidget(plot_group, 1)
-        self.figure = Figure(figsize=(7, 6))
-        self.axes = self.figure.add_subplot(111)
-        self.canvas = FigureCanvas(self.figure)
-        plot_layout.addWidget(self.canvas, 1)
+        preview_group = QGroupBox("Live camera")
+        preview_layout = QVBoxLayout(preview_group)
+        main_row.addWidget(preview_group, 1)
+        self.camera_display = CameraDisplay()
+        preview_layout.addWidget(self.camera_display, 1)
+        self.camera_status = QLabel("Camera stopped")
+        preview_layout.addWidget(self.camera_status)
         self.progress = QProgressBar()
-        plot_layout.addWidget(self.progress)
+        preview_layout.addWidget(self.progress)
         self.status = QLabel("Ready")
         root.addWidget(self.status)
 
@@ -183,7 +410,10 @@ class LaserAnnealWindow(QMainWindow):
             self.settle,
         ):
             widget.valueChanged.connect(self._update_estimate)
-        self._prepare_plot()
+
+        self.camera_exposure_ms.valueChanged.connect(self._update_camera_settings)
+        self.camera_gain.valueChanged.connect(self._update_camera_settings)
+        self._update_camera_settings()
         self._update_estimate()
         self._apply_style()
 
@@ -250,17 +480,6 @@ class LaserAnnealWindow(QMainWindow):
     def _update_start_state(self) -> None:
         self.start_button.setEnabled(self.confirm.isChecked() and self._thread is None)
 
-    def _prepare_plot(self) -> None:
-        self.axes.clear()
-        self.axes.set_title("Configured anneal area")
-        self.axes.set_xlabel("Mirror X voltage (V)")
-        self.axes.set_ylabel("Mirror Y voltage (V)")
-        self.axes.set_xlim(self.x_start.value(), self.x_stop.value())
-        self.axes.set_ylim(self.y_start.value(), self.y_stop.value())
-        self.marker = self.axes.plot([], [], "o", color="tab:red")[0]
-        self.figure.subplots_adjust(left=0.13, right=0.96, bottom=0.12, top=0.92)
-        self.canvas.draw_idle()
-
     def _test_sc10(self) -> None:
         try:
             with SC10(port=self.sc10_port.text().strip(), baud_rate=9600) as shutter:
@@ -269,6 +488,85 @@ class LaserAnnealWindow(QMainWindow):
             QMessageBox.critical(self, "SC10 test failed", str(exc))
         else:
             QMessageBox.information(self, "SC10 test passed", str(state))
+
+    def _update_camera_settings(self) -> None:
+        """Publish camera settings for application between frames."""
+        self._camera_settings.update(
+            self.camera_exposure_ms.value() / 1000.0,
+            self.camera_gain.value(),
+        )
+
+    def _start_camera(self) -> None:
+        if self._camera_thread is not None:
+            return
+        self._camera_stop_event.clear()
+        self._camera_thread = QThread(self)
+        self._update_camera_settings()
+        self._camera_worker = CameraWorker(
+            settings=self._camera_settings,
+            frame_interval_s=self.camera_interval_ms.value() / 1000.0,
+            stop_event=self._camera_stop_event,
+        )
+        self._camera_worker.moveToThread(self._camera_thread)
+        self._camera_thread.started.connect(self._camera_worker.run)
+        self._camera_worker.frame_ready.connect(self._on_camera_frame)
+        self._camera_worker.connected.connect(self._on_camera_connected)
+        self._camera_worker.failed.connect(self._on_camera_failed)
+        self._camera_worker.finished.connect(self._camera_thread.quit)
+        self._camera_thread.finished.connect(self._cleanup_camera_worker)
+        self.start_camera_button.setEnabled(False)
+        self.stop_camera_button.setEnabled(True)
+        self.camera_status.setText("Connecting to camera...")
+        self._camera_thread.start()
+
+    def _stop_camera(self) -> None:
+        if self._camera_thread is None:
+            return
+        self._camera_stop_event.set()
+        self.stop_camera_button.setEnabled(False)
+        self.camera_status.setText("Stopping camera...")
+
+    @pyqtSlot(object)
+    def _on_camera_frame(self, frame: object) -> None:
+        array = np.asarray(frame)
+        self.camera_display.set_frame(array)
+        self.camera_status.setText(
+            f"Live | shape {array.shape} | {array.dtype} | "
+            f"min {np.min(array)} | max {np.max(array)}"
+        )
+
+    @pyqtSlot(object)
+    def _on_camera_connected(self, information: object) -> None:
+        details = dict(information)
+        maximum_gain = float(details["maximum_gain"])
+        self.camera_gain.blockSignals(True)
+        self.camera_gain.setMaximum(maximum_gain)
+        self.camera_gain.setValue(float(details["applied_gain"]))
+        self.camera_gain.blockSignals(False)
+        self._update_camera_settings()
+        self.camera_status.setText(
+            f"Camera connected: {details['device_info']} | "
+            f"gain {details['applied_gain']:.2f}x / {maximum_gain:.2f}x max | "
+            f"exposure {details['exposure_s'] * 1000.0:.3f} ms"
+        )
+
+    @pyqtSlot(str)
+    def _on_camera_failed(self, error: str) -> None:
+        self.camera_display.clear_frame("Camera preview unavailable")
+        self.camera_status.setText(f"Camera error: {error}")
+        QMessageBox.critical(self, "Camera preview failed", error)
+
+    def _cleanup_camera_worker(self) -> None:
+        if self._camera_worker is not None:
+            self._camera_worker.deleteLater()
+        if self._camera_thread is not None:
+            self._camera_thread.deleteLater()
+        self._camera_worker = None
+        self._camera_thread = None
+        self.start_camera_button.setEnabled(True)
+        self.stop_camera_button.setEnabled(False)
+        if not self.camera_status.text().startswith("Camera error"):
+            self.camera_status.setText("Camera stopped")
 
     def _start(self) -> None:
         try:
@@ -286,7 +584,6 @@ class LaserAnnealWindow(QMainWindow):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self._prepare_plot()
         self._stop_event.clear()
         self._thread = QThread(self)
         self._worker = AnnealWorker(config, self._stop_event)
@@ -321,10 +618,9 @@ class LaserAnnealWindow(QMainWindow):
     @pyqtSlot(object)
     def _on_progress(self, update: AnnealProgress) -> None:
         self.progress.setValue(update.sequence)
-        self.marker.set_data([update.x_voltage_v], [update.y_voltage_v])
-        self.canvas.draw_idle()
         self.status.setText(
-            f"Pass {update.pass_index}/{update.passes} | {update.sequence:,}/{update.total_points:,} | "
+            f"Pass {update.pass_index}/{update.passes} | "
+            f"{update.sequence:,}/{update.total_points:,} | "
             f"X {update.x_voltage_v:.4f} V | Y {update.y_voltage_v:.4f} V"
         )
 
@@ -367,8 +663,18 @@ class LaserAnnealWindow(QMainWindow):
                 "Stop the anneal and wait for cleanup before closing.",
             )
             event.ignore()
-        else:
-            event.accept()
+            return
+        if self._camera_thread is not None:
+            self._camera_stop_event.set()
+            if not self._camera_thread.wait(3000):
+                QMessageBox.warning(
+                    self,
+                    "Camera still stopping",
+                    "Wait for the camera preview to stop before closing.",
+                )
+                event.ignore()
+                return
+        event.accept()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(
@@ -376,8 +682,11 @@ class LaserAnnealWindow(QMainWindow):
             QWidget { background: #f5f7fa; color: #102a43; font-size: 9pt; }
             QLabel#title { font-size: 20pt; font-weight: 700; }
             QLabel#state { background: #343a40; color: white; border-radius: 8px; padding: 8px 18px; }
+            QLabel#cameraDisplay { background: #101418; color: #d9e2ec; border: 1px solid #52606d; }
             QGroupBox { background: white; border: 1px solid #d7e1ea; border-radius: 9px; margin-top: 12px; padding: 12px; font-weight: 600; }
-            QLineEdit, QSpinBox, QDoubleSpinBox { background: white; border: 1px solid #b8c7d4; border-radius: 5px; padding: 5px; }
+            QLineEdit { background: white; border: 1px solid #b8c7d4; border-radius: 5px; padding: 5px; }
+            QSpinBox, QDoubleSpinBox { background: white; border: 1px solid #b8c7d4; border-radius: 5px; padding: 0; padding-right: 18px; }
+            QSpinBox::up-button, QDoubleSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::down-button { width: 18px; }
             QPushButton { background: white; border: 1px solid #9fb5c8; border-radius: 5px; padding: 7px; }
             QPushButton#primary { background: #147eaf; color: white; font-weight: 700; }
             QProgressBar { background: white; border: 1px solid #b8c7d4; text-align: center; }
