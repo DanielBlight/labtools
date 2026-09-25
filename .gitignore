@@ -40,4 +40,4 @@ vendor/Horiba/python-sdk
 *.pyc
 *.pyo
 __pycache__/
-scratch/
+scratch/.ruff_cache/

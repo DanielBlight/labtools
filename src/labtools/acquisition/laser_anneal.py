@@ -14,6 +14,7 @@ from threading import Event
 import numpy as np
 from loguru import logger
 
+from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
 from labtools.devices.labjack_u6 import LabJackU6
 from labtools.devices.sc10 import SC10, SC10Mode
 from labtools.devices.scanning_mirror import ScanningMirror
@@ -42,6 +43,10 @@ class LaserAnnealConfig:
     sc10_port: str = "COM4"
     sc10_baud_rate: int = 9600
     sc10_timeout_s: float = 1.0
+    anneal_rotation_coordinate: float = 35000.0
+    return_rotation_coordinate: float = 90000.0
+    return_rotation_stage: bool = True
+    rotation_stage_timeout_s: float = 60.0
     output_root: Path = Path("C:/LabData/LaserAnneal")
     save_run_log: bool = True
     maximum_open_time_s: float = 900.0
@@ -54,6 +59,12 @@ class LaserAnnealConfig:
             raise ValueError("Dwell and settle times cannot be negative")
         if not self.sc10_port.strip():
             raise ValueError("An SC10 COM port is required")
+        if self.rotation_stage_timeout_s <= 0:
+            raise ValueError("Rotation-stage timeout must be greater than zero")
+        if self.rotation_stage_timeout_s <= 0:
+            raise ValueError("Rotation-stage timeout must be greater than zero")
+        if self.rotation_stage_timeout_s <= 0:
+            raise ValueError("Rotation-stage timeout must be greater than zero")
         for name, value in (
             ("x_start_v", self.x_start_v),
             ("x_stop_v", self.x_stop_v),
@@ -125,7 +136,7 @@ def _new_dir(root):
     return p
 
 
-def run_laser_anneal(
+def _run_laser_anneal_without_rotation_stage(
     config: LaserAnnealConfig,
     *,
     stop_event: Event | None = None,
@@ -262,3 +273,110 @@ def run_laser_anneal(
         elapsed,
         out,
     )
+
+
+def _run_laser_anneal_without_rotation_stage(
+    config: LaserAnnealConfig,
+    *,
+    stop_event: Event | None = None,
+    progress_callback: ProgressCallback | None = None,
+    status_callback: StatusCallback | None = None,
+) -> LaserAnnealResult:
+    """Move the power stage, run the anneal, then optionally return the stage."""
+    config.validate()
+    status = status_callback or (lambda _message: None)
+
+    status("Connecting to rotation stage")
+    with KinesisRotationStage(
+        move_timeout_s=config.rotation_stage_timeout_s,
+    ) as rotation_stage:
+        status(
+            "Moving rotation stage to anneal coordinate "
+            f"{config.anneal_rotation_coordinate:g}"
+        )
+        rotation_stage.move_to(config.anneal_rotation_coordinate)
+
+        try:
+            return _run_laser_anneal_without_rotation_stage(
+                config,
+                stop_event=stop_event,
+                progress_callback=progress_callback,
+                status_callback=status_callback,
+            )
+        finally:
+            if config.return_rotation_stage:
+                status(
+                    "Moving rotation stage to return coordinate "
+                    f"{config.return_rotation_coordinate:g}"
+                )
+                rotation_stage.move_to(config.return_rotation_coordinate)
+
+
+def _run_laser_anneal_without_rotation_stage(
+    config: LaserAnnealConfig,
+    *,
+    stop_event: Event | None = None,
+    progress_callback: ProgressCallback | None = None,
+    status_callback: StatusCallback | None = None,
+) -> LaserAnnealResult:
+    """Select anneal power, run the scan, then optionally return the stage."""
+    config.validate()
+    status = status_callback or (lambda _message: None)
+    status("Connecting to rotation stage")
+    with KinesisRotationStage(
+        move_timeout_s=config.rotation_stage_timeout_s
+    ) as rotation_stage:
+        status(
+            "Moving rotation stage to anneal coordinate "
+            f"{config.anneal_rotation_coordinate:g}"
+        )
+        rotation_stage.move_to(config.anneal_rotation_coordinate)
+        try:
+            return _run_laser_anneal_without_rotation_stage(
+                config,
+                stop_event=stop_event,
+                progress_callback=progress_callback,
+                status_callback=status_callback,
+            )
+        finally:
+            if config.return_rotation_stage:
+                status(
+                    "Moving rotation stage to return coordinate "
+                    f"{config.return_rotation_coordinate:g}"
+                )
+                rotation_stage.move_to(config.return_rotation_coordinate)
+
+
+def run_laser_anneal(
+    config: LaserAnnealConfig,
+    *,
+    stop_event: Event | None = None,
+    progress_callback: ProgressCallback | None = None,
+    status_callback: StatusCallback | None = None,
+) -> LaserAnnealResult:
+    """Select anneal power, run the scan, then optionally return the stage."""
+    config.validate()
+    status = status_callback or (lambda _message: None)
+    status("Connecting to rotation stage")
+    with KinesisRotationStage(
+        move_timeout_s=config.rotation_stage_timeout_s
+    ) as rotation_stage:
+        status(
+            "Moving rotation stage to anneal coordinate "
+            f"{config.anneal_rotation_coordinate:g}"
+        )
+        rotation_stage.move_to(config.anneal_rotation_coordinate)
+        try:
+            return _run_laser_anneal_without_rotation_stage(
+                config,
+                stop_event=stop_event,
+                progress_callback=progress_callback,
+                status_callback=status_callback,
+            )
+        finally:
+            if config.return_rotation_stage:
+                status(
+                    "Moving rotation stage to return coordinate "
+                    f"{config.return_rotation_coordinate:g}"
+                )
+                rotation_stage.move_to(config.return_rotation_coordinate)

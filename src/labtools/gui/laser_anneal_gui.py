@@ -25,7 +25,9 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -36,6 +38,7 @@ from labtools.acquisition.laser_anneal import (
     LaserAnnealResult,
     run_laser_anneal,
 )
+from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
 from labtools.devices.sc10 import SC10
 from labtools.devices.uc480_camera import ThorlabsUC480Camera
 
@@ -306,6 +309,7 @@ class LaserAnnealWindow(QMainWindow):
         self.serpentine = QCheckBox("Use serpentine scan order")
         scan_form.addRow(self.serpentine)
 
+        self._make_collapsible(scan_group, initially_open=False)
         hardware_group = QGroupBox("SC10 shutter controller")
         hardware_form = QFormLayout(hardware_group)
         control_layout.addWidget(hardware_group)
@@ -315,6 +319,39 @@ class LaserAnnealWindow(QMainWindow):
         self.test_sc10.clicked.connect(self._test_sc10)
         hardware_form.addRow(self.test_sc10)
 
+        self._make_collapsible(hardware_group, initially_open=False)
+        stage_group = QGroupBox("Anneal power rotation stage")
+        stage_form = QFormLayout(stage_group)
+        control_layout.addWidget(stage_group)
+
+        self.anneal_stage_coordinate = QDoubleSpinBox()
+        self.anneal_stage_coordinate.setRange(-2147483648.0, 2147483647.0)
+        self.anneal_stage_coordinate.setDecimals(0)
+        self.anneal_stage_coordinate.setValue(35000.0)
+        self.anneal_stage_coordinate.setToolTip(
+            "Native controller coordinate used during laser annealing."
+        )
+        stage_form.addRow("Anneal coordinate", self.anneal_stage_coordinate)
+
+        self.return_stage = QCheckBox("Move to return coordinate after anneal")
+        self.return_stage.setChecked(True)
+        stage_form.addRow(self.return_stage)
+
+        self.return_stage_coordinate = QDoubleSpinBox()
+        self.return_stage_coordinate.setRange(-2147483648.0, 2147483647.0)
+        self.return_stage_coordinate.setDecimals(0)
+        self.return_stage_coordinate.setValue(90000.0)
+        stage_form.addRow("Return coordinate", self.return_stage_coordinate)
+
+        self.test_stage = QPushButton("Test rotation stage")
+        self.test_stage.clicked.connect(self._test_rotation_stage)
+        stage_form.addRow(self.test_stage)
+
+        self.move_to_anneal_stage = QPushButton("Move to anneal coordinate")
+        self.move_to_anneal_stage.clicked.connect(self._move_stage_to_anneal)
+        stage_form.addRow(self.move_to_anneal_stage)
+
+        self._make_collapsible(stage_group, initially_open=False)
         camera_group = QGroupBox("UC480 camera")
         camera_form = QFormLayout(camera_group)
         control_layout.addWidget(camera_group)
@@ -355,6 +392,7 @@ class LaserAnnealWindow(QMainWindow):
         camera_buttons.addWidget(self.stop_camera_button)
         camera_form.addRow(camera_buttons)
 
+        self._make_collapsible(camera_group, initially_open=False)
         output_group = QGroupBox("Output and confirmation")
         output_form = QFormLayout(output_group)
         control_layout.addWidget(output_group)
@@ -377,6 +415,7 @@ class LaserAnnealWindow(QMainWindow):
         self.confirm.toggled.connect(self._update_start_state)
         output_form.addRow(self.confirm)
 
+        self._make_collapsible(output_group, initially_open=False)
         self.estimate = QLabel()
         control_layout.addWidget(self.estimate)
         self.start_button = QPushButton("Start anneal")
@@ -416,6 +455,46 @@ class LaserAnnealWindow(QMainWindow):
         self._update_camera_settings()
         self._update_estimate()
         self._apply_style()
+
+    def _make_collapsible(
+        self,
+        group: QGroupBox,
+        *,
+        initially_open: bool,
+    ) -> QToolButton:
+        """Add a disclosure-arrow row and hide complete form rows safely."""
+        title = group.title()
+        group.setTitle("")
+        group.setCheckable(False)
+        layout = group.layout()
+        if not isinstance(layout, QFormLayout):
+            raise TypeError("Collapsible sections require a QFormLayout")
+
+        toggle = QToolButton(group)
+        toggle.setObjectName("sectionToggle")
+        toggle.setText(title)
+        toggle.setCheckable(True)
+        toggle.setChecked(initially_open)
+        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toggle.setArrowType(
+            Qt.ArrowType.DownArrow if initially_open else Qt.ArrowType.RightArrow
+        )
+        toggle.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        toggle.setMinimumHeight(24)
+        layout.insertRow(0, toggle)
+
+        def set_expanded(expanded: bool) -> None:
+            toggle.setArrowType(
+                Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+            )
+            for row in range(1, layout.rowCount()):
+                layout.setRowVisible(row, expanded)
+            group.adjustSize()
+            group.updateGeometry()
+
+        toggle.toggled.connect(set_expanded)
+        set_expanded(initially_open)
+        return toggle
 
     @staticmethod
     def _voltage_box(value: float) -> QDoubleSpinBox:
@@ -464,6 +543,9 @@ class LaserAnnealWindow(QMainWindow):
             mirror_settle_s=self.settle.value(),
             serpentine=self.serpentine.isChecked(),
             sc10_port=self.sc10_port.text().strip(),
+            anneal_rotation_coordinate=self.anneal_stage_coordinate.value(),
+            return_rotation_coordinate=self.return_stage_coordinate.value(),
+            return_rotation_stage=self.return_stage.isChecked(),
             output_root=Path(self.output_root.text().strip()),
             save_run_log=self.save_log.isChecked(),
             maximum_open_time_s=self.max_open.value(),
@@ -488,6 +570,85 @@ class LaserAnnealWindow(QMainWindow):
             QMessageBox.critical(self, "SC10 test failed", str(exc))
         else:
             QMessageBox.information(self, "SC10 test passed", str(state))
+
+    def _move_stage_to_anneal(self) -> None:
+        """Move the power-control stage to the configured anneal coordinate."""
+        if self._thread is not None:
+            QMessageBox.warning(
+                self,
+                "Anneal running",
+                "The rotation stage cannot be moved manually "
+                "while an anneal is running.",
+            )
+            return
+
+        coordinate = self.anneal_stage_coordinate.value()
+
+        answer = QMessageBox.question(
+            self,
+            "Confirm rotation-stage move",
+            "Move the power-control rotation stage "
+            f"to coordinate {coordinate:g}?\n\n"
+            "This may change the delivered laser power.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.move_to_anneal_stage.setEnabled(False)
+        self.test_stage.setEnabled(False)
+
+        self.status.setText(f"Moving rotation stage to coordinate {coordinate:g}")
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
+        try:
+            with KinesisRotationStage() as stage:
+                final_position = stage.move_to(coordinate)
+                serial_number = stage.serial_number or "unknown"
+
+        except Exception as exc:
+            self.status.setText("Rotation-stage move failed")
+
+            QMessageBox.critical(
+                self,
+                "Rotation stage move failed",
+                str(exc),
+            )
+
+        else:
+            self.status.setText(
+                f"Rotation stage {serial_number} reached coordinate {final_position:g}"
+            )
+
+            QMessageBox.information(
+                self,
+                "Rotation stage move completed",
+                f"Serial: {serial_number}\nCoordinate: {final_position:g}",
+            )
+
+        finally:
+            QApplication.restoreOverrideCursor()
+
+            self.move_to_anneal_stage.setEnabled(True)
+            self.test_stage.setEnabled(True)
+
+    def _test_rotation_stage(self) -> None:
+        """Connect to the stage and report its current native coordinate."""
+        try:
+            with KinesisRotationStage() as stage:
+                position = stage.get_position()
+                detected_serial = stage.serial_number
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Rotation stage test failed", str(exc))
+        else:
+            QMessageBox.information(
+                self,
+                "Rotation stage test passed",
+                f"Serial: {detected_serial}\nCurrent coordinate: {position:g}",
+            )
 
     def _update_camera_settings(self) -> None:
         """Publish camera settings for application between frames."""
@@ -688,6 +849,8 @@ class LaserAnnealWindow(QMainWindow):
             QSpinBox, QDoubleSpinBox { background: white; border: 1px solid #b8c7d4; border-radius: 5px; padding: 0; padding-right: 18px; }
             QSpinBox::up-button, QDoubleSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::down-button { width: 18px; }
             QPushButton { background: white; border: 1px solid #9fb5c8; border-radius: 5px; padding: 7px; }
+            QToolButton#sectionToggle { border: none; background: transparent; font-weight: 650; padding: 2px; text-align: left; }
+            QToolButton#sectionToggle:hover { color: #0b6fa4; }
             QPushButton#primary { background: #147eaf; color: white; font-weight: 700; }
             QProgressBar { background: white; border: 1px solid #b8c7d4; text-align: center; }
             QProgressBar::chunk { background: #147eaf; }
