@@ -61,7 +61,7 @@ class SC10:
         port: str = "COM4",
         *,
         baud_rate: int = 9600,
-        timeout_s: float = 1.0,
+        timeout_s: float = 0.5,
         auto_connect: bool = False,
     ) -> None:
         self.port = port
@@ -109,10 +109,29 @@ class SC10:
             raise SC10Error(f"Device on {self.port} is not an SC10: {identifier!r}")
 
     def close(self) -> None:
+        """Cancel pending serial I/O and release the SC10 connection."""
         connection = self._serial
         self._serial = None
-        if connection is not None and connection.is_open:
-            connection.close()
+
+        if connection is None:
+            return
+
+        try:
+            if connection.is_open:
+                try:
+                    connection.cancel_read()
+                except (AttributeError, OSError):
+                    pass
+
+                try:
+                    connection.cancel_write()
+                except (AttributeError, OSError):
+                    pass
+
+                connection.close()
+
+        finally:
+            self._serial = None
 
     def _connection(self) -> serial.Serial:
         if self._serial is None or not self._serial.is_open:

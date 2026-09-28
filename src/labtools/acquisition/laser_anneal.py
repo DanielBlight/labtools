@@ -42,7 +42,7 @@ class LaserAnnealConfig:
     home_y_voltage_v: float = 0.0
     sc10_port: str = "COM4"
     sc10_baud_rate: int = 9600
-    sc10_timeout_s: float = 1.0
+    sc10_timeout_s: float = 0.5
     anneal_rotation_coordinate: float = 35000.0
     return_rotation_coordinate: float = 90000.0
     return_rotation_stage: bool = True
@@ -59,10 +59,6 @@ class LaserAnnealConfig:
             raise ValueError("Dwell and settle times cannot be negative")
         if not self.sc10_port.strip():
             raise ValueError("An SC10 COM port is required")
-        if self.rotation_stage_timeout_s <= 0:
-            raise ValueError("Rotation-stage timeout must be greater than zero")
-        if self.rotation_stage_timeout_s <= 0:
-            raise ValueError("Rotation-stage timeout must be greater than zero")
         if self.rotation_stage_timeout_s <= 0:
             raise ValueError("Rotation-stage timeout must be greater than zero")
         for name, value in (
@@ -275,78 +271,6 @@ def _run_laser_anneal_without_rotation_stage(
     )
 
 
-def _run_laser_anneal_without_rotation_stage(
-    config: LaserAnnealConfig,
-    *,
-    stop_event: Event | None = None,
-    progress_callback: ProgressCallback | None = None,
-    status_callback: StatusCallback | None = None,
-) -> LaserAnnealResult:
-    """Move the power stage, run the anneal, then optionally return the stage."""
-    config.validate()
-    status = status_callback or (lambda _message: None)
-
-    status("Connecting to rotation stage")
-    with KinesisRotationStage(
-        move_timeout_s=config.rotation_stage_timeout_s,
-    ) as rotation_stage:
-        status(
-            "Moving rotation stage to anneal coordinate "
-            f"{config.anneal_rotation_coordinate:g}"
-        )
-        rotation_stage.move_to(config.anneal_rotation_coordinate)
-
-        try:
-            return _run_laser_anneal_without_rotation_stage(
-                config,
-                stop_event=stop_event,
-                progress_callback=progress_callback,
-                status_callback=status_callback,
-            )
-        finally:
-            if config.return_rotation_stage:
-                status(
-                    "Moving rotation stage to return coordinate "
-                    f"{config.return_rotation_coordinate:g}"
-                )
-                rotation_stage.move_to(config.return_rotation_coordinate)
-
-
-def _run_laser_anneal_without_rotation_stage(
-    config: LaserAnnealConfig,
-    *,
-    stop_event: Event | None = None,
-    progress_callback: ProgressCallback | None = None,
-    status_callback: StatusCallback | None = None,
-) -> LaserAnnealResult:
-    """Select anneal power, run the scan, then optionally return the stage."""
-    config.validate()
-    status = status_callback or (lambda _message: None)
-    status("Connecting to rotation stage")
-    with KinesisRotationStage(
-        move_timeout_s=config.rotation_stage_timeout_s
-    ) as rotation_stage:
-        status(
-            "Moving rotation stage to anneal coordinate "
-            f"{config.anneal_rotation_coordinate:g}"
-        )
-        rotation_stage.move_to(config.anneal_rotation_coordinate)
-        try:
-            return _run_laser_anneal_without_rotation_stage(
-                config,
-                stop_event=stop_event,
-                progress_callback=progress_callback,
-                status_callback=status_callback,
-            )
-        finally:
-            if config.return_rotation_stage:
-                status(
-                    "Moving rotation stage to return coordinate "
-                    f"{config.return_rotation_coordinate:g}"
-                )
-                rotation_stage.move_to(config.return_rotation_coordinate)
-
-
 def run_laser_anneal(
     config: LaserAnnealConfig,
     *,
@@ -359,7 +283,7 @@ def run_laser_anneal(
     status = status_callback or (lambda _message: None)
     status("Connecting to rotation stage")
     with KinesisRotationStage(
-        move_timeout_s=config.rotation_stage_timeout_s
+        move_timeout_s=config.rotation_stage_timeout_s,
     ) as rotation_stage:
         status(
             "Moving rotation stage to anneal coordinate "

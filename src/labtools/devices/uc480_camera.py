@@ -39,6 +39,7 @@ class ThorlabsUC480Camera:
         self.exposure_s = float(exposure_s)
         self.mirror_horizontal = bool(mirror_horizontal)
         self._camera = None
+        self._live = False
 
     @staticmethod
     def _module():
@@ -85,9 +86,13 @@ class ThorlabsUC480Camera:
         self._camera = None
         if camera is not None:
             try:
+                if self._live:
+                    camera.stop_acquisition()
                 camera.close()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 raise UC480CameraError(f"Could not close UC480 camera: {exc}") from exc
+            finally:
+                self._live = False
 
     def _connected_camera(self):
         if self._camera is None:
@@ -125,9 +130,40 @@ class ThorlabsUC480Camera:
         reported = self._connected_camera().set_gains(master=requested)
         return float(reported[0])
 
+    def start_live(self, *, buffer_frames: int = 20) -> None:
+        """Start continuous sequence acquisition."""
+        if buffer_frames < 2:
+            raise ValueError("buffer_frames must be at least two")
+        if self._live:
+            return
+        camera = self._connected_camera()
+        camera.setup_acquisition(nframes=int(buffer_frames))
+        camera.start_acquisition()
+        self._live = True
+
+    def stop_live(self) -> None:
+        """Stop continuous acquisition if active."""
+        if self._live:
+            self._connected_camera().stop_acquisition()
+            self._live = False
+
+    def read_latest(self, *, timeout_s: float = 1.0) -> NDArray[np.generic]:
+        """Wait for a frame and return the newest buffered image."""
+        if not self._live:
+            raise UC480CameraError("Continuous acquisition is not running")
+        camera = self._connected_camera()
+        camera.wait_for_frame(timeout=timeout_s)
+        frame = camera.read_newest_image()
+        if frame is None:
+            raise UC480CameraError("Camera reported a frame but returned no image")
+        return self._prepare_frame(np.asarray(frame))
+
     def snap(self) -> NDArray[np.generic]:
-        """Acquire one frame and optionally mirror it horizontally."""
+        """Acquire one standalone frame."""
         frame = np.asarray(self._connected_camera().snap())
+        return self._prepare_frame(frame)
+
+    def _prepare_frame(self, frame: NDArray[np.generic]) -> NDArray[np.generic]:
         if frame.ndim not in {2, 3}:
             raise UC480CameraError(
                 f"Unexpected camera frame shape {frame.shape}; expected 2D or 3D"

@@ -9,7 +9,7 @@ from threading import Event, Lock
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QSettings, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -89,6 +89,34 @@ class CameraSettings:
             return self._exposure_s, self._master_gain
 
 
+class LatestCameraFrame:
+    """Store only the newest complete camera frame."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._frame: NDArray[np.generic] | None = None
+
+    def put(
+        self,
+        frame: NDArray[np.generic],
+    ) -> None:
+        """Replace the stored frame with the newest frame."""
+        complete_frame = np.ascontiguousarray(frame)
+
+        with self._lock:
+            self._frame = complete_frame
+
+    def take(
+        self,
+    ) -> NDArray[np.generic] | None:
+        """Return and remove the newest available frame."""
+        with self._lock:
+            frame = self._frame
+            self._frame = None
+
+        return frame
+
+
 class CameraWorker(QObject):
     """Acquire UC480 frames continuously in a worker thread."""
 
@@ -101,12 +129,14 @@ class CameraWorker(QObject):
         self,
         *,
         settings: CameraSettings,
+        frame_buffer: LatestCameraFrame,
         frame_interval_s: float,
         stop_event: Event,
     ) -> None:
         super().__init__()
         self.settings = settings
-        self.frame_interval_s = frame_interval_s
+        self.frame_buffer = frame_buffer
+        self.frame_interval_s = max(float(frame_interval_s), 0.016)
         self.stop_event = stop_event
 
     @pyqtSlot()
@@ -125,6 +155,7 @@ class CameraWorker(QObject):
                     }
                 )
                 applied_exposure = camera.get_exposure()
+                camera.start_live(buffer_frames=20)
 
                 while not self.stop_event.is_set():
                     requested_exposure, requested_gain = self.settings.snapshot()
@@ -145,10 +176,10 @@ class CameraWorker(QObject):
                         for _ in range(3):
                             if self.stop_event.is_set():
                                 break
-                            camera.snap()
+                            camera.read_latest(timeout_s=1.0)
 
                     started = time.monotonic()
-                    self.frame_ready.emit(camera.snap())
+                    self.frame_buffer.put(camera.read_latest(timeout_s=1.0))
                     remaining = self.frame_interval_s - (time.monotonic() - started)
                     if remaining > 0:
                         self.stop_event.wait(remaining)
@@ -189,7 +220,7 @@ class CameraDisplay(QLabel):
             self._pixmap.scaled(
                 self.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
+                Qt.TransformationMode.FastTransformation,
             )
         )
 
@@ -253,6 +284,10 @@ class LaserAnnealWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
+        self._settings = QSettings(
+            "labtools",
+            "LaserAnneal",
+        )
         self.setWindowTitle("Laser Anneal")
         self.resize(1440, 900)
         self._thread: QThread | None = None
@@ -262,6 +297,10 @@ class LaserAnnealWindow(QMainWindow):
         self._camera_worker: CameraWorker | None = None
         self._camera_stop_event = Event()
         self._camera_settings = CameraSettings(0.020, 1.0)
+        self._camera_frame_buffer = LatestCameraFrame()
+        self._camera_display_timer = QTimer(self)
+        self._camera_display_timer.setInterval(33)
+        self._camera_display_timer.timeout.connect(self._draw_latest_camera_frame)
 
         root_widget = QWidget()
         self.setCentralWidget(root_widget)
@@ -377,11 +416,11 @@ class LaserAnnealWindow(QMainWindow):
         camera_form.addRow("Master gain", self.camera_gain)
 
         self.camera_interval_ms = QDoubleSpinBox()
-        self.camera_interval_ms.setRange(10.0, 10000.0)
+        self.camera_interval_ms.setRange(16.0, 10000.0)
         self.camera_interval_ms.setDecimals(0)
-        self.camera_interval_ms.setValue(100.0)
+        self.camera_interval_ms.setValue(33.0)
         self.camera_interval_ms.setSuffix(" ms")
-        camera_form.addRow("Display interval", self.camera_interval_ms)
+        camera_form.addRow("Extra display delay", self.camera_interval_ms)
         camera_buttons = QHBoxLayout()
         self.start_camera_button = QPushButton("Start camera")
         self.start_camera_button.clicked.connect(self._start_camera)
@@ -452,6 +491,7 @@ class LaserAnnealWindow(QMainWindow):
 
         self.camera_exposure_ms.valueChanged.connect(self._update_camera_settings)
         self.camera_gain.valueChanged.connect(self._update_camera_settings)
+        self._restore_settings()
         self._update_camera_settings()
         self._update_estimate()
         self._apply_style()
@@ -529,6 +569,124 @@ class LaserAnnealWindow(QMainWindow):
         layout.addWidget(stop)
         layout.addWidget(points)
         return widget
+
+    def _restore_settings(self) -> None:
+        """Restore values saved on the last clean GUI close."""
+        value_widgets = {
+            "x_start": (self.x_start, float),
+            "x_stop": (self.x_stop, float),
+            "x_points": (self.x_points, int),
+            "y_start": (self.y_start, float),
+            "y_stop": (self.y_stop, float),
+            "y_points": (self.y_points, int),
+            "passes": (self.passes, int),
+            "point_dwell_s": (self.dwell, float),
+            "mirror_settle_s": (self.settle, float),
+            "anneal_coordinate": (
+                self.anneal_stage_coordinate,
+                float,
+            ),
+            "return_coordinate": (
+                self.return_stage_coordinate,
+                float,
+            ),
+            "camera_exposure_ms": (
+                self.camera_exposure_ms,
+                float,
+            ),
+            "camera_gain": (
+                self.camera_gain,
+                float,
+            ),
+            "camera_interval_ms": (
+                self.camera_interval_ms,
+                float,
+            ),
+            "maximum_open_time_s": (
+                self.max_open,
+                float,
+            ),
+        }
+
+        for key, (
+            widget,
+            value_type,
+        ) in value_widgets.items():
+            saved = self._settings.value(
+                key,
+                None,
+                type=value_type,
+            )
+
+            if saved is not None:
+                widget.setValue(saved)
+
+        check_widgets = {
+            "serpentine": self.serpentine,
+            "return_rotation_stage": (self.return_stage),
+            "save_run_log": self.save_log,
+        }
+
+        for key, widget in check_widgets.items():
+            saved = self._settings.value(
+                key,
+                None,
+                type=bool,
+            )
+
+            if saved is not None:
+                widget.setChecked(saved)
+
+        text_widgets = {
+            "sc10_port": self.sc10_port,
+            "output_root": self.output_root,
+        }
+
+        for key, widget in text_widgets.items():
+            saved = self._settings.value(
+                key,
+                None,
+                type=str,
+            )
+
+            if saved:
+                widget.setText(saved)
+
+        # Never restore the safety acknowledgement.
+        self.confirm.setChecked(False)
+
+    def _save_settings(self) -> None:
+        """Save values after all workers stop on a clean close."""
+        values = {
+            "x_start": self.x_start.value(),
+            "x_stop": self.x_stop.value(),
+            "x_points": self.x_points.value(),
+            "y_start": self.y_start.value(),
+            "y_stop": self.y_stop.value(),
+            "y_points": self.y_points.value(),
+            "passes": self.passes.value(),
+            "point_dwell_s": self.dwell.value(),
+            "mirror_settle_s": self.settle.value(),
+            "serpentine": (self.serpentine.isChecked()),
+            "sc10_port": (self.sc10_port.text().strip()),
+            "anneal_coordinate": (self.anneal_stage_coordinate.value()),
+            "return_coordinate": (self.return_stage_coordinate.value()),
+            "return_rotation_stage": (self.return_stage.isChecked()),
+            "camera_exposure_ms": (self.camera_exposure_ms.value()),
+            "camera_gain": (self.camera_gain.value()),
+            "camera_interval_ms": (self.camera_interval_ms.value()),
+            "maximum_open_time_s": (self.max_open.value()),
+            "output_root": (self.output_root.text().strip()),
+            "save_run_log": (self.save_log.isChecked()),
+        }
+
+        for key, value in values.items():
+            self._settings.setValue(
+                key,
+                value,
+            )
+
+        self._settings.sync()
 
     def _build_config(self) -> LaserAnnealConfig:
         return LaserAnnealConfig(
@@ -657,6 +815,21 @@ class LaserAnnealWindow(QMainWindow):
             self.camera_gain.value(),
         )
 
+    def _draw_latest_camera_frame(
+        self,
+    ) -> None:
+        """Draw at most one newest frame on each timer tick."""
+        frame = self._camera_frame_buffer.take()
+
+        if frame is None:
+            return
+
+        array = np.asarray(frame)
+
+        self.camera_display.set_frame(array)
+
+        self.camera_status.setText(f"Live | shape {array.shape} | {array.dtype}")
+
     def _start_camera(self) -> None:
         if self._camera_thread is not None:
             return
@@ -665,12 +838,12 @@ class LaserAnnealWindow(QMainWindow):
         self._update_camera_settings()
         self._camera_worker = CameraWorker(
             settings=self._camera_settings,
+            frame_buffer=self._camera_frame_buffer,
             frame_interval_s=self.camera_interval_ms.value() / 1000.0,
             stop_event=self._camera_stop_event,
         )
         self._camera_worker.moveToThread(self._camera_thread)
         self._camera_thread.started.connect(self._camera_worker.run)
-        self._camera_worker.frame_ready.connect(self._on_camera_frame)
         self._camera_worker.connected.connect(self._on_camera_connected)
         self._camera_worker.failed.connect(self._on_camera_failed)
         self._camera_worker.finished.connect(self._camera_thread.quit)
@@ -678,6 +851,7 @@ class LaserAnnealWindow(QMainWindow):
         self.start_camera_button.setEnabled(False)
         self.stop_camera_button.setEnabled(True)
         self.camera_status.setText("Connecting to camera...")
+        self._camera_display_timer.start()
         self._camera_thread.start()
 
     def _stop_camera(self) -> None:
@@ -718,6 +892,7 @@ class LaserAnnealWindow(QMainWindow):
         QMessageBox.critical(self, "Camera preview failed", error)
 
     def _cleanup_camera_worker(self) -> None:
+        self._camera_display_timer.stop()
         if self._camera_worker is not None:
             self._camera_worker.deleteLater()
         if self._camera_thread is not None:
@@ -835,6 +1010,7 @@ class LaserAnnealWindow(QMainWindow):
                 )
                 event.ignore()
                 return
+        self._save_settings()
         event.accept()
 
     def _apply_style(self) -> None:
