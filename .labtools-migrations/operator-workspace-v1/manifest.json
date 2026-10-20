@@ -1,0 +1,46 @@
+{
+  "src/labtools/config/__init__.py": {
+    "existed": false,
+    "installed_sha256": "5a00b3bba8fc652f7a1535221c5df1e7c61c25e532285ba882a666cbf7f44b66"
+  },
+  "src/labtools/config/anneal_workspace.py": {
+    "existed": false,
+    "installed_sha256": "39b8e138d8d2e3126023af7b7f64f2f7f9e742f137bacbb8c96634832e5121bb"
+  },
+  "src/labtools/operator_cli.py": {
+    "existed": false,
+    "installed_sha256": "abffee8386ae5a9da6ae52a0a09d6b731aa02a57ce961c119c28f12c14bb9fdd"
+  },
+  "examples/profiles/instrument.example.json": {
+    "existed": false,
+    "installed_sha256": "9a36b2685483fa51c19647278d07b2c1b042323b8cb63d1c1d7c76c156c70a2f"
+  },
+  "examples/experiments/run_anneal_recipe.py": {
+    "existed": false,
+    "installed_sha256": "25d0d222b472898ad0dc5a3e98d909f87a6b4ae869900a16a526fb45a77fb8fb"
+  },
+  "docs/operator-workspace.md": {
+    "existed": false,
+    "installed_sha256": "bbc3479dff7c701d95ec497b0c6628a078932159d1df1f1bdadb66e6ca329376"
+  },
+  "tests/test_anneal_workspace.py": {
+    "existed": false,
+    "installed_sha256": "6bd061313bc337ca0e3b79212e089a7c6b91985666a033f18ff73b4b92a7103b"
+  },
+  "src/labtools/config/recipe_ui.py": {
+    "existed": false,
+    "installed_sha256": "4a775baa411eb44d21f590e44e220cfdfec9588b86a5c6f7c36f0e7688727246"
+  },
+  "src\\labtools\\gui\\laser_anneal_gui.py": {
+    "existed": true,
+    "installed_sha256": "ea6679fa4fda55ef7fa3570fb8cd6522c86a541b98e85bedcbf9fd9cd502a0f8"
+  },
+  "src\\labtools\\acquisition\\laser_anneal.py": {
+    "existed": true,
+    "installed_sha256": "4d100c2f0b7952f7aaf749189d9a1e9ddf6cb3c2a82e6dc81aafa8a71a57c4ba"
+  },
+  "pyproject.toml": {
+    "existed": true,
+    "installed_sha256": "ac48ef69fec49aad15c4625ee4bd5954932fb3291d8c9b267712c1975881ac66"
+  }
+}

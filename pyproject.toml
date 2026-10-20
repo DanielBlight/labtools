@@ -47,3 +47,8 @@ where = ["src"]
 markers = [
     "hardware: tests requiring connected laboratory hardware",
 ]
+
+[project.scripts]
+labtools = "labtools.operator_cli:main"
+labtools-anneal = "labtools.operator_cli:anneal_gui"
+labtools-intensity-map = "labtools.operator_cli:intensity_gui"

@@ -1,0 +1,18 @@
+{
+  "profile_id": "REVIEW-REQUIRED",
+  "approved": false,
+  "sc10_port": "COM4",
+  "sc10_baud_rate": 9600,
+  "sc10_timeout_s": 0.5,
+  "mirror_dio_pin": 2,
+  "minimum_mirror_voltage_v": -5.0,
+  "maximum_mirror_voltage_v": 5.0,
+  "home_x_voltage_v": 0.0,
+  "home_y_voltage_v": 0.0,
+  "rotation_stage_timeout_s": 60.0,
+  "rotation_min_coordinate": 35000.0,
+  "rotation_max_coordinate": 90000.0,
+  "maximum_open_time_s": 900.0,
+  "maximum_total_points": 1000000,
+  "require_return_stage": true
+}

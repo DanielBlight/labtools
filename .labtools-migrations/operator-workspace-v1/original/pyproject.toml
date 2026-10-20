@@ -1,0 +1,49 @@
+[project]
+name = "lab-tools"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "h5py>=3.16.0",
+    "horiba-sdk>=1.0.4",
+    "ipykernel>=6.31.0",
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.6.2",
+    "labjackpython>=2.3.0",
+    "lmfit>=1.3.4",
+    "loguru>=0.7.3",
+    "matplotlib>=3.11.1",
+    "napari>=0.8.0",
+    "numba>=0.67.0",
+    "numpy>=2.5.1",
+    "pandas>=3.0.5",
+    "pyft232>=0.12",
+    "pylablib-lightweight>=1.4.3",
+    "pyqt6>=6.11.0",
+    "pyserial>=3.5",
+    "pyvisa>=1.16.2",
+    "pyvisa-py>=0.8.1",
+    "scipy>=1.18.0",
+    "tifffile>=2026.7.14",
+    "xarray>=2026.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pyserial>=3.5",
+    "pytest>=9.1.1",
+    "ruff>=0.16.3",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "hardware: tests requiring connected laboratory hardware",
+]

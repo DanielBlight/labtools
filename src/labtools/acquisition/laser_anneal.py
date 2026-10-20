@@ -1,6 +1,8 @@
 """Interruptible no-pause scanning-mirror laser anneal."""
 
 from __future__ import annotations
+# labtools operator workspace v1
+from labtools.config.anneal_workspace import validate_run_config
 
 import csv
 import json
@@ -25,6 +27,9 @@ StatusCallback = Callable[[str], None]
 
 @dataclass(frozen=True)
 class LaserAnnealConfig:
+    instrument_profile_id: str = ""
+    instrument_profile_sha256: str = ""
+    software_version: str = ""
     x_start_v: float = -1.0
     x_stop_v: float = 1.0
     x_points: int = 2
@@ -279,6 +284,7 @@ def run_laser_anneal(
     status_callback: StatusCallback | None = None,
 ) -> LaserAnnealResult:
     """Select anneal power, run the scan, then optionally return the stage."""
+    validate_run_config(config)
     config.validate()
     status = status_callback or (lambda _message: None)
     status("Connecting to rotation stage")

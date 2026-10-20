@@ -1,6 +1,9 @@
 """PyQt6 GUI for no-pause scanning-mirror laser annealing."""
 
 from __future__ import annotations
+# labtools operator workspace v1
+from labtools.config.anneal_workspace import resolve_gui_config, validate_stage_coordinate
+from labtools.config.recipe_ui import setup_recipe_controls
 
 import sys
 import time
@@ -495,6 +498,7 @@ class LaserAnnealWindow(QMainWindow):
         self._update_camera_settings()
         self._update_estimate()
         self._apply_style()
+        setup_recipe_controls(self)
 
     def _make_collapsible(
         self,
@@ -689,7 +693,7 @@ class LaserAnnealWindow(QMainWindow):
         self._settings.sync()
 
     def _build_config(self) -> LaserAnnealConfig:
-        return LaserAnnealConfig(
+        config = LaserAnnealConfig(
             x_start_v=self.x_start.value(),
             x_stop_v=self.x_stop.value(),
             x_points=self.x_points.value(),
@@ -708,6 +712,7 @@ class LaserAnnealWindow(QMainWindow):
             save_run_log=self.save_log.isChecked(),
             maximum_open_time_s=self.max_open.value(),
         )
+        return resolve_gui_config(config)
 
     def _update_estimate(self) -> None:
         points = self.x_points.value() * self.y_points.value() * self.passes.value()
@@ -741,6 +746,11 @@ class LaserAnnealWindow(QMainWindow):
             return
 
         coordinate = self.anneal_stage_coordinate.value()
+        try:
+            validate_stage_coordinate(coordinate)
+        except (ValueError, OSError) as exc:
+            QMessageBox.critical(self, "Instrument profile error", str(exc))
+            return
 
         answer = QMessageBox.question(
             self,
