@@ -24,7 +24,7 @@ from matplotlib.colors import LogNorm, Normalize
 
 from matplotlib.figure import Figure
 
-from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSlot
 
 from PyQt6.QtGui import QFont
 
@@ -78,55 +78,13 @@ LASER_THRESHOLD_CURRENT_A = 0.049
 DEFAULT_OUTPUT_ROOT = Path("C:/LabData/IntensityMaps")
 
 
-class MapWorker(QObject):
-    """Run blocking intensity-map acquisition outside the Qt main thread."""
-
-    progress = pyqtSignal(object)
-
-    finished = pyqtSignal(object)
-
-    failed = pyqtSignal(str, str)
-
-    def __init__(
-        self,
-        config: IntensityMapConfig,
-        resume_directory: Path | None,
-    ) -> None:
-
-        super().__init__()
-
-        self.config = config
-
-        self.resume_directory = resume_directory
-
-        self._cancel = False
-
-    @pyqtSlot()
-    def run(self) -> None:
-
-        try:
-            result = acquire_intensity_map(
-                self.config,
-                resume_directory=self.resume_directory,
-                progress_callback=self.progress.emit,
-                cancel_requested=lambda: self._cancel,
-            )
-
-        except Exception as exc:  # noqa: BLE001
-            self.failed.emit(str(exc), traceback.format_exc())
-
-        else:
-            self.finished.emit(result)
-
-    def cancel(self) -> None:
-
-        self._cancel = True
+from labtools.gui.map_controller import MapController, MapWorker  # compatibility export
 
 
 class IntensityMapWindow(QMainWindow):
     """Main window for live count maps, resume, and laser control."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, acquisition=None) -> None:
 
         super().__init__()
 
@@ -136,9 +94,11 @@ class IntensityMapWindow(QMainWindow):
 
         self.setMinimumSize(1120, 720)
 
-        self._thread: QThread | None = None
-
-        self._worker: MapWorker | None = None
+        self.map_controller = MapController(self, acquisition=acquisition)
+        self.map_controller.progress.connect(self._on_progress)
+        self.map_controller.finished.connect(self._on_finished)
+        self.map_controller.failed.connect(self._on_failed)
+        self.map_controller.idle.connect(self._cleanup_worker)
 
         self._resume_directory: Path | None = None
 
@@ -1222,6 +1182,8 @@ class IntensityMapWindow(QMainWindow):
 
     def _start_worker(self, config: IntensityMapConfig) -> None:
 
+        if self.map_controller.busy:
+            return
         selected = "simulation" if self.simulation_mode.isChecked() else "real"
         if config.backend != selected:
             QMessageBox.warning(self, "Backend mismatch", "Select the matching backend before resuming this map.")
@@ -1255,36 +1217,12 @@ class IntensityMapWindow(QMainWindow):
 
         self._reset_map_display(config)
         self.simulation_mode.setEnabled(False)
-        self._thread = QThread(self)
-
-        self._worker = MapWorker(config, self._resume_directory)
-
-        self._worker.moveToThread(self._thread)
-
-        self._thread.started.connect(self._worker.run)
-
-        self._worker.progress.connect(self._on_progress)
-
-        self._worker.finished.connect(self._on_finished)
-
-        self._worker.failed.connect(self._on_failed)
-
-        self._worker.finished.connect(self._thread.quit)
-
-        self._worker.failed.connect(self._thread.quit)
-
-        self._thread.finished.connect(self._cleanup_worker)
-
-        self._thread.start()
+        self.map_controller.start(config, self._resume_directory)
 
     def request_stop(self) -> None:
-
         self.stop_button.setEnabled(False)
-
         self.set_status("Stopping after the current point and saving checkpoint...")
-
-        if self._worker is not None:
-            self._worker.cancel()
+        self.map_controller.cancel()
 
     @pyqtSlot(object)
     def _on_progress(self, snapshot: IntensityMapSnapshot) -> None:
@@ -1347,27 +1285,23 @@ class IntensityMapWindow(QMainWindow):
 
         box.exec()
 
-        self.set_status("Acquisition failed. Partial checkpoint was retained.")
+        self.set_status("Acquisition failed. Inspect error details and the output folder for a checkpoint.")
 
     @pyqtSlot()
     def _cleanup_worker(self) -> None:
-
         self.simulation_mode.setEnabled(True)
         self.start_button.setEnabled(True)
-
         self.resume_button.setEnabled(True)
-
         self.stop_button.setEnabled(False)
 
-        if self._worker is not None:
-            self._worker.deleteLater()
+    @property
+    def _thread(self):
+        """Read-only compatibility view of controller-owned lifecycle state."""
+        return self.map_controller.thread
 
-        if self._thread is not None:
-            self._thread.deleteLater()
-
-        self._worker = None
-
-        self._thread = None
+    @property
+    def _worker(self):
+        return self.map_controller.worker
 
     def set_laser_indicator(self, on: bool) -> None:
 
@@ -1551,7 +1485,7 @@ class IntensityMapWindow(QMainWindow):
 
     def closeEvent(self, event: Any) -> None:
 
-        if self._thread is not None and self._thread.isRunning():
+        if self.map_controller.busy:
             QMessageBox.warning(
                 self,
                 "Acquisition in progress",

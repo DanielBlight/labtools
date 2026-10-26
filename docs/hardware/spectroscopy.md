@@ -99,7 +99,7 @@ Calculates the pixel-wise median of repeated frames.
 
 ### `sigma_clip`
 
-Uses a robust median and median absolute deviation estimate to reject strong pixel-level outliers before averaging.
+Uses the per-pixel arithmetic mean and population standard deviation (NumPy ddof=0). Values farther than k_sigma standard deviations from that mean are masked, then the remaining values are averaged. This is a single pass, not iterative clipping and not a median/MAD estimator. With few frames, large outliers can inflate the standard deviation and remain unmasked.
 
 At least three frames are required for `sigma_clip`.
 

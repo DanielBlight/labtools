@@ -7,70 +7,21 @@ Commands are not measured voltage readbacks. Native driver calls can block.
 from __future__ import annotations
 
 import math
-import queue
 import sys
 
-from PyQt6.QtCore import QSettings, QThread, pyqtSignal
+from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
-MIN_V = -10.0
-MAX_V = 10.0
-DIO_PIN = 2
-
-
-def validate_target(x, y):
-    if not all(math.isfinite(v) and MIN_V <= v <= MAX_V for v in (x, y)):
-        raise ValueError("Target must be between -10 and +10 V")
-
-
-class HardwareThread(QThread):
-    done = pyqtSignal(str, object)
-    failed = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.commands = queue.Queue(maxsize=1)
-
-    def run(self):
-        device = None
-        mirror = None
-        try:
-            while True:
-                action, target = self.commands.get()
-                if action == "quit":
-                    return
-                if action == "connect":
-                    from labtools.devices.labjack_u6 import LabJackU6
-                    from labtools.devices.scanning_mirror import ScanningMirror
-                    device = LabJackU6()
-                    mirror = ScanningMirror(device, dio_pin=DIO_PIN)
-                elif action == "disconnect":
-                    if device is not None:
-                        device.close()
-                        device = None
-                    mirror = None
-                elif action == "move":
-                    if mirror is None:
-                        raise RuntimeError("Not connected")
-                    validate_target(*target)
-                    mirror.move(*target)
-                self.done.emit(action, target)
-        except Exception as exc:
-            self.failed.emit(f"{exc}. Outputs unknown; a partial write is possible.")
-        finally:
-            if device is not None:
-                try:
-                    device.close()
-                except Exception as exc:
-                    self.failed.emit(f"Close failed: {exc}")
+from labtools.runtime.mirror_backend import MIN_V, MAX_V, DIO_PIN, validate_target
+from labtools.gui.mirror_controller import HardwareThread
 
 
 class MirrorWindow(QWidget):
-    def __init__(self):
+    def __init__(self, *, backend_factory=None):
         super().__init__()
         self.setWindowTitle("Labtools | Mirror")
         self.resize(410, 245)
@@ -79,7 +30,7 @@ class MirrorWindow(QWidget):
         self.closing = False
         self.fault = False
         self.settings = QSettings("labtools", "ManualMirrorVoltages")
-        self.worker = HardwareThread(self)
+        self.worker = HardwareThread(self, backend_factory=backend_factory)
         self.worker.done.connect(self.completed)
         self.worker.failed.connect(self.failed)
         self.worker.finished.connect(self.finished)

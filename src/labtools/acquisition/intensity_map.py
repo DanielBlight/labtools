@@ -22,6 +22,7 @@ from numpy.typing import NDArray
 
 from labtools.config.intensity_map import SCHEMA_VERSION, IntensityMapConfig
 from labtools.runtime.map_devices import open_map_devices
+from labtools.runtime.cleanup import cleanup_actions
 from labtools.simulation.map_devices import MODEL_VERSION
 
 FloatArray = NDArray[np.float64]
@@ -460,24 +461,41 @@ def acquire_intensity_map(
     acquired_this_session = 0
     interrupted = False
 
+    def save_current_checkpoint():
+        _save_checkpoint(
+            output_directory,
+            x_values_v=x_values,
+            y_values_v=y_values,
+            channels=config.channels,
+            counts=counts,
+            count_rates_cps=rates,
+            completed_mask=completed,
+            timestamps_unix_s=timestamps,
+            session_ids=session_ids,
+        )
+
     try:
         with open_map_devices(config) as (mirror, gate, controller):
 
-            for channel, threshold_v, edge in zip(
-                config.channels,
-                config.channel_thresholds_v,
-                config.channel_edges,
-                strict=True,
+            with cleanup_actions(
+                ("checkpoint", save_current_checkpoint),
+                ("mirror home", mirror.home),
+                ("gate close", gate.close),
             ):
-                controller.configure_channel(
-                    channel,
-                    threshold_v=threshold_v,
-                    edge=edge,
-                    enabled=True,
-                )
+                for channel, threshold_v, edge in zip(
+                    config.channels,
+                    config.channel_thresholds_v,
+                    config.channel_edges,
+                    strict=True,
+                ):
+                    controller.configure_channel(
+                        channel,
+                        threshold_v=threshold_v,
+                        edge=edge,
+                        enabled=True,
+                    )
 
-            gate.open()
-            try:
+                gate.open()
                 for y_index, x_index in _scan_indices(config):
                     if completed[y_index, x_index]:
                         continue
@@ -543,34 +561,15 @@ def acquire_intensity_map(
                     )
                     if progress_callback is not None:
                         progress_callback(snap)
-            finally:
-                _save_checkpoint(
-                    output_directory,
-                    x_values_v=x_values,
-                    y_values_v=y_values,
-                    channels=config.channels,
-                    counts=counts,
-                    count_rates_cps=rates,
-                    completed_mask=completed,
-                    timestamps_unix_s=timestamps,
-                    session_ids=session_ids,
-                )
-                mirror.home()
-                gate.close()
-    except Exception:
-        _save_checkpoint(
-            output_directory,
-            x_values_v=x_values,
-            y_values_v=y_values,
-            channels=config.channels,
-            counts=counts,
-            count_rates_cps=rates,
-            completed_mask=completed,
-            timestamps_unix_s=timestamps,
-            session_ids=session_ids,
-        )
+
+    except Exception as exc:
+        try:
+            save_current_checkpoint()
+        except Exception as save_error:
+            exc.add_note(f"Checkpoint retry failed: {save_error!r}")
+            logger.exception("Checkpoint retry failed in {}", output_directory)
         logger.exception(
-            "Intensity-map acquisition failed; partial data are saved in {}",
+            "Intensity-map acquisition failed; inspect partial data/checkpoint in {}",
             output_directory,
         )
         raise
