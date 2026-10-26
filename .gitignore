@@ -41,3 +41,8 @@ vendor/Horiba/python-sdk
 *.pyo
 __pycache__/
 scratch/.ruff_cache/
+
+# Local source exports and guarded refactor backups
+labtools_project_*.txt
+labtools_source_*.txt
+.labtools-refactor-backups/

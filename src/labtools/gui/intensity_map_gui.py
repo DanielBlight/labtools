@@ -64,7 +64,7 @@ from labtools.acquisition.intensity_map import (
     estimated_minimum_duration_s,
 )
 
-from labtools.simulation.map_backend import LazyITC4000 as ITC4000
+from labtools.runtime.lazy_devices import LazyITC4000 as ITC4000
 
 from labtools.visualisation.intensity_map import update_map_axes
 

@@ -47,3 +47,13 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.hardware)
         if item.get_closest_marker("hardware") and not config.getoption("--run-hardware"):
             item.add_marker(pytest.mark.skip(reason="Requires --run-hardware"))
+
+
+def pytest_ignore_collect(collection_path, config):
+    """Exclude known hardware modules before their native imports execute."""
+    hardware_modules = {
+        "test_idq_acquisition.py", "test_sc10_modes.py", "test_timestamp_stream.py",
+    }
+    if collection_path.name in hardware_modules and not config.getoption("--run-hardware"):
+        return True
+    return None

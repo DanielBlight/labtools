@@ -1,8 +1,9 @@
-from labtools.gui.spectrum_gui_horiba import main as gui_main
+"""Legacy spectrum launcher. Prefer: labtools gui spectrum."""
+from labtools.launchers import spectrum_gui
 
 
 def main():
-    gui_main()
+    spectrum_gui()
 
 
 if __name__ == "__main__":

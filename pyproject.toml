@@ -1,7 +1,7 @@
 [project]
 name = "lab-tools"
 version = "0.1.0"
-description = "Add your description here"
+description = "Laboratory instrument control, acquisition, analysis and offline simulation"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -49,6 +49,9 @@ markers = [
 ]
 
 [project.scripts]
-labtools = "labtools.operator_cli:main"
-labtools-anneal = "labtools.operator_cli:anneal_gui"
-labtools-intensity-map = "labtools.operator_cli:intensity_gui"
+labtools = "labtools.cli:main"
+labtools-anneal = "labtools.launchers:anneal_gui"
+labtools-intensity-map = "labtools.launchers:intensity_gui"
+labtools-spectrum = "labtools.launchers:spectrum_gui"
+labtools-mirror = "labtools.launchers:mirror_gui"
+labtools-simulate-map = "labtools.simulation.intensity_map:main"

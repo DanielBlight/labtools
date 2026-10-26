@@ -3,7 +3,7 @@
 from __future__ import annotations
 # labtools operator workspace v1
 from labtools.config.anneal_workspace import resolve_gui_config, validate_stage_coordinate
-from labtools.config.recipe_ui import setup_recipe_controls
+from labtools.gui.recipe_controls import setup_recipe_controls
 
 import sys
 import time

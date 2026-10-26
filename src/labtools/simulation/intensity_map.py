@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--output', type=Path, default=Path.home() / 'Labtools Simulation')
@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--realtime', action='store_true')
     parser.add_argument('--stop-after', type=int)
     parser.add_argument('--resume', type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.points < 2 or args.seed < 0 or (args.stop_after is not None and args.stop_after < 1):
         parser.error('points >= 2, seed >= 0 and stop-after >= 1 are required')
     if args.gui:

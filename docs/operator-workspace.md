@@ -1,7 +1,7 @@
 # Operator workspace (annealing first phase)
 
-The installer adds recipes/profile validation and GUI load/save controls for laser annealing.
-Intensity mapping receives a launcher only; its recipe migration is not implemented here.
+The annealing workflow includes recipe/profile validation and GUI load/save controls.
+Intensity mapping has a standalone launcher and explicit simulation; named recipe migration is not implemented.
 Camera preferences and existing QSettings persistence are retained. Recipes exclude hardware
 connections, maintainer limits, camera preferences and safety acknowledgements.
 
@@ -16,18 +16,18 @@ LABTOOLS_INSTRUMENT_PROFILE overrides the path for development/testing; it is NO
 boundary. An operator able to execute arbitrary Python can bypass these software guardrails.
 Do not treat the approved flag as independent evidence of calibration or safety.
 
-Run uv sync after installation to refresh entry points. The installer does not modify uv.lock;
+Run uv sync after source changes to refresh entry points. The cleanup does not edit uv.lock;
 review any lock changes produced by uv sync. Do not install development code editable in the
 protected deployment. Build/install a tested wheel with a separately created environment and
 machine-accessible Python. Keep vendor drivers/DLLs available to each account. Windows ACL
-setup and production deployment are deliberately NOT performed by this installer.
+setup and production deployment are deliberately NOT performed by the cleanup.
 
 ## Operator use
 
 labtools init "C:/Users/OPERATOR/Documents/Labtools Experiments"
 labtools doctor
 labtools validate "C:/Users/OPERATOR/Documents/Labtools Experiments/recipes/anneal.json"
-labtools-anneal
+labtools gui anneal
 
 Use Load recipe / Save recipe / Save recipe as / Restore recipe defaults in the GUI.
 Profile hardware fields override GUI hardware preferences. Requested maximum open time may
@@ -56,7 +56,11 @@ Direct calls to run_laser_anneal(LaserAnnealConfig(...)) now require resolved pr
 Migrate them to build_config(recipe, profile); the GUI is patched to resolve the profile.
 Existing hardware integration tests may need corresponding fixtures. The profile check runs
 before the public anneal function opens devices. Internal helpers and direct device wrappers
-are not a security boundary. The installer does not modify those wrappers.
+are not a security boundary. The cleanup does not modify those wrappers.
 
-Backups live in .labtools-migrations; do not commit that folder. Rollback checks hashes and
-refuses to overwrite files changed after installation, including by a formatter.
+
+## Migration history
+
+Historical migration backups may exist in `.labtools-migrations`; keep them out
+of Git. Do not rerun older migration installers against the refactored source.
+The current cleanup uses `.labtools-refactor-backups` and its own guarded rollback.

@@ -1,27 +1,15 @@
-# Offline intensity-map simulation, v1
+# Offline intensity-map simulation
 
-Install on `feature/hardware-simulation`, from a clean committed checkout.
-The self-contained installer updates the acquisition and GUI modules in place
-using AST-located edits. It adds a simulation package, tests and this guide.
-It does not replace the entire GUI or device wrappers.
+Simulation is already part of the source tree. Run `uv sync --dev` to refresh
+entry points. Do not rerun the historical `install_intensity_map_simulation.py`
+against refactored files; it targets the older source layout.
 
-## Install
-
-    uv run python install_intensity_map_simulation.py --check
-    uv run python install_intensity_map_simulation.py
-    uv run python -m pytest --noconftest tests/test_intensity_map_simulation.py -q
-
-`--noconftest` isolates this test file from existing hardware fixtures and
-collection-time native imports in the repository's conftest files. The tests
-provide their own fixtures. Do not add `--run-hardware` to this command.
-
-No additional dependencies are required beyond the project's existing NumPy,
-Matplotlib, pytest and (for the GUI) PyQt6. The installer itself uses only the
-standard library. It does not run pip, uv sync, or connect devices.
+Run offline tests with `uv run python -m pytest -q`. The known hardware modules
+are now excluded before import by default; `--noconftest` is not required.
 
 ## Launch
 
-    uv run python -m labtools.simulation.intensity_map --gui
+    uv run labtools simulate intensity-map --gui
 
 This starts the existing intensity-map GUI with simulation selected. It shows
 a SIMULATION banner and disables real laser actions. The normal GUI launcher
@@ -32,15 +20,15 @@ real laser before switching to simulation.
 
 A headless two-channel synthetic map:
 
-    uv run python -m labtools.simulation.intensity_map --points 15
+    uv run labtools simulate intensity-map --points 15
 
 A stopped map:
 
-    uv run python -m labtools.simulation.intensity_map --points 15 --stop-after 40
+    uv run labtools simulate intensity-map --points 15 --stop-after 40
 
 Resume using the printed dataset directory:
 
-    uv run python -m labtools.simulation.intensity_map --resume "FULL DATASET PATH"
+    uv run labtools simulate intensity-map --resume "FULL DATASET PATH"
 
 The headless runner defaults to fast operation; `--realtime` honours integration
 and settling delays. The GUI uses real-time delays so Stop can be exercised.
@@ -84,14 +72,11 @@ fault checkpoints, seed reproducibility, provenance, backend isolation and GUI
 laser-action guards. These do not prove Qt rendering, real-device behaviour,
 physical timing, wiring or calibration. Run the tests on your actual checkout.
 
-The development validation used a representative acquisition fixture rebuilt
-from the retrieved source interfaces, not a byte-for-byte local copy of the
-current repository. Full Qt/hardware execution was unavailable.
+The cleanup was checked against the uploaded source snapshot with offline tests
+and a headless synthetic map. Full Qt/Windows/hardware execution was unavailable.
 
-## Rollback
+## Reverting the cleanup
 
-    uv run python install_intensity_map_simulation.py --rollback
-
-Backups are in .labtools-migrations/intensity-map-simulation-v1. Do not commit
-that directory. Rollback refuses to overwrite files modified after installation,
-including formatting changes. Review the diff and keep the backup until tested.
+Use the cleanup installer's guarded rollback with the backup path it prints.
+Do not run the historical simulation installer or its rollback against the new
+layout. Keep older migration backups for traceability, not as a current update path.
