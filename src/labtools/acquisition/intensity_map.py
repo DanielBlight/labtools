@@ -20,10 +20,7 @@ import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
-from labtools.devices.idq_time_controller import IDQTimeController
-from labtools.devices.labjack_u6 import LabJackU6
-from labtools.devices.scanning_mirror import ScanningMirror
-from labtools.devices.spad_gate import SPADGate
+from labtools.simulation.map_backend import MODEL_VERSION, open_map_devices
 
 FloatArray = NDArray[np.float64]
 BoolArray = NDArray[np.bool_]
@@ -59,8 +56,27 @@ class IntensityMapConfig:
     safe_voltage_min_v: float = -10.0
     safe_voltage_max_v: float = 10.0
     checkpoint_every_points: int = 10
+    backend: str = "real"
+    simulation_seed: int = 0
+    simulation_realtime: bool = True
+    simulation_fail_after_points: int | None = None
 
     def validate(self) -> None:
+        if self.backend not in {"real", "simulation"}:
+            raise ValueError("backend must be real or simulation")
+        if type(self.simulation_seed) is not int or self.simulation_seed < 0:
+            raise ValueError("simulation_seed must be a nonnegative integer")
+        if type(self.simulation_realtime) is not bool:
+            raise ValueError("simulation_realtime must be bool")
+        if self.simulation_fail_after_points is not None and (
+            type(self.simulation_fail_after_points) is not int or self.simulation_fail_after_points < 0
+        ):
+            raise ValueError("simulation_fail_after_points must be nonnegative or None")
+        if not all(np.isfinite(v) for v in (
+            self.integration_time_s, self.settle_time_s,
+            self.safe_voltage_min_v, self.safe_voltage_max_v,
+        )):
+            raise ValueError("Timing and voltage limits must be finite")
         if self.x_points < 2 or self.y_points < 2:
             raise ValueError("x_points and y_points must each be at least 2.")
         if self.integration_time_s <= 0:
@@ -99,24 +115,11 @@ class IntensityMapConfig:
 
     def checkpoint_signature(self) -> dict[str, Any]:
         """Return settings that must match exactly when a map is resumed."""
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "x_start_v": self.x_start_v,
-            "x_stop_v": self.x_stop_v,
-            "x_points": self.x_points,
-            "y_start_v": self.y_start_v,
-            "y_stop_v": self.y_stop_v,
-            "y_points": self.y_points,
-            "integration_time_s": self.integration_time_s,
-            "channels": list(self.channels),
-            "settle_time_s": self.settle_time_s,
-            "time_controller_address": self.time_controller_address,
-            "channel_thresholds_v": list(self.channel_thresholds_v),
-            "channel_edges": list(self.channel_edges),
-            "mirror_dio_pin": self.mirror_dio_pin,
-            "spad_gate_pin": self.spad_gate_pin,
-            "serpentine": self.serpentine,
-        }
+        signature = {'schema_version': SCHEMA_VERSION, 'x_start_v': self.x_start_v, 'x_stop_v': self.x_stop_v, 'x_points': self.x_points, 'y_start_v': self.y_start_v, 'y_stop_v': self.y_stop_v, 'y_points': self.y_points, 'integration_time_s': self.integration_time_s, 'channels': list(self.channels), 'settle_time_s': self.settle_time_s, 'time_controller_address': self.time_controller_address, 'channel_thresholds_v': list(self.channel_thresholds_v), 'channel_edges': list(self.channel_edges), 'mirror_dio_pin': self.mirror_dio_pin, 'spad_gate_pin': self.spad_gate_pin, 'serpentine': self.serpentine}
+        if self.backend == "simulation":
+            signature.update(backend="simulation", simulation_seed=self.simulation_seed,
+                             simulation_model=MODEL_VERSION)
+        return signature
 
 
 @dataclass(frozen=True)
@@ -223,6 +226,8 @@ def _write_metadata(
     complete: bool,
 ) -> None:
     payload = asdict(config)
+    payload.update(synthetic_data=config.backend == "simulation",
+                   simulation_model=MODEL_VERSION if config.backend == "simulation" else None)
     payload["channels"] = list(config.channels)
     payload["output_root"] = str(config.output_root)
     payload.update(
@@ -273,6 +278,8 @@ def _validate_resume_config(
     config: IntensityMapConfig,
     metadata: dict[str, Any],
 ) -> None:
+    if metadata.get("backend", "real") != config.backend:
+        raise ValueError("Cannot resume data with a different real/simulation backend")
     saved = metadata.get("checkpoint_signature")
     current = config.checkpoint_signature()
     if saved != current:
@@ -438,6 +445,8 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         completed_mask=result.completed_mask,
         timestamps_unix_s=result.timestamps_unix_s,
         session_ids=result.session_ids,
+        backend=config.backend,
+        synthetic_data=config.backend == "simulation",
     )
 
     from labtools.visualisation.intensity_map import plot_intensity_map
@@ -446,7 +455,7 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         result.x_values_v,
         result.y_values_v,
         result.summed_count_rate_cps,
-        title=_plot_title(result.channels),
+        title=("SYNTHETIC — " if config.backend == "simulation" else "") + _plot_title(result.channels),
         output_path=output / "summed_intensity_map.png",
         show=False,
     )
@@ -489,7 +498,19 @@ def acquire_intensity_map(
         initial_started_at = str(metadata["initial_started_at"])
         resume_sessions = int(metadata.get("resume_sessions", 0)) + 1
     else:
-        output_directory = _new_output_directory(config.output_root)
+        root = Path(config.output_root)
+        if config.backend == "simulation":
+            root = root / "SIMULATION"
+        if config.backend == "simulation":
+            output_directory = root / datetime.now(UTC).strftime("synthetic_%Y%m%d-%H%M%S-%f")
+            output_directory.mkdir(parents=True, exist_ok=False)
+        else:
+            output_directory = _new_output_directory(root)
+        if config.backend == "simulation":
+            (output_directory / "SYNTHETIC_DATA.txt").write_text(
+                "SIMULATION: synthetic development data, not experimental measurements.\n",
+                encoding="utf-8",
+            )
         x_values = np.linspace(config.x_start_v, config.x_stop_v, config.x_points)
         y_values = np.linspace(config.y_start_v, config.y_stop_v, config.y_points)
         shape = (len(config.channels), config.y_points, config.x_points)
@@ -526,12 +547,7 @@ def acquire_intensity_map(
     interrupted = False
 
     try:
-        with (
-            LabJackU6() as labjack,
-            IDQTimeController(config.time_controller_address) as controller,
-        ):
-            mirror = ScanningMirror(labjack, dio_pin=config.mirror_dio_pin)
-            gate = SPADGate(labjack, pin=config.spad_gate_pin)
+        with open_map_devices(config) as (mirror, gate, controller):
 
             for channel, threshold_v, edge in zip(
                 config.channels,
@@ -559,7 +575,7 @@ def acquire_intensity_map(
                     x_voltage = float(x_values[x_index])
                     y_voltage = float(y_values[y_index])
                     mirror.move(x_voltage, y_voltage)
-                    if config.settle_time_s:
+                    if config.settle_time_s and (config.backend == "real" or config.simulation_realtime):
                         time.sleep(config.settle_time_s)
 
                     measured = controller.get_simultaneous_counts(

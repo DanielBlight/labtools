@@ -1,0 +1,78 @@
+& {
+    $ErrorActionPreference = "Stop"
+    $root = (Get-Location).ProviderPath
+
+    if (-not (Test-Path -LiteralPath "pyproject.toml")) {
+        throw "Run this from the labtools folder containing pyproject.toml."
+    }
+
+    $paths = @(git ls-files --cached --others --exclude-standard)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git could not list the project files."
+    }
+
+    $paths = @($paths | Sort-Object -Unique | Where-Object {
+        $_ -notmatch '(^|/)(vendor|data|datasets|results|measurements|\.venv|\.labtools-migrations|__pycache__)/' -and
+        $_ -notmatch '(?i)(secret|credential|password|token|(^|/)\.env($|\.))' -and
+        (
+            $_ -match '\.(py|pyi|toml|md|rst|yaml|yml|json|ini|cfg|ps1|bat|cmd|sh|ui|qrc)$' -or
+            $_ -match '(^|/)(requirements[^/]*\.txt|\.gitignore|\.python-version|LICENSE[^/]*)$'
+        )
+    })
+
+    $output = Join-Path $root (
+        "labtools_source_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss")
+    )
+
+    $writer = [System.IO.StreamWriter]::new(
+        $output, $false, [System.Text.UTF8Encoding]::new($false)
+    )
+
+    $included = 0
+    $failed = @()
+
+    try {
+        $writer.WriteLine("LABTOOLS SOURCE SNAPSHOT")
+        $writer.WriteLine("FILE MANIFEST")
+        foreach ($path in $paths) {
+            $writer.WriteLine($path)
+        }
+
+        foreach ($path in $paths) {
+            try {
+                $fullPath = Join-Path $root $path
+                $content = [System.IO.File]::ReadAllText($fullPath)
+
+                if ($content.IndexOf([char]0) -ge 0) {
+                    throw "Contains binary/null bytes."
+                }
+
+                $writer.WriteLine("")
+                $writer.WriteLine("============================================================")
+                $writer.WriteLine("BEGIN FILE: $path")
+                $writer.WriteLine("============================================================")
+                $writer.WriteLine($content)
+                $writer.WriteLine("END FILE: $path")
+                $included++
+            }
+            catch {
+                $failed += "$path : $($_.Exception.Message)"
+            }
+        }
+
+        $writer.WriteLine("")
+        $writer.WriteLine("EXPORT SUMMARY")
+        $writer.WriteLine("Successfully included: $included")
+        foreach ($failure in $failed) {
+            $writer.WriteLine("FAILED: $failure")
+        }
+    }
+    finally {
+        $writer.Dispose()
+    }
+
+    Write-Host "Created: $output"
+    Write-Host "Included files: $included"
+    Write-Host "Failed files: $($failed.Count)"
+    Write-Host "Review for sensitive information before uploading."
+}
