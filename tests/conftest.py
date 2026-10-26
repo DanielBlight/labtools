@@ -29,3 +29,21 @@ def time_controller_address() -> str:
     if not time_controller_available():
         pytest.skip(f"Time Controller not reachable at {TC_ADDRESS}:{TC_SCPI_PORT}")
     return TC_ADDRESS
+
+# labtools hardware opt-in v3
+
+def pytest_addoption(parser):
+    """Register explicit hardware permission."""
+    parser.addoption("--run-hardware", action="store_true", default=False,
+                     help="Allow marked laboratory hardware tests to execute")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Mark known device tests and require explicit permission to execute."""
+    known = {"test_idq_acquisition.py", "test_sc10_modes.py", "test_timestamp_stream.py"}
+    for item in items:
+        if item.path.name in known or "time_controller_address" in item.fixturenames:
+            if item.get_closest_marker("hardware") is None:
+                item.add_marker(pytest.mark.hardware)
+        if item.get_closest_marker("hardware") and not config.getoption("--run-hardware"):
+            item.add_marker(pytest.mark.skip(reason="Requires --run-hardware"))

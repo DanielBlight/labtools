@@ -82,17 +82,29 @@ class ThorlabsUC480Camera:
             raise UC480CameraError(f"Could not open UC480 camera: {exc}") from exc
 
     def close(self) -> None:
-        camera = self._camera
-        self._camera = None
-        if camera is not None:
+        """Attempt both shutdown stages and retain every failure."""
+        import logging
+
+        camera, live = self._camera, self._live
+        self._camera, self._live = None, False
+        if camera is None:
+            return
+        failures = []
+        if live:
             try:
-                if self._live:
-                    camera.stop_acquisition()
-                camera.close()
+                camera.stop_acquisition()
             except Exception as exc:
-                raise UC480CameraError(f"Could not close UC480 camera: {exc}") from exc
-            finally:
-                self._live = False
+                logging.getLogger(__name__).exception("UC480 stop failed")
+                failures.append(exc)
+        try:
+            camera.close()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("UC480 close failed")
+            failures.append(exc)
+        if failures:
+            raise UC480CameraError("Camera cleanup failed") from ExceptionGroup(
+                "UC480 shutdown failures", failures
+            )
 
     def _connected_camera(self):
         if self._camera is None:
@@ -170,7 +182,7 @@ class ThorlabsUC480Camera:
             )
         if self.mirror_horizontal:
             frame = np.flip(frame, axis=1)
-        return np.ascontiguousarray(frame)
+        return np.array(frame, copy=True, order="C")
 
     def __enter__(self) -> Self:
         self.connect()

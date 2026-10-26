@@ -1,7 +1,4 @@
-"""Read-only connectivity and frame test for a UC480-compatible camera."""
-
-from __future__ import annotations
-
+"""Explicit UC480 single-frame diagnostic. Close ThorCam before running."""
 import argparse
 
 import numpy as np
@@ -9,35 +6,19 @@ import numpy as np
 from labtools.devices.uc480_camera import ThorlabsUC480Camera
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=("uc480", "ueye"), default="uc480")
-    parser.add_argument("--camera-id", type=int, default=0)
-    parser.add_argument("--device-id", type=int)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exposure-ms", type=float, default=20.0)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    print("Available cameras:")
-    for camera in ThorlabsUC480Camera.list_cameras(backend=args.backend):
-        print(camera)
-
-    with ThorlabsUC480Camera(
-        camera_id=args.camera_id,
-        device_id=args.device_id,
-        backend=args.backend,
-        exposure_s=args.exposure_ms / 1000.0,
-    ) as camera:
+    args = parser.parse_args()
+    if not np.isfinite(args.exposure_ms) or args.exposure_ms <= 0:
+        parser.error("Exposure must be finite and positive")
+    print(ThorlabsUC480Camera.list_cameras())
+    with ThorlabsUC480Camera(exposure_s=args.exposure_ms / 1000) as camera:
         frame = camera.snap()
-        print(f"Device: {camera.get_device_info()}")
-        print(f"Exposure: {camera.get_exposure() * 1000.0:.3f} ms")
-        print(f"Frame shape: {frame.shape}")
-        print(f"Frame dtype: {frame.dtype}")
-        print(f"Minimum: {np.min(frame)}")
-        print(f"Maximum: {np.max(frame)}")
-        print(f"Mean: {np.mean(frame):.3f}")
+        print(camera.get_device_info())
+        print("Exposure (ms):", camera.get_exposure() * 1000)
+        print("Frame:", frame.shape, frame.dtype)
+        print("Min / max / mean:", frame.min(), frame.max(), frame.mean())
 
 
 if __name__ == "__main__":
