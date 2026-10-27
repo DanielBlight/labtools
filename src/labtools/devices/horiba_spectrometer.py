@@ -249,12 +249,21 @@ class HoribaSpectrometer:
         exposure_time: float | None = None,
         roi: dict | None = None,
         entrance_slit_width_mm: float | None = None,
+        minimum_exposure_override_s: float | None = None,
     ) -> None:
         """Apply and verify the selected optical and detector configuration.
 
         Values default to the active preset. Hardware is moved only when its
         current readback differs from the requested preset value.
+        minimum_exposure_override_s is an explicit workflow-specific software
+        floor. Alignment requests 0.02 s; other callers retain preset floors.
+        This override is not a hardware shutter timing guarantee.
         """
+        if minimum_exposure_override_s is not None:
+            if (isinstance(minimum_exposure_override_s, bool)
+                    or not np.isfinite(minimum_exposure_override_s)
+                    or minimum_exposure_override_s < 0.02):
+                raise ValueError("Exposure floor override must be finite and at least 0.02 s")
         if self.mono is None or self.ccd is None:
             raise RuntimeError("Connect the HORIBA system before configuration.")
 
@@ -279,8 +288,10 @@ class HoribaSpectrometer:
         self._validate_detector_token(configuration, "speeds", speed, "speed")
 
         if exposure_time is not None:
-            minimum = float(self._preset.get("minimum_exposure_s", 0.0))
-            if exposure_time < minimum:
+            minimum = (float(self._preset.get("minimum_exposure_s", 0.0))
+                       if minimum_exposure_override_s is None
+                       else float(minimum_exposure_override_s))
+            if not np.isfinite(exposure_time) or exposure_time < minimum:
                 raise ValueError(
                     f"Preset {self._preset_name!r} requires an exposure of at "
                     f"least {minimum:.3f} s for the configured continuous "
@@ -706,3 +717,4 @@ class HoribaSpectrometer:
 
     async def __aexit__(self, *_) -> None:
         await self.disconnect()
+
