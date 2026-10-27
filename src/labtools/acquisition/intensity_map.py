@@ -391,8 +391,13 @@ def acquire_intensity_map(
     resume_directory: str | Path | None = None,
     progress_callback: ProgressCallback | None = None,
     cancel_requested: CancelCallback | None = None,
+    device_provider=None,
 ) -> IntensityMapResult:
-    """Acquire a new map or resume unfinished positions from a checkpoint."""
+    """Acquire/resume a map; optional provider(config) owns devices through cleanup.
+
+    The default remains the existing per-acquisition real/synthetic backend.
+    Injected providers must explicitly validate backend and hardware settings.
+    """
     config.validate()
     resumed = resume_directory is not None
     session_started_at = datetime.now(UTC).astimezone().isoformat(timespec="seconds")
@@ -475,7 +480,8 @@ def acquire_intensity_map(
         )
 
     try:
-        with open_map_devices(config) as (mirror, gate, controller):
+        provider = open_map_devices if device_provider is None else device_provider
+        with provider(config) as (mirror, gate, controller):
 
             with cleanup_actions(
                 ("checkpoint", save_current_checkpoint),

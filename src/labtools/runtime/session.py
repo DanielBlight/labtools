@@ -29,6 +29,13 @@ class Reservation:
     def call(self, resource, method, *args, **kwargs):
         return self._session._call(self._token, resource, method, args, kwargs)
 
+    def cleanup(self, resource, method):
+        """Run an explicitly allowlisted, argument-free cleanup on an open service.
+
+        Does not reconnect, clear a fault, release ownership or certify safety.
+        """
+        return self._session._call(self._token, resource, method, (), {}, cleanup=True)
+
     def release(self):
         self._session._release(self._token)
 
@@ -53,7 +60,7 @@ class InstrumentSession:
     not adapted here. Existing standalone GUIs do not use this class yet.
     """
 
-    def __init__(self, factories, *, aliases=None):
+    def __init__(self, factories, *, aliases=None, cleanup_methods=None):
         self._factories = dict(factories)
         if not self._factories or any(
             not isinstance(k, str) or not k.strip() or not callable(v)
@@ -67,6 +74,15 @@ class InstrumentSession:
             for k, v in self._aliases.items()
         ):
             raise ValueError("Aliases must map new names directly to physical resources")
+        self._cleanup_methods = {}
+        for resource, methods in (cleanup_methods or {}).items():
+            if resource not in self._factories or isinstance(methods, str):
+                raise ValueError("Cleanup allowlists use physical resource names and sequences")
+            allowed = frozenset(methods)
+            if any(not isinstance(name, str) or not name or name.startswith("_")
+                   or name in {"close", "connect", "disconnect"} for name in allowed):
+                raise ValueError("Invalid cleanup method name")
+            self._cleanup_methods[resource] = allowed
         self._lock = RLock()
         self._leases = {}
         self._owners = {}
@@ -134,29 +150,38 @@ class InstrumentSession:
             self._devices[physical] = device
         return getattr(self._devices[physical], method)(*args, **kwargs)
 
-    def _call(self, token, resource, method, args, kwargs):
+    def _call(self, token, resource, method, args, kwargs, *, cleanup=False):
         if get_ident() == self._worker_ident:
             raise RuntimeError("Recursive session calls from the worker are forbidden")
         if not isinstance(method, str) or method.startswith("_") or method in {"close", "connect", "disconnect"}:
             raise ValueError("Lifecycle and private methods are session-owned")
         physical = self._physical(resource)
+        if cleanup and method not in self._cleanup_methods.get(physical, ()):
+            raise PermissionError("Cleanup method is not allowlisted for this resource")
         with self._lock:
             self._validate(token)
             lease = self._leases[token]
             if physical not in lease[0]:
                 raise PermissionError("Resource is not covered by this reservation")
-            if physical in self._faults:
+            if not cleanup and physical in self._faults:
                 raise RuntimeError("Resource faulted; further commands are blocked")
             lease[2] += 1
             def execute():
                 try:
                     with self._lock:
-                        if physical in self._faults:
+                        if not cleanup and physical in self._faults:
                             raise RuntimeError("Resource faulted before queued command ran")
+                    if cleanup:
+                        # Never construct/reconnect hardware just to perform cleanup.
+                        if physical not in self._devices:
+                            raise RuntimeError("Cleanup requires an already-open resource")
+                        self._worker_ident = get_ident()
+                        return getattr(self._devices[physical], method)()
                     return self._execute(physical, method, args, kwargs)
                 except BaseException:
                     with self._lock:
-                        self._faults.add(physical)
+                        if not cleanup or physical in self._devices:
+                            self._faults.add(physical)
                     raise
                 finally:
                     with self._lock:
