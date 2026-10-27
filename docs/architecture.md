@@ -15,7 +15,7 @@
   existing map factory lives here, separate from synthetic device models.
 - `devices/`: real instrument wrappers. No wrapper has been renamed or rewritten.
 - `simulation/`: synthetic map devices, deterministic scene and runner.
-- `processing/`: Qt-free background CSV parsing and subtraction.
+- `processing/`: Qt/native-free background parsing, reusable dark data and frame reduction.
 - `visualisation/`: existing intensity-map colour mapping and plotting helpers.
 - `io/`: retained namespace; output logic has not all been moved into it.
 
@@ -68,3 +68,9 @@ Synthetic devices should exercise acquisition logic, cancellation and cleanup
 without importing native wrappers. Keep model provenance and backend-specific
 checkpoint validation. A future shared synthetic session will need intentional
 state ownership; the current factory creates fresh state per acquisition.
+
+
+## Spectrum processing boundary
+See [Spectrum refactor](spectrum-refactor.md) for extraction details and validation limits.
+Range acquisition retains its public dark-data exports and loads vendor stitching lazily.
+The legacy hyperspectral runner is import-safe, not a newly validated hardware workflow.

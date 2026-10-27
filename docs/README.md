@@ -18,3 +18,6 @@
 The README is the quick start. Detailed instrument procedures belong in the
 hardware reference; simulation behaviour belongs in the simulation guide.
 Avoid duplicating the same procedure in multiple places.
+
+
+- [Spectrum processing refactor](spectrum-refactor.md): processing boundaries, compatibility and offline tests.

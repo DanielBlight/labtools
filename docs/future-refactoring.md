@@ -11,11 +11,13 @@ current boundaries and refactor-notes.md for the completed cleanup.
    Add Qt interaction tests before moving signal wiring and close-event logic.
 4. Extend explicit simulation to additional workflows with tested contracts.
    Camera, annealing, shutter, stage, spectrometer and laser are not simulated.
-5. Add regression coverage for spectrum combination and dark-frame timing,
-   then separate output/checkpoint services where that improves reuse.
+5. Extend spectrum regression coverage to installed vendor stitching and Qt
+   interactions, then separate output/checkpoint services where useful.
+   Offline combination/dark-order coverage is now in test_spectrum_processing.py.
 6. Review remaining hardcoded defaults and dependency groups separately.
    Do not change laboratory limits or split dependencies without local testing.
 
 Previously stale statements that the README was empty, xarray was undeclared,
 or only IDQ tests existed have been removed. No persistent connection manager
 or universal instrument simulation is introduced by this cleanup.
+

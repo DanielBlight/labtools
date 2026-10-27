@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import ClassVar, Literal, Self
+from typing import ClassVar, Self
 
 import numpy as np
 from horiba_sdk.core.acquisition_format import AcquisitionFormat
@@ -11,12 +11,11 @@ from horiba_sdk.devices.device_manager import DeviceManager
 from horiba_sdk.devices.single_devices.monochromator import Monochromator
 from loguru import logger
 
+from labtools.processing.spectrum import CombineMode, combine_frames
+
 # CCD indices in device_manager.charge_coupled_devices
 CCD_SYMPHONY = 0
 CCD_SYNCERITY = 1
-
-# Public type alias imported by range_spectrum.py.
-CombineMode = Literal["single", "mean", "median", "sigma_clip"]
 
 
 class HoribaSpectrometer:
@@ -595,23 +594,7 @@ class HoribaSpectrometer:
                 y_data = y_data - dark
             frames.append(y_data)
 
-        if mode == "single":
-            return x_data, frames[0]
-
-        stacked = np.stack(frames)  # shape (n_frames, n_pixels)
-
-        if mode == "mean":
-            return x_data, np.mean(stacked, axis=0)
-
-        if mode == "median":
-            return x_data, np.median(stacked, axis=0)
-
-        # sigma_clip: mask outliers per pixel, then average clean values
-        mean = stacked.mean(axis=0)
-        std = stacked.std(axis=0)
-        mask = np.abs(stacked - mean) > k_sigma * std
-        clean = np.where(mask, np.nan, stacked)
-        return x_data, np.nanmean(clean, axis=0)
+        return x_data, combine_frames(frames, mode, k_sigma)
 
     async def get_dark_spectrum(
         self,
@@ -638,20 +621,7 @@ class HoribaSpectrometer:
             x_data, y_data = await self._acquire_single(open_shutter=False)
             frames.append(y_data)
 
-        if mode == "single":
-            return x_data, frames[0]
-
-        stacked = np.stack(frames)
-        if mode == "mean":
-            return x_data, np.mean(stacked, axis=0)
-        if mode == "median":
-            return x_data, np.median(stacked, axis=0)
-
-        mean = stacked.mean(axis=0)
-        std = stacked.std(axis=0)
-        mask = np.abs(stacked - mean) > k_sigma * std
-        clean = np.where(mask, np.nan, stacked)
-        return x_data, np.nanmean(clean, axis=0)
+        return x_data, combine_frames(frames, mode, k_sigma)
 
     async def _acquire_single(
         self,
@@ -706,3 +676,4 @@ class HoribaSpectrometer:
 
     async def __aexit__(self, *_) -> None:
         await self.disconnect()
+

@@ -1,18 +1,13 @@
+"""Legacy hardware experiment; import opens no devices or output directory.
+
+Explicit run() or module execution still operates real hardware. This change
+isolates imports, not the legacy experiment's failure cleanup. Plotting backend
+selection is left to the caller/environment rather than forcing Qt5Agg.
+"""
 import os
 import asyncio
-import numpy as np
 from datetime import datetime
-import matplotlib
-matplotlib.use('Qt5Agg')
-import matplotlib.pyplot as plt
-import pandas as pd
-import xarray as xr
 
-from labtools.devices.labjack_u6 import LabJackU6
-from labtools.devices.scanning_mirror import ScanningMirror
-from labtools.devices.itc4000 import ITC4000
-from labtools.devices.horiba_spectrometer import HoribaSpectrometer
-from labtools.acquisition.range_spectrum import get_range_spectrum
 
 
 # ----------------------
@@ -38,8 +33,7 @@ BANDS = [
 
 OUTPUT_DIR      = "C:\\Users\\Legend\\Documents\\test\\Hyperspectral maps\\"
 
-OUTPUT_FOLDER = os.path.join(OUTPUT_DIR, datetime.now().strftime("%Y-%m-%d-%H.%M"))
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+OUTPUT_FOLDER = None  # Optional explicit override; resolved only inside run().
 
 
 # ============================================================
@@ -48,6 +42,8 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 def save_live_preview(cube_partial, x_vals, y_vals, wl, last_spectrum, fname):
     """cube_partial: (Ny_done, Nx, Nλ)"""
+    import matplotlib.pyplot as plt
+
     fig, axes = plt.subplots(1, 2, figsize=(8, 4))
 
     im = axes[0].imshow(
@@ -72,6 +68,8 @@ def save_live_preview(cube_partial, x_vals, y_vals, wl, last_spectrum, fname):
 
 
 def save_live_spectrum(wl, last_spectrum, fname):
+    import matplotlib.pyplot as plt
+
     plt.plot(wl, last_spectrum)
     plt.title("Last acquired spectrum")
     plt.xlabel("Wavelength (nm)")
@@ -86,6 +84,21 @@ def save_live_spectrum(wl, last_spectrum, fname):
 # ============================================================
 
 async def run():
+    """Execute the legacy hardware experiment, not an offline test."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import xarray as xr
+    from labtools.devices.labjack_u6 import LabJackU6
+    from labtools.devices.scanning_mirror import ScanningMirror
+    from labtools.devices.itc4000 import ITC4000
+    from labtools.devices.horiba_spectrometer import HoribaSpectrometer
+    from labtools.acquisition.range_spectrum import get_range_spectrum
+
+    output_folder = OUTPUT_FOLDER or os.path.join(
+        OUTPUT_DIR, datetime.now().strftime("%Y-%m-%d-%H.%M")
+    )
+    os.makedirs(output_folder, exist_ok=True)
     x_vals = np.linspace(X_START, X_STOP, NX)
     y_vals = np.linspace(Y_START, Y_STOP, NY)
 
@@ -142,7 +155,7 @@ async def run():
                     wavelength = wl
 
                 row_data.append(spectrum)
-                save_live_spectrum(wl, spectrum, os.path.join(OUTPUT_FOLDER, "last_spectrum.png"))
+                save_live_spectrum(wl, spectrum, os.path.join(output_folder, "last_spectrum.png"))
                 print(f"[SCAN] ({iy+1}/{NY}, {ix+1}/{NX}) complete")
 
             cube_list.append(row_data)
@@ -150,7 +163,7 @@ async def run():
             cube_partial = np.array(cube_list)
             save_live_preview(
                 cube_partial, x_vals, y_vals[:iy+1], wavelength, cube_list[-1][-1],
-                os.path.join(OUTPUT_FOLDER, "live_preview.png"),
+                os.path.join(output_folder, "live_preview.png"),
             )
 
         # --- shutdown ---
@@ -175,11 +188,11 @@ async def run():
     cube_xr.attrs["laser_current_A"] = LASER_CURRENT
     cube_xr.attrs["sumCount"] = N_REPEATS
     cube_xr.attrs["timestamp"] = datetime.now().isoformat()
-    cube_xr.to_netcdf(os.path.join(OUTPUT_FOLDER, "spectral_cube.nc"))
+    cube_xr.to_netcdf(os.path.join(output_folder, "spectral_cube.nc"))
 
     # NumPy NPZ
     np.savez(
-        os.path.join(OUTPUT_FOLDER, "spectral_cube.npz"),
+        os.path.join(output_folder, "spectral_cube.npz"),
         cube=cube_np, x_mirror=x_vals, y_mirror=y_vals, wavelength=wavelength,
     )
 
@@ -192,12 +205,12 @@ async def run():
         "y_mirror":  y_vals[iy_idx.ravel()],
         "wavelength": wavelength[iwl_idx.ravel()],
         "intensity":  cube_np.ravel(),
-    }).to_csv(os.path.join(OUTPUT_FOLDER, "spectral_cube_long.csv"), index=False)
+    }).to_csv(os.path.join(output_folder, "spectral_cube_long.csv"), index=False)
 
     # Integrated intensity map
     plt.imshow(cube_np.sum(axis=2), origin="lower", cmap="inferno")
     plt.colorbar(label="Σ intensity")
-    plt.savefig(os.path.join(OUTPUT_FOLDER, "integrated_map.png"))
+    plt.savefig(os.path.join(output_folder, "integrated_map.png"))
     plt.close()
 
     # Band maps
@@ -207,7 +220,7 @@ async def run():
         plt.imshow(band, origin="lower", cmap="inferno")
         plt.colorbar()
         plt.title(f"{name} ({wlmin}-{wlmax} nm)")
-        plt.savefig(os.path.join(OUTPUT_FOLDER, f"band_{name}.png"))
+        plt.savefig(os.path.join(output_folder, f"band_{name}.png"))
         plt.close()
 
     print("[DONE] Acquisition finished cleanly")
@@ -215,4 +228,5 @@ async def run():
 
 if __name__ == "__main__":
     asyncio.run(run())
+
 
