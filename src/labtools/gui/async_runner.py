@@ -15,6 +15,7 @@ class AsyncTaskRunner(QObject):
 
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(
         self,
@@ -35,7 +36,9 @@ class AsyncTaskRunner(QObject):
                 self.coroutine_factory()
             )
 
-        except Exception:
+        except asyncio.CancelledError:
+            self.cancelled.emit()
+        except Exception:  # noqa: BLE001 - report arbitrary worker failures via Qt
             self.failed.emit(
                 traceback.format_exc()
             )

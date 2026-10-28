@@ -5,8 +5,8 @@ experimental diagnostics. Workflows include HORIBA spectra, scanning-mirror
 intensity maps, laser annealing and an explicitly synthetic intensity-map backend.
 
 Maintainers and coding models: start with [the repository handover](docs/ai-handover.md).
-A headless synthetic spectrum-service example is also available; existing spectrum
-GUI behavior is not yet migrated to that service.
+A headless synthetic spectrum-service example is also available. The ordinary spectrum
+GUI now uses the service and requires a maintainer-supplied configuration identifier.
 
 ## Setup
 
@@ -83,3 +83,4 @@ The cleanup retains voltage limits, hardware command ordering, device wrappers,
 QSettings keys, output formats, checkpoint schema and the synthetic scene model.
 Legacy launch commands and selected moved-module imports remain available;
 see the command guide. The large GUI classes have not been rewritten.
+

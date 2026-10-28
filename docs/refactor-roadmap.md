@@ -20,9 +20,9 @@ Current validation: 263 passed, two Qt modules skipped; no hardware validation.
 The legacy spectrum GUI and its dark behavior remain unchanged. No alignment code
 was present to migrate. No new main GUI or persistent HORIBA worker was built.
 
-## Phase 1: NEXT TASK, spectrum GUI service migration
+## Phase 1: spectrum GUI service migration
 
-Status: PLANNED BUT NOT IMPLEMENTED. Prerequisite: this foundation checkpoint and
+Status: IMPLEMENTED IN THIS CHECKPOINT; QT ACCEPTANCE STILL REQUIRED IN THE LAB ENVIRONMENT. Prerequisite: this foundation checkpoint and
 usable PyQt6 environment for fake/offscreen tests. Suitable model: GPT-6 or another
 capable coding model; use deeper reasoning for lifecycle failures.
 
@@ -50,8 +50,11 @@ settings before device open; dark capture -> exposure/preset/gain/speed/slit/ran
 overlap/reduction change -> blocked reuse; disabled subtraction; NPZ roundtrip;
 legacy CSV rejection message; raw/corrected save metadata; cancel/error/close/restart;
 thread ownership until finished; full offline suite and changed-file lint/format.
-Acceptance: one GUI acquisition/correction implementation via service, all above
-fake Qt tests execute (not skip), no existing regression failures. Hardware is not
+Implementation: the ordinary GUI now injects SpectrumService and a required maintainer configuration_id, snapshots immutable settings on the UI thread, uses provenance-bearing NPZ darks, reports stale darks, retains dark data when subtraction is disabled, exports immutable SpectrumResult metadata, and keeps worker ownership until QThread.finished. Legacy CSV is inspection-only and requires recapture. Median now requires three frames.
+
+Validation here: full offline suite 263 passed, 3 skipped, with 172 inherited warnings. The three skipped modules require PyQt6/QtWidgets, including the new offscreen Phase 1 window suite; therefore GUI acceptance is NOT claimed. Compile/build and changed-file formatting checks are recorded in the handover.
+
+Acceptance remains: the new fake Qt tests must execute (not skip) on the laboratory environment and pass with no regressions. Hardware is not
 required for software tests; laboratory acceptance IS required before release.
 Risk: CSV workflow change, signal ordering, premature busy reset, Qt cancellation.
 Checkpoint: one reviewed commit, no main merge: "Route spectrum GUI through tested spectrum service".
@@ -321,3 +324,4 @@ settings changes/stop/close; Windows DLL and actual camera preview REQUIRED.
 - OPEN: real profile schema for all instruments and persistent-worker reservation
   bridge details. Direction is fixed; bounded phases resolve implementation details.
 - Environment gap: no PyQt6/ruff/uv.lock/vendor tree here; no locked Windows test.
+

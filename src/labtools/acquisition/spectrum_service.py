@@ -1,6 +1,6 @@
 """Opt-in reusable range-spectrum orchestration, independent of Qt/native SDKs.
 
-Legacy GUIs are not migrated yet. Each operation owns one backend context;
+The ordinary spectrum GUI uses this service. Each operation owns one backend context;
 real connect/use/disconnect therefore stay on the caller's one asyncio loop.
 """
 
@@ -113,6 +113,18 @@ class SpectrumService:
     def _cancel(cancel_requested: Callable[[], bool] | None) -> None:
         if cancel_requested is not None and cancel_requested():
             raise asyncio.CancelledError("Spectrum operation cancelled")
+
+    async def test_connection(
+        self,
+        settings: SpectrumSettings,
+        *,
+        cancel_requested: Callable[[], bool] | None = None,
+    ) -> None:
+        """Open/configure/close the backend, with cleanup before cancellation escapes."""
+        settings.validate()
+        self._cancel(cancel_requested)
+        async with self._backend_factory(settings):
+            self._cancel(cancel_requested)
 
     async def capture_dark(
         self,

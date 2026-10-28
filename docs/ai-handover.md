@@ -127,7 +127,20 @@ For a clean environment use the actual repository's lockfile if present; the
 snapshot did not include it. Never run --run-hardware or diagnostic scripts
 without the operator's reviewed setup and explicit permission.
 
-## NEXT TASK: Phase 1 only
+
+## Phase 1 spectrum GUI checkpoint, 28 October 2026
+The ordinary spectrum GUI now uses the injected SpectrumService, SpectrumSettings, DarkRecord and SpectrumResult for connection tests, reusable dark capture and acquisition. It requires a maintainer-supplied configuration_id; the standalone launcher reads LABTOOLS_SPECTRUM_CONFIGURATION_ID and refuses to start without it. No persistent HORIBA connection or alignment feature was introduced.
+
+Dark archives are provenance-bearing NPZ files. Legacy CSV is not converted into a DarkRecord and the GUI explains that recapture is required. Dark enablement is separate from the retained record, and relevant settings changes display valid/stale status. Median requires three frames. Result NPZ metadata and CSV/PNG derivatives are generated from the immutable SpectrumResult; collision-safe suffixes avoid overwriting prior outputs. No spectrum-specific QSettings keys existed in the supplied GUI, so none were invented; QSettings used by other tools were untouched.
+
+AsyncTaskRunner now handles asyncio.CancelledError explicitly. The window retains its QThread/runner and busy state until QThread.finished, rejects close while cleanup is active, and permits restart only after release. New offscreen fake-service tests cover stale settings, disabled subtraction with retained data, NPZ load, legacy CSV messaging, immutable saved metadata, success/error/cancel/close/restart and minimum frame count. Existing service tests continue to cover NPZ roundtrip and native-import isolation for simulation.
+
+Validation in the reconstruction environment: `PYTHONPATH=src MPLBACKEND=Agg PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q` reported 263 passed, 3 skipped and 172 inherited matplotlib/pyparsing warnings. The skips are Qt modules because PyQt6/QtWidgets is unavailable here, including the new Phase 1 GUI suite. GUI acceptance is therefore NOT claimed. No hardware or diagnostic script was run. Run the Qt tests on the laboratory environment before committing or release.
+
+## NEXT TASK: execute Phase 1 Qt acceptance, then review checkpoint
+Run the new offscreen spectrum GUI tests plus the existing Qt controller/lifecycle tests in the laboratory environment. If they pass, inspect the diff/status and create the reviewed Phase 1 checkpoint only. Do not begin alignment or persistent connection work in the same commit.
+
+
 
 Migrate the ordinary spectrum GUI to SpectrumService/DarkRecord, with fake/offscreen
 Qt tests, before implementing alignment or persistent connection reuse. Full scope
@@ -202,3 +215,4 @@ Software tests do not validate real shutter/TTL timing, optical darkness, physic
 safe states, calibration, Windows drivers or native abort feasibility. Changed
 LabJack startup/close behavior and the real spectrum adapter require hardware
 acceptance before merging for laboratory use. External script consumers are OPEN.
+
