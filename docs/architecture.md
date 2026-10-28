@@ -82,6 +82,23 @@ measurement and cleanup. Standalone maps retain their existing per-map controlle
 Shared simulation retains its config-bound deterministic counter and imports no IDQ
 or ZMQ implementation.
 
+### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: spectrum asyncio worker foundation
+
+`runtime/spectrum_worker.py` provides one lazy dedicated thread and asyncio loop for
+complete `SpectrumService` jobs. Construction starts no thread or hardware. The first
+job starts the loop; concurrent jobs are rejected with diagnostic owner/job status,
+and sequential jobs cannot interleave. Cancellation remains cooperative at the
+existing service boundaries before backend open and after one complete backend
+operation; native SDK calls are not claimed interruptible. Real operation failures
+fault the worker until teardown. Shutdown refuses an active job, closes the loop and
+joins the thread, and is idempotent after success.
+
+The foundation does not yet change the ordinary GUI and does not keep a real HORIBA
+connection open between jobs. Each submitted service operation still owns its current
+connect/configure/operate/disconnect backend context, but all of those steps execute
+on the worker's single loop. Later application composition may assign persistent
+backend ownership only after real-SDK validation.
+
 ### CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION
 
 Real wrappers, shared LabJack service and the new real range adapter. The adapter

@@ -122,28 +122,29 @@ coincidence ownership, channel discovery and firmware policy remain planned. No
 physical controller or ZMQ endpoint was contacted.
 Checkpoint: "Centralise IDQ count ownership in the shared session".
 
-## Phase 4: persistent HORIBA worker and alignment
+## Phase 4a: persistent HORIBA asyncio-worker foundation
 
-Status: PLANNED; alignment source unavailable. Prerequisite: Phase 1, reviewed
-main-branch alignment files and resolution of exposure-floor conflict. Model:
-strong reasoning model for async lifecycle; smaller models only for specified UI work.
-Files: future runtime async worker, spectrum service adapter seam, alignment modules
-when actually available, launcher registry and worker/contract tests.
+Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL HORIBA VALIDATION REQUIRED.
 
-One persistent asyncio loop owns connect/use/disconnect and serializes complete
-jobs for the shared ICL/monochromator resource. Reuse the correction policy and
-settings/record types. Refactor context ownership explicitly for persistent reuse;
-do not call the current per-operation factory once per live frame and call that
-persistent alignment. Use bounded latest-frame delivery, optional valid stored
-dark, exposure-based cadence without an arbitrary extra timer, cooperative stop
-and explicit cleanup. Preserve standalone alignment launch compatibility once known.
-Tests: loop identity, repeated acquire, no reconnect per frame, conflict between
-range/alignment and presets, stale dark, cancel/error/shutdown, bounded UI queue.
-Acceptance: no cached cross-loop objects, cleanup before lease release, documented
-and hardware-reviewed minimum exposure. Hardware REQUIRED: SDrive/TTL shutter,
-CCD minima, detector identity, calibration and stop/error paths. Risk: wrong optical
-path, stale dark, blocked SDK, cross-loop WebSocket. Checkpoint: worker first, then
-alignment integration, then separate recorded hardware acceptance.
+One lazy dedicated thread/asyncio loop serializes complete SpectrumService jobs. The
+policy rejects concurrent submissions rather than queuing them. Busy conflicts report
+owner and job labels and do not fault or duplicate the worker. Cancellation is
+cooperative only at existing service boundaries; native SDK calls are not claimed
+interruptible. Real operation failures fault the worker until teardown. Successful
+shutdown stops/closes the loop, joins the thread and is idempotent.
+
+The ordinary standalone GUI remains unchanged and operation-scoped backend contexts
+still connect/configure/operate/disconnect within each job on the worker loop. No
+hidden global connection, alignment feature or physical HORIBA contact was added.
+Checkpoint: "Add persistent HORIBA asyncio worker foundation".
+
+## Phase 4b: alignment client integration
+
+Status: PLANNED. Inject the worker into the bounded alignment client, preserving the
+ordinary GUI and standalone lifecycle. Repeated acquisition, cancellation, close and
+restart must use the worker without adding hidden device persistence or GUI-to-vendor
+access.
+Checkpoint: "Integrate alignment with the spectrum worker".
 
 ## Phase 5: wrapper reliability and hazardous-workflow review
 
