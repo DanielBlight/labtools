@@ -1,4 +1,5 @@
 """Independent cleanup attempts with original-failure preservation."""
+
 from contextlib import contextmanager
 
 
@@ -16,7 +17,7 @@ def cleanup_actions(*actions):
         for label, action in actions:
             try:
                 action()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - aggregate cleanup failures
                 exc.add_note(f"Cleanup action: {label}")
                 failures.append(exc)
                 if primary is not None:

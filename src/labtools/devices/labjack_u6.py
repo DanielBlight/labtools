@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from typing import Self
 
 import u6
 
@@ -27,7 +28,7 @@ class LabJackU6:
         except BaseException as primary:
             try:
                 self.close()
-            except Exception as cleanup:
+            except Exception as cleanup:  # noqa: BLE001 - preserve startup failure
                 primary.add_note(f"Partial LabJack startup cleanup failed: {cleanup!r}")
             raise
 
@@ -51,7 +52,7 @@ class LabJackU6:
             self._dev.close()
             self._closed = True
 
-    def __enter__(self) -> LabJackU6:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_) -> None:

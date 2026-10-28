@@ -63,7 +63,12 @@ from labtools.runtime.spectrum_backend import create_spectrum_service
 def _real_preset_options() -> dict[str, dict]:
     """Load authoritative wrapper options only for the real standalone GUI."""
     from labtools.devices.horiba_spectrometer import HoribaSpectrometer
-    return {name: HoribaSpectrometer.preset_options(name) for name in ("syncerity", "symphony")}
+
+    return {
+        name: HoribaSpectrometer.preset_options(name)
+        for name in ("syncerity", "symphony")
+    }
+
 
 MAX_LASER_CURRENT_A = 0.100
 DEFAULT_LASER_CURRENT_A = 0.080
@@ -75,18 +80,32 @@ DEFAULT_OUTPUT_DIRECTORY = Path.cwd() / "spectra"
 class HoribaRangeWindow(QMainWindow):
     """Main window for stitched spectra, reusable darks, and laser control."""
 
-    def __init__(self, *, service: SpectrumService | None = None,
-                 configuration_id: str | None = None, backend: str = "real",
-                 preset_options: dict[str, dict] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        service: SpectrumService | None = None,
+        configuration_id: str | None = None,
+        backend: str = "real",
+        preset_options: dict[str, dict] | None = None,
+    ) -> None:
         super().__init__()
         if backend not in {"real", "simulation"}:
             raise ValueError("Explicit real or simulation backend required")
         self._backend = backend
         self._configuration_id = configuration_id
-        if not isinstance(self._configuration_id, str) or not self._configuration_id.strip():
-            raise ValueError("A maintainer-supplied spectrum configuration_id is required")
-        self._preset_options = preset_options if preset_options is not None else _real_preset_options()
-        self._service = service if service is not None else create_spectrum_service(backend=backend)
+        if (
+            not isinstance(self._configuration_id, str)
+            or not self._configuration_id.strip()
+        ):
+            raise ValueError(
+                "A maintainer-supplied spectrum configuration_id is required"
+            )
+        self._preset_options = (
+            preset_options if preset_options is not None else _real_preset_options()
+        )
+        self._service = (
+            service if service is not None else create_spectrum_service(backend=backend)
+        )
         self._cancel_event = Event()
         self.latest_result: SpectrumResult | None = None
         self._save_options: tuple[bool, bool, Path] | None = None
@@ -489,13 +508,28 @@ class HoribaRangeWindow(QMainWindow):
             self._update_background_controls
         )
 
-        for widget in (self.preset_combo, self.exposure_box, self.frames_box,
-                       self.mode_combo, self.gain_combo, self.speed_combo,
-                       self.overlap_box, self.slit_width_box, self.start_wl, self.end_wl):
-            signal = widget.valueChanged if hasattr(widget, "valueChanged") else widget.currentIndexChanged
+        for widget in (
+            self.preset_combo,
+            self.exposure_box,
+            self.frames_box,
+            self.mode_combo,
+            self.gain_combo,
+            self.speed_combo,
+            self.overlap_box,
+            self.slit_width_box,
+            self.start_wl,
+            self.end_wl,
+        ):
+            signal = (
+                widget.valueChanged
+                if hasattr(widget, "valueChanged")
+                else widget.currentIndexChanged
+            )
             signal.connect(self._update_background_controls)
         self.advanced_group.toggled.connect(self._update_background_controls)
-        self.background_timing.currentIndexChanged.connect(self._update_background_controls)
+        self.background_timing.currentIndexChanged.connect(
+            self._update_background_controls
+        )
         self.laser_group.toggled.connect(self._toggle_laser_controls)
         self.laser_connect.clicked.connect(self.connect_laser)
         self.laser_on.clicked.connect(self.turn_laser_on)
@@ -602,13 +636,19 @@ class HoribaRangeWindow(QMainWindow):
         self.advanced_group.setEnabled(idle)
         self.output_directory.setEnabled(idle)
         self.output_browse_button.setEnabled(idle)
-        self.load_dark_button.setEnabled(idle and self.use_background.isChecked() and self.background_mode.currentIndex() == 1)
+        self.load_dark_button.setEnabled(
+            idle
+            and self.use_background.isChecked()
+            and self.background_mode.currentIndex() == 1
+        )
         self.clear_dark_button.setEnabled(idle and self.pre_taken_dark is not None)
         self._update_advanced_controls()
 
     def _update_frame_controls(self) -> None:
         mode = self.mode_combo.currentText()
-        minimum = 1 if mode == "single" else 3 if mode in {"median", "sigma_clip"} else 2
+        minimum = (
+            1 if mode == "single" else 3 if mode in {"median", "sigma_clip"} else 2
+        )
         self.frames_box.setMinimum(minimum)
         self.frames_box.setEnabled(mode != "single")
         if mode == "single":
@@ -622,14 +662,23 @@ class HoribaRangeWindow(QMainWindow):
         gain, speed = self._selected_detector_settings()
         settings = SpectrumSettings(
             configuration_id=self._configuration_id,
-            preset=self.preset_combo.currentText(), exposure_s=float(self.exposure_box.value()),
-            gain=gain, speed=speed, slit_width_mm=float(self.slit_width_box.value()),
-            start_nm=start, end_nm=end, overlap_pixels=int(self.overlap_box.value()),
-            n_frames=int(self.frames_box.value()), combine_mode=self.mode_combo.currentText(),
+            preset=self.preset_combo.currentText(),
+            exposure_s=float(self.exposure_box.value()),
+            gain=gain,
+            speed=speed,
+            slit_width_mm=float(self.slit_width_box.value()),
+            start_nm=start,
+            end_nm=end,
+            overlap_pixels=int(self.overlap_box.value()),
+            n_frames=int(self.frames_box.value()),
+            combine_mode=self.mode_combo.currentText(),
             backend=self._backend,
         )
         settings.validate()
-        if settings.exposure_s < self._preset_options[settings.preset]["minimum_exposure_s"]:
+        if (
+            settings.exposure_s
+            < self._preset_options[settings.preset]["minimum_exposure_s"]
+        ):
             raise ValueError("Exposure is below the selected detector preset minimum")
         return settings
 
@@ -647,9 +696,13 @@ class HoribaRangeWindow(QMainWindow):
         enabled = self.use_background.isChecked()
         pre = self.background_mode.currentText() == "Use pre-taken stitched dark"
         self.background_mode.setEnabled(enabled)
-        self.load_dark_button.setEnabled(not self._spectrometer_busy and enabled and pre)
+        self.load_dark_button.setEnabled(
+            not self._spectrometer_busy and enabled and pre
+        )
         self.background_timing.setEnabled(enabled and not pre)
-        self.clear_dark_button.setEnabled(not self._spectrometer_busy and self.pre_taken_dark is not None)
+        self.clear_dark_button.setEnabled(
+            not self._spectrometer_busy and self.pre_taken_dark is not None
+        )
         validity = self._dark_validity()
         if not enabled:
             text = "Dark subtraction disabled; stored dark retained. " + validity
@@ -676,7 +729,9 @@ class HoribaRangeWindow(QMainWindow):
     def request_stop(self) -> None:
         self._cancel_event.set()
         self.stop_button.setEnabled(False)
-        self.set_status("Cancellation requested; waiting for acquisition and disconnect cleanup.")
+        self.set_status(
+            "Cancellation requested; waiting for acquisition and disconnect cleanup."
+        )
 
     def _run_async(self, coroutine_factory, on_done, on_error) -> None:
         if self._async_tasks:
@@ -726,18 +781,30 @@ class HoribaRangeWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.warning(self, "Invalid settings", str(exc))
             return
+
         async def test():
-            await self._service.test_connection(settings, cancel_requested=self._cancel_event.is_set)
+            await self._service.test_connection(
+                settings, cancel_requested=self._cancel_event.is_set
+            )
             return settings.preset
-        self._start_operation(test, self._handle_connection_test_done,
-                              self._handle_connection_error, "Testing spectrometer connection...")
+
+        self._start_operation(
+            test,
+            self._handle_connection_test_done,
+            self._handle_connection_error,
+            "Testing spectrometer connection...",
+        )
 
     def _handle_connection_test_done(self, preset) -> None:
-        self.set_status(f"Spectrometer {preset} connected, configured and disconnected.")
+        self.set_status(
+            f"Spectrometer {preset} connected, configured and disconnected."
+        )
 
     def _handle_connection_error(self, error) -> None:
         self.set_status("Connection test failed: " + self._exception_summary(error))
-        self._show_error("Spectrometer connection failed", self._exception_summary(error), error)
+        self._show_error(
+            "Spectrometer connection failed", self._exception_summary(error), error
+        )
 
     def acquire_spectrum(self) -> None:
         if self._spectrometer_busy:
@@ -748,18 +815,29 @@ class HoribaRangeWindow(QMainWindow):
             dark = self.pre_taken_dark if mode == "pre_taken" else None
             if mode == "pre_taken":
                 if dark is None:
-                    raise ValueError("Capture or load a provenance-bearing NPZ dark first; legacy CSV cannot be validated.")
+                    raise ValueError(
+                        "Capture or load a provenance-bearing NPZ dark first; legacy CSV cannot be validated."
+                    )
                 dark.validate_for(settings)
         except ValueError as exc:
             QMessageBox.warning(self, "Invalid spectrum settings or dark", str(exc))
             return
-        self._save_options = (self.save_csv.isChecked(), self.save_png.isChecked(),
-                              self._selected_output_directory())
+        self._save_options = (
+            self.save_csv.isChecked(),
+            self.save_png.isChecked(),
+            self._selected_output_directory(),
+        )
         self._start_operation(
-            lambda: self._service.acquire(settings, dark_mode=mode, dark=dark,
-                                          cancel_requested=self._cancel_event.is_set),
-            self._handle_acquire_done, self._handle_acquire_error,
-            f"Acquiring {settings.start_nm:.2f}-{settings.end_nm:.2f} nm ({mode})...")
+            lambda: self._service.acquire(
+                settings,
+                dark_mode=mode,
+                dark=dark,
+                cancel_requested=self._cancel_event.is_set,
+            ),
+            self._handle_acquire_done,
+            self._handle_acquire_error,
+            f"Acquiring {settings.start_nm:.2f}-{settings.end_nm:.2f} nm ({mode})...",
+        )
 
     def _handle_acquire_done(self, result: SpectrumResult) -> None:
         self.latest_result = result
@@ -769,20 +847,26 @@ class HoribaRangeWindow(QMainWindow):
         self.ax.plot(x_data, y_data, color="#0b6fa4", linewidth=1.35, label=identity)
         self.ax.set_xlabel("Wavelength (nm)", fontsize=11)
         self.ax.set_ylabel("Intensity (counts)", fontsize=11)
-        self.ax.set_title(f"HORIBA range spectrum ({identity.lower()})", fontsize=14, pad=12)
+        self.ax.set_title(
+            f"HORIBA range spectrum ({identity.lower()})", fontsize=14, pad=12
+        )
         self.ax.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.85)
         self.ax.set_facecolor("#fbfcfd")
         self.ax.margins(x=0.01, y=0.08)
         self.figure.tight_layout()
         self.canvas.draw_idle()
-        self.plot_meta.setText(f"{x_data[0]:.2f}-{x_data[-1]:.2f} nm | {len(x_data)} points | {identity}")
+        self.plot_meta.setText(
+            f"{x_data[0]:.2f}-{x_data[-1]:.2f} nm | {len(x_data)} points | {identity}"
+        )
         try:
             saved = self._maybe_save_result(result)
         except Exception as exc:  # noqa: BLE001 - GUI boundary reports save failures
             self.set_status(f"Acquisition succeeded, but saving failed: {exc}")
             self._show_error("Save failed", str(exc), traceback.format_exc())
             return
-        self.set_status(f"{identity} spectrum acquired." + (f" Saved to {saved}." if saved else ""))
+        self.set_status(
+            f"{identity} spectrum acquired." + (f" Saved to {saved}." if saved else "")
+        )
 
     def _handle_acquire_error(self, error: str) -> None:
         summary = self._exception_summary(error)
@@ -798,24 +882,35 @@ class HoribaRangeWindow(QMainWindow):
             QMessageBox.warning(self, "Invalid dark settings", str(exc))
             return
         self._start_operation(
-            lambda: self._service.capture_dark(settings, cancel_requested=self._cancel_event.is_set),
-            self._handle_dark_capture_done, self._handle_dark_capture_error,
-            "Capturing provenance-bearing reusable dark...")
+            lambda: self._service.capture_dark(
+                settings, cancel_requested=self._cancel_event.is_set
+            ),
+            self._handle_dark_capture_done,
+            self._handle_dark_capture_error,
+            "Capturing provenance-bearing reusable dark...",
+        )
 
     def _handle_dark_capture_done(self, dark: DarkRecord) -> None:
         self.pre_taken_dark = dark
         self._update_background_controls()
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save reusable dark", str(self._selected_output_directory() / "range_dark.npz"),
-            "NPZ dark archives (*.npz)")
+            self,
+            "Save reusable dark",
+            str(self._selected_output_directory() / "range_dark.npz"),
+            "NPZ dark archives (*.npz)",
+        )
         if path:
             try:
                 save_dark_record(Path(path).with_suffix(".npz"), dark)
-                self.set_status(f"Reusable dark saved to {path}; enable subtraction when needed.")
+                self.set_status(
+                    f"Reusable dark saved to {path}; enable subtraction when needed."
+                )
             except Exception as exc:  # noqa: BLE001 - GUI boundary reports save failures
                 self._show_error("Save dark failed", str(exc), traceback.format_exc())
         else:
-            self.set_status("Reusable dark captured in memory; subtraction enablement unchanged.")
+            self.set_status(
+                "Reusable dark captured in memory; subtraction enablement unchanged."
+            )
 
     def _handle_dark_capture_error(self, error: str) -> None:
         self.set_status("Dark capture failed: " + self._exception_summary(error))
@@ -825,15 +920,23 @@ class HoribaRangeWindow(QMainWindow):
         if self._spectrometer_busy:
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load reusable dark", str(self._selected_output_directory()),
-            "Validated NPZ darks (*.npz);;Legacy CSV (unverified) (*.csv)")
+            self,
+            "Load reusable dark",
+            str(self._selected_output_directory()),
+            "Validated NPZ darks (*.npz);;Legacy CSV (unverified) (*.csv)",
+        )
         if not path:
             return
         if Path(path).suffix.lower() == ".csv":
-            QMessageBox.warning(self, "Legacy dark unverified",
+            QMessageBox.warning(
+                self,
+                "Legacy dark unverified",
                 "Legacy CSV has no acquisition settings or configuration provenance. "
-                "It cannot be used for validated subtraction. Recapture a dark and save it as NPZ.")
-            self.set_status("Legacy CSV not loaded for subtraction; recapture required.")
+                "It cannot be used for validated subtraction. Recapture a dark and save it as NPZ.",
+            )
+            self.set_status(
+                "Legacy CSV not loaded for subtraction; recapture required."
+            )
             return
         try:
             dark = load_dark_record(path)
@@ -860,17 +963,23 @@ class HoribaRangeWindow(QMainWindow):
         base = f"horiba_{result.settings.start_nm:.0f}_{result.settings.end_nm:.0f}nm"
         stem = base
         suffix = 1
-        while any((output_dir / f"{stem}{extension}").exists()
-                  for extension in (".npz", ".csv", ".png")):
+        while any(
+            (output_dir / f"{stem}{extension}").exists()
+            for extension in (".npz", ".csv", ".png")
+        ):
             suffix += 1
             stem = f"{base}_{suffix}"
         # The immutable result is the sole source for arrays and acquisition metadata.
         save_spectrum_result(output_dir / f"{stem}.npz", result)
         if csv_enabled:
-            with (output_dir / f"{stem}.csv").open("x", newline="", encoding="utf-8") as handle:
+            with (output_dir / f"{stem}.csv").open(
+                "x", newline="", encoding="utf-8"
+            ) as handle:
                 writer = csv.writer(handle)
                 writer.writerow(["wavelength_nm", "intensity"])
-                writer.writerows(zip(result.wavelength_nm, result.intensity, strict=True))
+                writer.writerows(
+                    zip(result.wavelength_nm, result.intensity, strict=True)
+                )
         if png_enabled:
             self.figure.savefig(output_dir / f"{stem}.png", dpi=200)
         return output_dir
@@ -1034,4 +1143,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

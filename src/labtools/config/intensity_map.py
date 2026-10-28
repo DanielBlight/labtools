@@ -1,13 +1,17 @@
 """Intensity-map configuration and checkpoint compatibility; no Qt or hardware imports."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 import numpy as np
+
 from labtools.simulation.map_devices import MODEL_VERSION
 
 SCHEMA_VERSION = 1
+
 
 @dataclass(frozen=True)
 class IntensityMapConfig:
@@ -46,13 +50,19 @@ class IntensityMapConfig:
         if type(self.simulation_realtime) is not bool:
             raise ValueError("simulation_realtime must be bool")
         if self.simulation_fail_after_points is not None and (
-            type(self.simulation_fail_after_points) is not int or self.simulation_fail_after_points < 0
+            type(self.simulation_fail_after_points) is not int
+            or self.simulation_fail_after_points < 0
         ):
             raise ValueError("simulation_fail_after_points must be nonnegative or None")
-        if not all(np.isfinite(v) for v in (
-            self.integration_time_s, self.settle_time_s,
-            self.safe_voltage_min_v, self.safe_voltage_max_v,
-        )):
+        if not all(
+            np.isfinite(v)
+            for v in (
+                self.integration_time_s,
+                self.settle_time_s,
+                self.safe_voltage_min_v,
+                self.safe_voltage_max_v,
+            )
+        ):
             raise ValueError("Timing and voltage limits must be finite")
         if self.x_points < 2 or self.y_points < 2:
             raise ValueError("x_points and y_points must each be at least 2.")
@@ -92,9 +102,28 @@ class IntensityMapConfig:
 
     def checkpoint_signature(self) -> dict[str, Any]:
         """Return settings that must match exactly when a map is resumed."""
-        signature = {'schema_version': SCHEMA_VERSION, 'x_start_v': self.x_start_v, 'x_stop_v': self.x_stop_v, 'x_points': self.x_points, 'y_start_v': self.y_start_v, 'y_stop_v': self.y_stop_v, 'y_points': self.y_points, 'integration_time_s': self.integration_time_s, 'channels': list(self.channels), 'settle_time_s': self.settle_time_s, 'time_controller_address': self.time_controller_address, 'channel_thresholds_v': list(self.channel_thresholds_v), 'channel_edges': list(self.channel_edges), 'mirror_dio_pin': self.mirror_dio_pin, 'spad_gate_pin': self.spad_gate_pin, 'serpentine': self.serpentine}
+        signature = {
+            "schema_version": SCHEMA_VERSION,
+            "x_start_v": self.x_start_v,
+            "x_stop_v": self.x_stop_v,
+            "x_points": self.x_points,
+            "y_start_v": self.y_start_v,
+            "y_stop_v": self.y_stop_v,
+            "y_points": self.y_points,
+            "integration_time_s": self.integration_time_s,
+            "channels": list(self.channels),
+            "settle_time_s": self.settle_time_s,
+            "time_controller_address": self.time_controller_address,
+            "channel_thresholds_v": list(self.channel_thresholds_v),
+            "channel_edges": list(self.channel_edges),
+            "mirror_dio_pin": self.mirror_dio_pin,
+            "spad_gate_pin": self.spad_gate_pin,
+            "serpentine": self.serpentine,
+        }
         if self.backend == "simulation":
-            signature.update(backend="simulation", simulation_seed=self.simulation_seed,
-                             simulation_model=MODEL_VERSION)
+            signature.update(
+                backend="simulation",
+                simulation_seed=self.simulation_seed,
+                simulation_model=MODEL_VERSION,
+            )
         return signature
-

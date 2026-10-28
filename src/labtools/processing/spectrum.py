@@ -3,16 +3,20 @@
 Preserves historical single-pass mean/population-standard-deviation clipping,
 not a median/MAD or iterative estimator. Acquisition validation stays in the wrapper.
 """
+
 from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Literal
+
 import numpy as np
 
 CombineMode = Literal["single", "mean", "median", "sigma_clip"]
 
 
-def combine_frames(frames: Sequence[np.ndarray], mode: CombineMode,
-                   k_sigma: float = 3.0) -> np.ndarray:
+def combine_frames(
+    frames: Sequence[np.ndarray], mode: CombineMode, k_sigma: float = 3.0
+) -> np.ndarray:
     """Reduce acquired frames without changing acquisition ordering."""
     if mode not in ("single", "mean", "median", "sigma_clip"):
         raise ValueError(f"Unsupported frame combination mode {mode!r}.")

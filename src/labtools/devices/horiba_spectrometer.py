@@ -676,4 +676,3 @@ class HoribaSpectrometer:
 
     async def __aexit__(self, *_) -> None:
         await self.disconnect()
-

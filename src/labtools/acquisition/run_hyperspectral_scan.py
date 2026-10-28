@@ -4,34 +4,31 @@ Explicit run() or module execution still operates real hardware. This change
 isolates imports, not the legacy experiment's failure cleanup. Plotting backend
 selection is left to the caller/environment rather than forcing Qt5Agg.
 """
-import os
+
 import asyncio
+import os
 from datetime import datetime
-
-
 
 # ----------------------
 # USER SETTINGS  # CAN CHANGE
 # ----------------------
-PRESET         = "syncerity"   # "syncerity" or "symphony"
-EXPOSURE_TIME  = 50            # seconds
-START_WL       = 850
-END_WL         = 895
-SLIT_WIDTH     = 0.1           # mm
-OVERLAP        = 10            # pixel overlap between spectra for stitching
-N_REPEATS      = 3
-DARK_SUBTRACT  = True
+PRESET = "syncerity"  # "syncerity" or "symphony"
+EXPOSURE_TIME = 50  # seconds
+START_WL = 850
+END_WL = 895
+SLIT_WIDTH = 0.1  # mm
+OVERLAP = 10  # pixel overlap between spectra for stitching
+N_REPEATS = 3
+DARK_SUBTRACT = True
 
 X_START, X_STOP, NX = 0.25, 0.35, 3
 Y_START, Y_STOP, NY = 1.65, 1.75, 3
-LASER_CURRENT  = 0.08
-LASER_WARMUP   = 5.0
+LASER_CURRENT = 0.08
+LASER_WARMUP = 5.0
 
-BANDS = [
-    ("NiV", 875, 890)
-]
+BANDS = [("NiV", 875, 890)]
 
-OUTPUT_DIR      = "C:\\Users\\Legend\\Documents\\test\\Hyperspectral maps\\"
+OUTPUT_DIR = "C:\\Users\\Legend\\Documents\\test\\Hyperspectral maps\\"
 
 OUTPUT_FOLDER = None  # Optional explicit override; resolved only inside run().
 
@@ -39,6 +36,7 @@ OUTPUT_FOLDER = None  # Optional explicit override; resolved only inside run().
 # ============================================================
 # LIVE PREVIEW FIGURE
 # ============================================================
+
 
 def save_live_preview(cube_partial, x_vals, y_vals, wl, last_spectrum, fname):
     """cube_partial: (Ny_done, Nx, Nλ)"""
@@ -50,7 +48,7 @@ def save_live_preview(cube_partial, x_vals, y_vals, wl, last_spectrum, fname):
         cube_partial.sum(axis=2),
         origin="lower",
         cmap="inferno",
-        extent=[x_vals.min(), x_vals.max(), y_vals.min(), y_vals.max()]
+        extent=[x_vals.min(), x_vals.max(), y_vals.min(), y_vals.max()],
     )
     axes[0].set_title("Live integrated intensity")
     axes[0].set_xlabel("Mirror X (V)")
@@ -83,20 +81,22 @@ def save_live_spectrum(wl, last_spectrum, fname):
 # MAIN ACQUISITION
 # ============================================================
 
+
 async def run():
     """Execute the legacy hardware experiment, not an offline test."""
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
     import pandas as pd
     import xarray as xr
+
+    from labtools.acquisition.range_spectrum import get_range_spectrum
+    from labtools.devices.horiba_spectrometer import HoribaSpectrometer
+    from labtools.devices.itc4000 import ITC4000
     from labtools.devices.labjack_u6 import LabJackU6
     from labtools.devices.scanning_mirror import ScanningMirror
-    from labtools.devices.itc4000 import ITC4000
-    from labtools.devices.horiba_spectrometer import HoribaSpectrometer
-    from labtools.acquisition.range_spectrum import get_range_spectrum
 
     output_folder = OUTPUT_FOLDER or os.path.join(
-        OUTPUT_DIR, datetime.now().strftime("%Y-%m-%d-%H.%M")
+        OUTPUT_DIR, datetime.now().astimezone().strftime("%Y-%m-%d-%H.%M")
     )
     os.makedirs(output_folder, exist_ok=True)
     x_vals = np.linspace(X_START, X_STOP, NX)
@@ -120,7 +120,9 @@ async def run():
             # acquire dark with laser off
             await asyncio.sleep(LASER_WARMUP)
             wl, DARK_SPECTRUM = await get_range_spectrum(
-                spec, START_WL, END_WL,
+                spec,
+                START_WL,
+                END_WL,
                 stitch_pixel_overlap=OVERLAP,
                 n_frames=N_REPEATS,
                 mode="sigma_clip",
@@ -142,7 +144,9 @@ async def run():
                 mirror.move(x, y)
 
                 wl, spectrum = await get_range_spectrum(
-                    spec, START_WL, END_WL,
+                    spec,
+                    START_WL,
+                    END_WL,
                     stitch_pixel_overlap=OVERLAP,
                     n_frames=N_REPEATS,
                     mode="sigma_clip",
@@ -155,14 +159,20 @@ async def run():
                     wavelength = wl
 
                 row_data.append(spectrum)
-                save_live_spectrum(wl, spectrum, os.path.join(output_folder, "last_spectrum.png"))
-                print(f"[SCAN] ({iy+1}/{NY}, {ix+1}/{NX}) complete")
+                save_live_spectrum(
+                    wl, spectrum, os.path.join(output_folder, "last_spectrum.png")
+                )
+                print(f"[SCAN] ({iy + 1}/{NY}, {ix + 1}/{NX}) complete")
 
             cube_list.append(row_data)
 
             cube_partial = np.array(cube_list)
             save_live_preview(
-                cube_partial, x_vals, y_vals[:iy+1], wavelength, cube_list[-1][-1],
+                cube_partial,
+                x_vals,
+                y_vals[: iy + 1],
+                wavelength,
+                cube_list[-1][-1],
                 os.path.join(output_folder, "live_preview.png"),
             )
 
@@ -187,25 +197,30 @@ async def run():
     )
     cube_xr.attrs["laser_current_A"] = LASER_CURRENT
     cube_xr.attrs["sumCount"] = N_REPEATS
-    cube_xr.attrs["timestamp"] = datetime.now().isoformat()
+    cube_xr.attrs["timestamp"] = datetime.now().astimezone().isoformat()
     cube_xr.to_netcdf(os.path.join(output_folder, "spectral_cube.nc"))
 
     # NumPy NPZ
     np.savez(
         os.path.join(output_folder, "spectral_cube.npz"),
-        cube=cube_np, x_mirror=x_vals, y_mirror=y_vals, wavelength=wavelength,
+        cube=cube_np,
+        x_mirror=x_vals,
+        y_mirror=y_vals,
+        wavelength=wavelength,
     )
 
     # Long-table CSV
     iy_idx, ix_idx, iwl_idx = np.meshgrid(
         np.arange(NY), np.arange(NX), np.arange(len(wavelength)), indexing="ij"
     )
-    pd.DataFrame({
-        "x_mirror":  x_vals[ix_idx.ravel()],
-        "y_mirror":  y_vals[iy_idx.ravel()],
-        "wavelength": wavelength[iwl_idx.ravel()],
-        "intensity":  cube_np.ravel(),
-    }).to_csv(os.path.join(output_folder, "spectral_cube_long.csv"), index=False)
+    pd.DataFrame(
+        {
+            "x_mirror": x_vals[ix_idx.ravel()],
+            "y_mirror": y_vals[iy_idx.ravel()],
+            "wavelength": wavelength[iwl_idx.ravel()],
+            "intensity": cube_np.ravel(),
+        }
+    ).to_csv(os.path.join(output_folder, "spectral_cube_long.csv"), index=False)
 
     # Integrated intensity map
     plt.imshow(cube_np.sum(axis=2), origin="lower", cmap="inferno")
@@ -228,5 +243,3 @@ async def run():
 
 if __name__ == "__main__":
     asyncio.run(run())
-
-

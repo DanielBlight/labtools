@@ -32,16 +32,12 @@ class AsyncTaskRunner(QObject):
     def run(self) -> None:
         """Execute the coroutine and emit either its result or traceback."""
         try:
-            result = asyncio.run(
-                self.coroutine_factory()
-            )
+            result = asyncio.run(self.coroutine_factory())
 
         except asyncio.CancelledError:
             self.cancelled.emit()
         except Exception:  # noqa: BLE001 - report arbitrary worker failures via Qt
-            self.failed.emit(
-                traceback.format_exc()
-            )
+            self.failed.emit(traceback.format_exc())
 
         else:
             self.finished.emit(result)

@@ -260,7 +260,11 @@ def test_real_adapter_fake_lifecycle_one_loop(settings, monkeypatch, failure):
         async def configure(self, **kw):
             event("configure")
             assert kw == {
-                "gain": 2, "speed": 0, "exposure_time": 0.1, "roi": None, "entrance_slit_width_mm": 0.5
+                "gain": 2,
+                "speed": 0,
+                "exposure_time": 0.1,
+                "roi": None,
+                "entrance_slit_width_mm": 0.5,
             }
 
         async def disconnect(self):
@@ -270,7 +274,10 @@ def test_real_adapter_fake_lifecycle_one_loop(settings, monkeypatch, failure):
         event("capture")
         assert (start, end) == (500.0, 600.0)
         assert kw == {
-            "stitch_pixel_overlap": 20, "n_frames": 1, "mode": "single", "dark_mode": "none"
+            "stitch_pixel_overlap": 20,
+            "n_frames": 1,
+            "mode": "single",
+            "dark_mode": "none",
         }
         return np.array([500.0, 600.0]), np.array([1.0, 2.0])
 

@@ -2,6 +2,7 @@
 
 Importing this module does not import native drivers or connect to instruments.
 """
+
 from dataclasses import dataclass
 from threading import get_ident
 
@@ -69,29 +70,35 @@ class LabJackService:
         if self._closed:
             return
         try:
-            with cleanup_actions(("gate close", self._gate.close),
-                                 ("LabJack close", self._device.close)):
+            with cleanup_actions(
+                ("gate close", self._gate.close), ("LabJack close", self._device.close)
+            ):
                 pass
         finally:
             self._closed = True
 
 
-def open_labjack_service(wiring=LabJackWiring(), *, device_factory=None,
-                         mirror_factory=None, gate_factory=None):
+def open_labjack_service(
+    wiring=None, *, device_factory=None, mirror_factory=None, gate_factory=None
+):
     """Lazy real defaults; fake factories may be explicitly injected for tests.
 
     Factories must clean up their own constructor failures. Once a device has
     been returned here, subsequent wrapper-construction failures close it.
     """
+    wiring = LabJackWiring() if wiring is None else wiring
     wiring.validate()
     if device_factory is None:
         from labtools.devices.labjack_u6 import LabJackU6
+
         device_factory = LabJackU6
     if mirror_factory is None:
         from labtools.devices.scanning_mirror import ScanningMirror
+
         mirror_factory = ScanningMirror
     if gate_factory is None:
         from labtools.devices.spad_gate import SPADGate
+
         gate_factory = SPADGate
     device = device_factory()
     gate = None
@@ -105,19 +112,26 @@ def open_labjack_service(wiring=LabJackWiring(), *, device_factory=None,
         for label, action in actions:
             try:
                 action()
-            except Exception as cleanup:
+            except Exception as cleanup:  # noqa: BLE001 - preserve startup failure
                 exc.add_note(f"{label} failed: {cleanup!r}")
         raise
 
 
-def create_labjack_session(wiring=LabJackWiring(), *, service_factory=None):
+def create_labjack_session(wiring=None, *, service_factory=None):
     """Create an unopened session. Real hardware opens only on the first call.
 
     Allow only argument-free home and gate-close after a fault. Home is a
     movement retained from existing map cleanup, not a universal safe position.
     """
+    wiring = LabJackWiring() if wiring is None else wiring
     wiring.validate()
-    factory = service_factory if service_factory is not None else lambda: open_labjack_service(wiring)
-    return InstrumentSession({"labjack": factory},
+    factory = (
+        service_factory
+        if service_factory is not None
+        else lambda: open_labjack_service(wiring)
+    )
+    return InstrumentSession(
+        {"labjack": factory},
         aliases={"mirror": "labjack", "gate": "labjack"},
-        cleanup_methods={"labjack": ("home", "close_gate")})
+        cleanup_methods={"labjack": ("home", "close_gate")},
+    )

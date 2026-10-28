@@ -1,9 +1,13 @@
 """Own one map worker and its thread, independently of the window."""
+
 from __future__ import annotations
+
+import traceback
 from pathlib import Path
 from threading import Event
-import traceback
-from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
+
+from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, pyqtSlot
+
 from labtools.acquisition.intensity_map import IntensityMapConfig, acquire_intensity_map
 
 

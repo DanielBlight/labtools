@@ -3,6 +3,7 @@
 Existing standalone windows do not use this module. Counter connections remain
 per-map and run on the acquisition thread, not on the LabJack worker.
 """
+
 from contextlib import contextmanager
 
 from labtools.runtime.labjack_service import LabJackWiring
@@ -33,6 +34,7 @@ class SessionGate:
 @contextmanager
 def real_counter(config):
     from labtools.devices.idq_time_controller import IDQTimeController
+
     with IDQTimeController(config.time_controller_address) as controller:
         yield controller
 
@@ -46,17 +48,29 @@ class SharedMapProvider:
     The caller owns session lifetime; exiting a map releases but does not close it.
     """
 
-    def __init__(self, session, *, wiring=LabJackWiring(), backend="real",
-                 counter_provider=None, owner="intensity-map"):
+    def __init__(
+        self,
+        session,
+        *,
+        wiring=None,
+        backend="real",
+        counter_provider=None,
+        owner="intensity-map",
+    ):
+        wiring = LabJackWiring() if wiring is None else wiring
         wiring.validate()
         if backend not in {"real", "simulation"}:
             raise ValueError("backend must be real or simulation")
         if backend == "simulation" and counter_provider is None:
-            raise ValueError("Simulation requires an explicit synthetic counter provider")
+            raise ValueError(
+                "Simulation requires an explicit synthetic counter provider"
+            )
         self.session = session
         self.wiring = wiring
         self.backend = backend
-        self.counter_provider = real_counter if counter_provider is None else counter_provider
+        self.counter_provider = (
+            real_counter if counter_provider is None else counter_provider
+        )
         self.owner = owner
 
     @contextmanager
@@ -65,7 +79,9 @@ class SharedMapProvider:
         if config.backend != self.backend:
             raise ValueError("Map backend does not match shared provider")
         if (config.mirror_dio_pin, config.spad_gate_pin) != (
-                self.wiring.mirror_dio_pin, self.wiring.spad_gate_pin):
+            self.wiring.mirror_dio_pin,
+            self.wiring.spad_gate_pin,
+        ):
             raise ValueError("Map wiring does not match the application-owned LabJack")
         with self.session.reserve(self.owner, ("mirror", "gate")) as lease:
             manager = self.counter_provider(config)
@@ -75,7 +91,7 @@ class SharedMapProvider:
             except BaseException as primary:
                 try:
                     manager.__exit__(type(primary), primary, primary.__traceback__)
-                except BaseException as cleanup:
+                except BaseException as cleanup:  # noqa: BLE001 - preserve cancellation/primary failure
                     primary.add_note(f"Counter close also failed: {cleanup!r}")
                 # A counter context must not suppress a measurement failure.
                 raise

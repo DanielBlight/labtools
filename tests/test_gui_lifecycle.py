@@ -1,13 +1,15 @@
 """Window lifecycle tests run in isolated processes with fake hardware only."""
+
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
+
 import pytest
 
-pytest.importorskip('PyQt6.QtWidgets', exc_type=ImportError)
+pytest.importorskip("PyQt6.QtWidgets", exc_type=ImportError)
 
-SCRIPT = r'''
+SCRIPT = r"""
 import sys, time
 from pathlib import Path
 from threading import Event
@@ -110,14 +112,26 @@ else:
         assert w.worker.wait(5000)
         app.processEvents()
         w.close()
-'''
+"""
 
 
-@pytest.mark.parametrize('mode', ['map-success', 'map-stop', 'map-failure', 'mirror-success', 'mirror-failure'])
+@pytest.mark.parametrize(
+    "mode",
+    ["map-success", "map-stop", "map-failure", "mirror-success", "mirror-failure"],
+)
 def test_window_lifecycle(mode, tmp_path):
-    env = dict(os.environ, QT_QPA_PLATFORM='offscreen', MPLBACKEND='Agg',
-               XDG_CONFIG_HOME=str(tmp_path),
-               PYTHONPATH=str(Path(__file__).resolve().parents[1] / 'src'))
-    result = subprocess.run([sys.executable, '-c', SCRIPT, mode, str(tmp_path)],
-                            env=env, capture_output=True, text=True, timeout=25)
+    env = dict(
+        os.environ,
+        QT_QPA_PLATFORM="offscreen",
+        MPLBACKEND="Agg",
+        XDG_CONFIG_HOME=str(tmp_path),
+        PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", SCRIPT, mode, str(tmp_path)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=25,
+    )
     assert result.returncode == 0, result.stdout + result.stderr

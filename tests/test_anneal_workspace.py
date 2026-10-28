@@ -1,10 +1,18 @@
 """Hardware-free recipe and profile tests."""
+
 import json
 from dataclasses import asdict, replace
+
 import pytest
+
 from labtools.config.anneal_workspace import (
-    AnnealRecipe, InstrumentProfile, initialise_workspace, load_profile,
-    load_recipe, save_recipe, validate_recipe,
+    AnnealRecipe,
+    InstrumentProfile,
+    initialise_workspace,
+    load_profile,
+    load_recipe,
+    save_recipe,
+    validate_recipe,
 )
 
 
@@ -24,12 +32,20 @@ def test_round_trip(tmp_path):
     validate_recipe(original, approved())
 
 
-@pytest.mark.parametrize("change", [
-    {"x_points": True}, {"x_points": 0}, {"x_start_v": float("nan")},
-    {"x_stop_v": 6.0}, {"maximum_open_time_s": 901.0},
-    {"return_rotation_stage": False}, {"anneal_rotation_coordinate": 1.0},
-    {"output_root": "relative"}, {"point_dwell_s": -1.0},
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"x_points": True},
+        {"x_points": 0},
+        {"x_start_v": float("nan")},
+        {"x_stop_v": 6.0},
+        {"maximum_open_time_s": 901.0},
+        {"return_rotation_stage": False},
+        {"anneal_rotation_coordinate": 1.0},
+        {"output_root": "relative"},
+        {"point_dwell_s": -1.0},
+    ],
+)
 def test_invalid_recipe(tmp_path, change):
     with pytest.raises(ValueError):
         validate_recipe(replace(recipe(tmp_path), **change), approved())

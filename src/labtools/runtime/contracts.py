@@ -1,4 +1,5 @@
 """Structural map-device contracts; real and synthetic implementations need no inheritance."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -17,11 +18,18 @@ class Gate(Protocol):
 
 class Counter(Protocol):
     def configure_channel(
-        self, channel: int, *, threshold_v: float, edge: str, enabled: bool = True,
+        self,
+        channel: int,
+        *,
+        threshold_v: float,
+        edge: str,
+        enabled: bool = True,
     ) -> None: ...
 
     def get_simultaneous_counts(
-        self, channels: Sequence[int], integration_time_s: float,
+        self,
+        channels: Sequence[int],
+        integration_time_s: float,
     ) -> dict[int, int]: ...
 
 

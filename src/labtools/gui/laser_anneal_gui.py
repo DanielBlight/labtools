@@ -1,9 +1,6 @@
 """PyQt6 GUI for no-pause scanning-mirror laser annealing."""
 
 from __future__ import annotations
-# labtools operator workspace v1
-from labtools.config.anneal_workspace import resolve_gui_config, validate_stage_coordinate
-from labtools.gui.recipe_controls import setup_recipe_controls
 
 import sys
 import time
@@ -41,9 +38,16 @@ from labtools.acquisition.laser_anneal import (
     LaserAnnealResult,
     run_laser_anneal,
 )
+
+# labtools operator workspace v1
+from labtools.config.anneal_workspace import (
+    resolve_gui_config,
+    validate_stage_coordinate,
+)
 from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
 from labtools.devices.sc10 import SC10
 from labtools.devices.uc480_camera import ThorlabsUC480Camera
+from labtools.gui.recipe_controls import setup_recipe_controls
 
 
 class AnnealWorker(QObject):
@@ -777,7 +781,7 @@ class LaserAnnealWindow(QMainWindow):
                 final_position = stage.move_to(coordinate)
                 serial_number = stage.serial_number or "unknown"
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - GUI reports vendor move failures
             self.status.setText("Rotation-stage move failed")
 
             QMessageBox.critical(

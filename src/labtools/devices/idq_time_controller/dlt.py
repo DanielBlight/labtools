@@ -14,9 +14,9 @@ import logging
 import socket
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from threading import Thread
-from typing import Callable, Optional
 
 import numpy as np
 import zmq
@@ -34,7 +34,7 @@ def check_host(address: str, port: int) -> bool:
     try:
         s.connect((address, port))
         return True
-    except socket.error:
+    except OSError:
         return False
     finally:
         s.close()
@@ -102,7 +102,9 @@ def dlt_exec(sock: zmq.Socket, command: str):
         sock.send_string(command)
         raw = sock.recv().decode("utf-8")
     except zmq.Again as exc:
-        raise TimeoutError(f"DataLinkTarget did not respond to command: {command!r}") from exc
+        raise TimeoutError(
+            f"DataLinkTarget did not respond to command: {command!r}"
+        ) from exc
 
     answer = json.loads(raw) if raw.strip() else None
 
@@ -155,6 +157,7 @@ class StreamClient(Thread):
                             self.callback(self.channel, ts)
                     elif ready is monitor:
                         from zmq.utils.monitor import recv_monitor_message
+
                         evt = recv_monitor_message(monitor)
                         if evt["event"] == zmq.EVENT_DISCONNECTED:
                             self._running = False
@@ -165,6 +168,6 @@ class StreamClient(Thread):
             sock.close()
             context.term()
 
-    def join(self, timeout: Optional[float] = None) -> None:
+    def join(self, timeout: float | None = None) -> None:
         self._running = False
         super().join(timeout)

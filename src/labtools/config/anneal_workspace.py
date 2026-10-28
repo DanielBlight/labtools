@@ -4,6 +4,7 @@ No hardware is imported until build_config is called. Validation and workspace
 creation never connect to devices. Filesystem permissions protect the profile;
 this module is not a security boundary against arbitrary Python execution.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -65,7 +66,9 @@ def profile_path() -> Path:
 
 def _strict(cls, data):
     if not isinstance(data, dict):
-        raise ValueError("Expected a JSON object")
+        raise ValueError(  # noqa: TRY004 - invalid serialized configuration structure
+            "Expected a JSON object"
+        )
     defaults = asdict(cls())
     unknown = set(data) - set(defaults)
     if unknown:
@@ -90,27 +93,49 @@ def load_profile(path: Path | None = None) -> InstrumentProfile:
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError as exc:
-        raise ValueError(f"Instrument profile missing: {path}. Ask the maintainer to install it.") from exc
-    if not isinstance(data, dict) or set(data) != {field.name for field in fields(InstrumentProfile)}:
-        raise ValueError("Instrument profile must explicitly specify every field; use the maintainer template")
+        raise ValueError(
+            f"Instrument profile missing: {path}. Ask the maintainer to install it."
+        ) from exc
+    if not isinstance(data, dict) or set(data) != {
+        field.name for field in fields(InstrumentProfile)
+    }:
+        raise ValueError(
+            "Instrument profile must explicitly specify every field; use the maintainer template"
+        )
     return validate_profile(_strict(InstrumentProfile, data))
 
 
 def validate_profile(profile):
     _strict(InstrumentProfile, asdict(profile))
-    if not profile.approved or not profile.profile_id.strip() or profile.profile_id == "REVIEW-REQUIRED":
-        raise ValueError("The instrument profile must be reviewed and approved by the maintainer.")
+    if (
+        not profile.approved
+        or not profile.profile_id.strip()
+        or profile.profile_id == "REVIEW-REQUIRED"
+    ):
+        raise ValueError(
+            "The instrument profile must be reviewed and approved by the maintainer."
+        )
     if profile.minimum_mirror_voltage_v >= profile.maximum_mirror_voltage_v:
         raise ValueError("Invalid mirror voltage limits")
     if profile.rotation_min_coordinate > profile.rotation_max_coordinate:
         raise ValueError("Invalid rotation-stage limits")
-    for key in ("sc10_timeout_s", "rotation_stage_timeout_s", "maximum_open_time_s", "maximum_total_points", "sc10_baud_rate"):
+    for key in (
+        "sc10_timeout_s",
+        "rotation_stage_timeout_s",
+        "maximum_open_time_s",
+        "maximum_total_points",
+        "sc10_baud_rate",
+    ):
         if getattr(profile, key) <= 0:
             raise ValueError(f"Profile {key} must be positive")
     if profile.mirror_dio_pin < 0 or not profile.sc10_port.strip():
         raise ValueError("Invalid instrument connection settings")
     for value in (profile.home_x_voltage_v, profile.home_y_voltage_v):
-        if not profile.minimum_mirror_voltage_v <= value <= profile.maximum_mirror_voltage_v:
+        if (
+            not profile.minimum_mirror_voltage_v
+            <= value
+            <= profile.maximum_mirror_voltage_v
+        ):
             raise ValueError("Home coordinate exceeds mirror limits")
     return profile
 
@@ -126,7 +151,11 @@ def validate_recipe(recipe: AnnealRecipe, profile: InstrumentProfile) -> None:
     if total > profile.maximum_total_points:
         raise ValueError("Recipe exceeds instrument point-count limit")
     for key in ("x_start_v", "x_stop_v", "y_start_v", "y_stop_v"):
-        if not profile.minimum_mirror_voltage_v <= getattr(recipe, key) <= profile.maximum_mirror_voltage_v:
+        if (
+            not profile.minimum_mirror_voltage_v
+            <= getattr(recipe, key)
+            <= profile.maximum_mirror_voltage_v
+        ):
             raise ValueError(f"{key} exceeds instrument voltage limits")
     for key in ("anneal_rotation_coordinate", "return_rotation_coordinate"):
         validate_stage_coordinate(getattr(recipe, key), profile)
@@ -145,7 +174,11 @@ def validate_stage_coordinate(coordinate, profile=None):
     profile = profile or load_profile()
     if type(coordinate) not in (int, float) or not math.isfinite(coordinate):
         raise ValueError("Invalid rotation coordinate")
-    if not profile.rotation_min_coordinate <= coordinate <= profile.rotation_max_coordinate:
+    if (
+        not profile.rotation_min_coordinate
+        <= coordinate
+        <= profile.rotation_max_coordinate
+    ):
         raise ValueError("Rotation coordinate exceeds instrument limits")
 
 
@@ -163,7 +196,10 @@ def save_recipe(path: Path, recipe: AnnealRecipe) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps({"schema_version": 1, "anneal": asdict(recipe)}, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps({"schema_version": 1, "anneal": asdict(recipe)}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     temporary.replace(path)
 
 
@@ -177,10 +213,22 @@ def _resolved_values(recipe, profile):
     validate_recipe(recipe, profile)
     data = asdict(recipe)
     data["output_root"] = Path(recipe.output_root)
-    for key in ("sc10_port", "sc10_baud_rate", "sc10_timeout_s", "mirror_dio_pin", "minimum_mirror_voltage_v", "maximum_mirror_voltage_v", "home_x_voltage_v", "home_y_voltage_v", "rotation_stage_timeout_s"):
+    for key in (
+        "sc10_port",
+        "sc10_baud_rate",
+        "sc10_timeout_s",
+        "mirror_dio_pin",
+        "minimum_mirror_voltage_v",
+        "maximum_mirror_voltage_v",
+        "home_x_voltage_v",
+        "home_y_voltage_v",
+        "rotation_stage_timeout_s",
+    ):
         data[key] = getattr(profile, key)
     data["instrument_profile_id"] = profile.profile_id
-    data["instrument_profile_sha256"] = hashlib.sha256(json.dumps(asdict(profile), sort_keys=True).encode()).hexdigest()
+    data["instrument_profile_sha256"] = hashlib.sha256(
+        json.dumps(asdict(profile), sort_keys=True).encode()
+    ).hexdigest()
     try:
         data["software_version"] = version("lab-tools")
     except PackageNotFoundError:
@@ -190,11 +238,14 @@ def _resolved_values(recipe, profile):
 
 def build_config(recipe, profile=None):
     from labtools.acquisition.laser_anneal import LaserAnnealConfig
+
     return LaserAnnealConfig(**_resolved_values(recipe, profile or load_profile()))
 
 
 def resolve_gui_config(config):
-    return replace(config, **_resolved_values(recipe_from_config(config), load_profile()))
+    return replace(
+        config, **_resolved_values(recipe_from_config(config), load_profile())
+    )
 
 
 def validate_run_config(config):
@@ -202,7 +253,9 @@ def validate_run_config(config):
     expected = _resolved_values(recipe_from_config(config), profile)
     for key, value in expected.items():
         if getattr(config, key) != value:
-            raise ValueError(f"Configuration {key} does not match the instrument profile; use build_config().")
+            raise ValueError(
+                f"Configuration {key} does not match the instrument profile; use build_config()."
+            )
     config.validate()
 
 

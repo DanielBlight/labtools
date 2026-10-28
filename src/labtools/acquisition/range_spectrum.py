@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 from loguru import logger
 
-from labtools.processing.spectrum import CombineMode
 from labtools.processing.dark_spectrum import DarkSpectrum, subtract_dark_spectrum
+from labtools.processing.spectrum import CombineMode
 
 if TYPE_CHECKING:
     from labtools.devices.horiba_spectrometer import HoribaSpectrometer
@@ -209,4 +209,3 @@ async def get_range_spectrum(
         y_out = subtract_dark_spectrum(x_out, y_out, pre_taken_dark)
 
     return x_out, y_out
-

@@ -21,8 +21,8 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from labtools.config.intensity_map import SCHEMA_VERSION, IntensityMapConfig
-from labtools.runtime.map_devices import open_map_devices
 from labtools.runtime.cleanup import cleanup_actions
+from labtools.runtime.map_devices import open_map_devices
 from labtools.simulation.map_devices import MODEL_VERSION
 
 FloatArray = NDArray[np.float64]
@@ -32,9 +32,6 @@ CancelCallback = Callable[[], bool]
 
 CHECKPOINT_FILENAME = "intensity_map_checkpoint.npz"
 METADATA_FILENAME = "intensity_map_metadata.json"
-
-
-
 
 
 @dataclass(frozen=True)
@@ -141,8 +138,10 @@ def _write_metadata(
     complete: bool,
 ) -> None:
     payload = asdict(config)
-    payload.update(synthetic_data=config.backend == "simulation",
-                   simulation_model=MODEL_VERSION if config.backend == "simulation" else None)
+    payload.update(
+        synthetic_data=config.backend == "simulation",
+        simulation_model=MODEL_VERSION if config.backend == "simulation" else None,
+    )
     payload["channels"] = list(config.channels)
     payload["output_root"] = str(config.output_root)
     payload.update(
@@ -370,7 +369,8 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         result.x_values_v,
         result.y_values_v,
         result.summed_count_rate_cps,
-        title=("SYNTHETIC — " if config.backend == "simulation" else "") + _plot_title(result.channels),
+        title=("SYNTHETIC — " if config.backend == "simulation" else "")
+        + _plot_title(result.channels),
         output_path=output / "summed_intensity_map.png",
         show=False,
     )
@@ -422,7 +422,9 @@ def acquire_intensity_map(
         if config.backend == "simulation":
             root = root / "SIMULATION"
         if config.backend == "simulation":
-            output_directory = root / datetime.now(UTC).strftime("synthetic_%Y%m%d-%H%M%S-%f")
+            output_directory = root / datetime.now(UTC).strftime(
+                "synthetic_%Y%m%d-%H%M%S-%f"
+            )
             output_directory.mkdir(parents=True, exist_ok=False)
         else:
             output_directory = _new_output_directory(root)
@@ -481,97 +483,100 @@ def acquire_intensity_map(
 
     try:
         provider = open_map_devices if device_provider is None else device_provider
-        with provider(config) as (mirror, gate, controller):
-
-            with cleanup_actions(
+        with (
+            provider(config) as (mirror, gate, controller),
+            cleanup_actions(
                 ("checkpoint", save_current_checkpoint),
                 ("mirror home", mirror.home),
                 ("gate close", gate.close),
+            ),
+        ):
+            for channel, threshold_v, edge in zip(
+                config.channels,
+                config.channel_thresholds_v,
+                config.channel_edges,
+                strict=True,
             ):
-                for channel, threshold_v, edge in zip(
-                    config.channels,
-                    config.channel_thresholds_v,
-                    config.channel_edges,
-                    strict=True,
+                controller.configure_channel(
+                    channel,
+                    threshold_v=threshold_v,
+                    edge=edge,
+                    enabled=True,
+                )
+
+            gate.open()
+            for y_index, x_index in _scan_indices(config):
+                if completed[y_index, x_index]:
+                    continue
+                if cancel_requested is not None and cancel_requested():
+                    interrupted = True
+                    logger.warning("Map stopped at the user's request.")
+                    break
+
+                x_voltage = float(x_values[x_index])
+                y_voltage = float(y_values[y_index])
+                mirror.move(x_voltage, y_voltage)
+                if config.settle_time_s and (
+                    config.backend == "real" or config.simulation_realtime
                 ):
-                    controller.configure_channel(
-                        channel,
-                        threshold_v=threshold_v,
-                        edge=edge,
-                        enabled=True,
+                    time.sleep(config.settle_time_s)
+
+                measured = controller.get_simultaneous_counts(
+                    config.channels,
+                    config.integration_time_s,
+                )
+                for channel_index, channel in enumerate(config.channels):
+                    value = measured[channel]
+                    counts[channel_index, y_index, x_index] = value
+                    rates[channel_index, y_index, x_index] = (
+                        value / config.integration_time_s
+                    )
+                completed[y_index, x_index] = True
+                timestamps[y_index, x_index] = time.time()
+                session_ids[y_index, x_index] = resume_sessions
+                acquired_this_session += 1
+
+                if acquired_this_session % config.checkpoint_every_points == 0:
+                    _save_checkpoint(
+                        output_directory,
+                        x_values_v=x_values,
+                        y_values_v=y_values,
+                        channels=config.channels,
+                        counts=counts,
+                        count_rates_cps=rates,
+                        completed_mask=completed,
+                        timestamps_unix_s=timestamps,
+                        session_ids=session_ids,
                     )
 
-                gate.open()
-                for y_index, x_index in _scan_indices(config):
-                    if completed[y_index, x_index]:
-                        continue
-                    if cancel_requested is not None and cancel_requested():
-                        interrupted = True
-                        logger.warning("Map stopped at the user's request.")
-                        break
-
-                    x_voltage = float(x_values[x_index])
-                    y_voltage = float(y_values[y_index])
-                    mirror.move(x_voltage, y_voltage)
-                    if config.settle_time_s and (config.backend == "real" or config.simulation_realtime):
-                        time.sleep(config.settle_time_s)
-
-                    measured = controller.get_simultaneous_counts(
-                        config.channels,
-                        config.integration_time_s,
-                    )
-                    for channel_index, channel in enumerate(config.channels):
-                        value = measured[channel]
-                        counts[channel_index, y_index, x_index] = value
-                        rates[channel_index, y_index, x_index] = (
-                            value / config.integration_time_s
-                        )
-                    completed[y_index, x_index] = True
-                    timestamps[y_index, x_index] = time.time()
-                    session_ids[y_index, x_index] = resume_sessions
-                    acquired_this_session += 1
-
-                    if acquired_this_session % config.checkpoint_every_points == 0:
-                        _save_checkpoint(
-                            output_directory,
-                            x_values_v=x_values,
-                            y_values_v=y_values,
-                            channels=config.channels,
-                            counts=counts,
-                            count_rates_cps=rates,
-                            completed_mask=completed,
-                            timestamps_unix_s=timestamps,
-                            session_ids=session_ids,
-                        )
-
-                    snap = _snapshot(
-                        x_values=x_values,
-                        y_values=y_values,
-                        config=config,
-                        rates=rates,
-                        completed=completed,
-                        start_monotonic=start_monotonic,
-                        output_directory=output_directory,
-                        resumed=resumed,
-                    )
-                    logger.info(
-                        "Point {}/{}: x={:.4f} V, y={:.4f} V, rates={} cps",
-                        snap.points_complete,
-                        snap.total_points,
-                        x_voltage,
-                        y_voltage,
-                        [
-                            round(rates[i, y_index, x_index], 3)
-                            for i in range(len(config.channels))
-                        ],
-                    )
-                    if progress_callback is not None:
-                        progress_callback(snap)
+                snap = _snapshot(
+                    x_values=x_values,
+                    y_values=y_values,
+                    config=config,
+                    rates=rates,
+                    completed=completed,
+                    start_monotonic=start_monotonic,
+                    output_directory=output_directory,
+                    resumed=resumed,
+                )
+                logger.info(
+                    "Point {}/{}: x={:.4f} V, y={:.4f} V, rates={} cps",
+                    snap.points_complete,
+                    snap.total_points,
+                    x_voltage,
+                    y_voltage,
+                    [
+                        round(rates[i, y_index, x_index], 3)
+                        for i in range(len(config.channels))
+                    ],
+                )
+                if progress_callback is not None:
+                    progress_callback(snap)
 
     except Exception as exc:
         try:
             save_current_checkpoint()
-        except Exception as save_error:
+        except Exception as save_error:  # noqa: BLE001 - preserve primary acquisition failure
             exc.add_note(f"Checkpoint retry failed: {save_error!r}")
             logger.exception("Checkpoint retry failed in {}", output_directory)
         logger.exception(

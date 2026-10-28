@@ -22,7 +22,7 @@ def _summarise_channel(chunks: list[np.ndarray]) -> tuple[int, float]:
     if not chunks:
         return 0, 0.0
     all_ts = np.concatenate(chunks)
-    total = int(len(all_ts))
+    total = len(all_ts)
     if total < 2:
         span_s = 0.0
     else:
@@ -44,7 +44,7 @@ def test_timestamp_stream_lifecycle_smoke(time_controller_address):
             channels=CHANNELS,
             callback=on_chunk,
             duration_s=STREAM_DURATION_S,
-            timeout_s=30
+            timeout_s=30,
         )
 
     summary = {}

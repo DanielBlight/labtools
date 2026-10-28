@@ -3,10 +3,14 @@
 CSV parsing and array ownership retain existing behaviour. This is not a
 calibration/provenance validator for deciding whether a dark can be reused.
 """
+
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+
 import numpy as np
+
 
 @dataclass(frozen=True)
 class DarkSpectrum:
@@ -86,5 +90,3 @@ def subtract_dark_spectrum(
         )
 
     return y_data - dark.intensity
-
-

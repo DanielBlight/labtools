@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Self
 
 import pyvisa
 from pyvisa.resources import MessageBasedResource
@@ -58,9 +59,7 @@ class ITC4000:
             raise ValueError("max_current must be greater than zero.")
 
         if self.threshold_current > self.max_current:
-            raise ValueError(
-                "threshold_current cannot exceed max_current."
-            )
+            raise ValueError("threshold_current cannot exceed max_current.")
 
         self._rm = pyvisa.ResourceManager()
 
@@ -81,9 +80,7 @@ class ITC4000:
     def _ensure_open(self) -> None:
         """Raise a clear error if code uses a closed VISA session."""
         if self._closed:
-            raise RuntimeError(
-                "The ITC4000 VISA session is closed."
-            )
+            raise RuntimeError("The ITC4000 VISA session is closed.")
 
     def _query(self, command: str) -> str:
         """Send a SCPI query and return the stripped response."""
@@ -95,9 +92,7 @@ class ITC4000:
         error = self._query("SYST:ERR?")
 
         if not error.startswith(("0", "+0")):
-            raise RuntimeError(
-                f"{operation} failed: {error}"
-            )
+            raise RuntimeError(f"{operation} failed: {error}")
 
     def _write_checked(
         self,
@@ -161,8 +156,7 @@ class ITC4000:
 
         if self.get_diode_output():
             raise RuntimeError(
-                "The controller still reports the laser-diode output "
-                "as ON."
+                "The controller still reports the laser-diode output as ON."
             )
 
         self.set_current(self.threshold_current)
@@ -178,9 +172,7 @@ class ITC4000:
         )
 
         if not self.get_tec_output():
-            raise RuntimeError(
-                "The controller still reports the TEC output as OFF."
-            )
+            raise RuntimeError("The controller still reports the TEC output as OFF.")
 
     def disable_tec(self) -> None:
         """Disable the TEC output and verify its reported state."""
@@ -190,9 +182,7 @@ class ITC4000:
         )
 
         if self.get_tec_output():
-            raise RuntimeError(
-                "The controller still reports the TEC output as ON."
-            )
+            raise RuntimeError("The controller still reports the TEC output as ON.")
 
     # ------------------------------------------------------------------
     # Combined startup and shutdown sequencing
@@ -213,9 +203,7 @@ class ITC4000:
             is skipped if the controller already reports that the TEC is on.
         """
         if tec_stabilise_s < 0:
-            raise ValueError(
-                "tec_stabilise_s cannot be negative."
-            )
+            raise ValueError("tec_stabilise_s cannot be negative.")
 
         if not self.get_tec_output():
             self.enable_tec()
@@ -276,9 +264,7 @@ class ITC4000:
 
     def get_current(self) -> float:
         """Return the laser-current setpoint in amperes."""
-        return float(
-            self._query("SOUR:CURR?")
-        )
+        return float(self._query("SOUR:CURR?"))
 
     def set_temperature(self, temperature: float) -> None:
         """Set the TEC temperature setpoint in degrees Celsius."""
@@ -286,21 +272,16 @@ class ITC4000:
 
         self._write_checked(
             f"SOUR2:TEMP {temperature:.9g}C",
-            f"Set TEC temperature to "
-            f"{temperature:.9g} degrees Celsius",
+            f"Set TEC temperature to {temperature:.9g} degrees Celsius",
         )
 
     def get_temperature_setpoint(self) -> float:
         """Return the TEC temperature setpoint in degrees Celsius."""
-        return float(
-            self._query("SOUR2:TEMP?")
-        )
+        return float(self._query("SOUR2:TEMP?"))
 
     def get_temperature(self) -> float:
         """Return the measured temperature in degrees Celsius."""
-        return float(
-            self._query("MEAS:TEMP?")
-        )
+        return float(self._query("MEAS:TEMP?"))
 
     # ------------------------------------------------------------------
     # Pulse settings
@@ -310,9 +291,7 @@ class ITC4000:
         frequency = float(frequency)
 
         if frequency <= 0:
-            raise ValueError(
-                "frequency must be greater than zero."
-            )
+            raise ValueError("frequency must be greater than zero.")
 
         period = 1 / frequency
 
@@ -323,9 +302,7 @@ class ITC4000:
 
     def get_pulse_frequency(self) -> float:
         """Return the pulse frequency in hertz."""
-        period = float(
-            self._query("SOURce:PULSe:PERiod?")
-        )
+        period = float(self._query("SOURce:PULSe:PERiod?"))
 
         return 1 / period
 
@@ -334,9 +311,7 @@ class ITC4000:
         width = float(width)
 
         if width <= 0:
-            raise ValueError(
-                "width must be greater than zero."
-            )
+            raise ValueError("width must be greater than zero.")
 
         self._write_checked(
             f"SOURce:PULSe:WIDTh {width:.12g}",
@@ -345,9 +320,7 @@ class ITC4000:
 
     def get_pulse_width(self) -> float:
         """Return the pulse width in seconds."""
-        return float(
-            self._query("SOURce:PULSe:WIDTh?")
-        )
+        return float(self._query("SOURce:PULSe:WIDTh?"))
 
     def set_pulse_duty_cycle(
         self,
@@ -357,9 +330,7 @@ class ITC4000:
         duty_cycle = float(duty_cycle)
 
         if not 0 < duty_cycle <= 100:
-            raise ValueError(
-                "duty_cycle must be greater than 0 and at most 100."
-            )
+            raise ValueError("duty_cycle must be greater than 0 and at most 100.")
 
         self._write_checked(
             f"SOURce:PULSe:DCYCle {duty_cycle:.9g}",
@@ -368,9 +339,7 @@ class ITC4000:
 
     def get_pulse_duty_cycle(self) -> float:
         """Return the pulse duty cycle in percent."""
-        return float(
-            self._query("SOURce:PULSe:DCYCle?")
-        )
+        return float(self._query("SOURce:PULSe:DCYCle?"))
 
     def set_pulse_hold(self, parameter: str) -> None:
         """Choose whether pulse width or duty cycle remains constant.
@@ -389,8 +358,7 @@ class ITC4000:
 
         if key not in options:
             raise ValueError(
-                "parameter must be 'width' or 'dcycle'; "
-                f"received {parameter!r}."
+                f"parameter must be 'width' or 'dcycle'; received {parameter!r}."
             )
 
         self._write_checked(
@@ -400,9 +368,7 @@ class ITC4000:
 
     def get_pulse_hold(self) -> str:
         """Return the active pulse hold mode."""
-        return self._query(
-            "SOURce:PULSe:HOLD?"
-        )
+        return self._query("SOURce:PULSe:HOLD?")
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -418,7 +384,7 @@ class ITC4000:
             self._rm.close()
             self._closed = True
 
-    def __enter__(self) -> "ITC4000":
+    def __enter__(self) -> Self:
         """Return the connected controller for a context manager."""
         return self
 

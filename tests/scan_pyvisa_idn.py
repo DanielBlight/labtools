@@ -36,7 +36,9 @@ def scan_resources(timeout_ms: int = 2000) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="List PyVISA resources and query *IDN? on each one.")
+    parser = argparse.ArgumentParser(
+        description="List PyVISA resources and query *IDN? on each one."
+    )
     parser.add_argument(
         "--timeout-ms",
         type=int,

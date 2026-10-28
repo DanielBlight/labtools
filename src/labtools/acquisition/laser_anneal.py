@@ -1,8 +1,6 @@
 """Interruptible no-pause scanning-mirror laser anneal."""
 
 from __future__ import annotations
-# labtools operator workspace v1
-from labtools.config.anneal_workspace import validate_run_config
 
 import csv
 import json
@@ -16,6 +14,8 @@ from threading import Event
 import numpy as np
 from loguru import logger
 
+# labtools operator workspace v1
+from labtools.config.anneal_workspace import validate_run_config
 from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
 from labtools.devices.labjack_u6 import LabJackU6
 from labtools.devices.sc10 import SC10, SC10Mode

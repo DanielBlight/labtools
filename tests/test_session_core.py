@@ -1,26 +1,39 @@
 """Session foundation tests: injected fake devices only."""
+
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, get_ident
+
 import pytest
-from labtools.runtime.session import InstrumentSession, ResourceBusyError, SessionClosedError
+
+from labtools.runtime.session import (
+    InstrumentSession,
+    ResourceBusyError,
+    SessionClosedError,
+)
 
 
 def setup_session(*, fail=False, close_fail=False):
     calls = []
+
     class Device:
         def move(self, x, y):
             calls.append(("move", get_ident(), x, y))
             if fail:
                 raise OSError("injected move failure")
             return x, y
+
         def close(self):
             calls.append(("close", get_ident()))
             if close_fail:
                 raise OSError("injected close failure")
+
     def factory():
         calls.append(("connect", get_ident()))
         return Device()
-    session = InstrumentSession({"labjack": factory}, aliases={"mirror": "labjack", "gate": "labjack"})
+
+    session = InstrumentSession(
+        {"labjack": factory}, aliases={"mirror": "labjack", "gate": "labjack"}
+    )
     return session, calls
 
 
@@ -60,9 +73,8 @@ def test_atomic_multi_resource_reservation():
 def test_release_on_measurement_failure():
     s, _ = setup_session()
     with s:
-        with pytest.raises(ValueError):
-            with s.reserve("map", ["mirror"]):
-                raise ValueError("measurement")
+        with pytest.raises(ValueError), s.reserve("map", ["mirror"]):
+            raise ValueError("measurement")
         with s.reserve("manual", ["mirror"]):
             pass
 
@@ -87,18 +99,15 @@ def test_unreserved_resource_rejected():
 @pytest.mark.parametrize("method", ["close", "connect", "disconnect", "_private"])
 def test_lifecycle_calls_rejected(method):
     s, calls = setup_session()
-    with s:
-        with s.reserve("manual", ["mirror"]) as lease:
-            with pytest.raises(ValueError):
-                lease.call("mirror", method)
+    with s, s.reserve("manual", ["mirror"]) as lease, pytest.raises(ValueError):
+        lease.call("mirror", method)
     assert calls == []
 
 
 def test_shutdown_refuses_active_measurement():
     s, _ = setup_session()
-    with s.reserve("map", ["mirror"]):
-        with pytest.raises(ResourceBusyError):
-            s.close()
+    with s.reserve("map", ["mirror"]), pytest.raises(ResourceBusyError):
+        s.close()
     s.close()
     s.close()
     with pytest.raises(SessionClosedError):
@@ -120,44 +129,53 @@ def test_command_failure_faults_resource_and_still_closes():
 
 def test_independent_shutdown_and_primary_preserved():
     calls = []
+
     class Device:
-        def ping(self): return None
+        def ping(self):
+            return None
+
         def close(self):
             calls.append("close")
             raise OSError("close failed")
+
     s = InstrumentSession({"a": Device, "b": Device})
-    with pytest.raises(ExceptionGroup) as caught:
-        with s:
-            with s.reserve("map", ["a", "b"]) as lease:
-                lease.call("a", "ping")
-                lease.call("b", "ping")
+    with pytest.raises(ExceptionGroup) as caught, s:
+        with s.reserve("map", ["a", "b"]) as lease:
+            lease.call("a", "ping")
+            lease.call("b", "ping")
     assert len(caught.value.exceptions) == 2
     assert calls == ["close", "close"]
     s, _ = setup_session(close_fail=True)
-    with pytest.raises(ValueError) as caught:
-        with s:
-            with s.reserve("map", ["mirror"]) as lease:
-                lease.call("mirror", "move", 1, 2)
-            raise ValueError("primary")
+    with pytest.raises(ValueError) as caught, s:
+        with s.reserve("map", ["mirror"]) as lease:
+            lease.call("mirror", "move", 1, 2)
+        raise ValueError("primary")
     assert "shutdown failed" in caught.value.__notes__[0]
 
 
 def test_inflight_lease_cannot_release_or_shutdown():
     entered, release = Event(), Event()
+
     class Device:
         def block(self):
             entered.set()
             assert release.wait(5)
-        def close(self): pass
+
+        def close(self):
+            pass
+
     with InstrumentSession({"labjack": Device}) as s:
         lease = s.reserve("map", ["labjack"])
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(lease.call, "labjack", "block")
             try:
                 assert entered.wait(3)
-                with pytest.raises(ResourceBusyError): lease.release()
-                with pytest.raises(ResourceBusyError): s.close()
-                with pytest.raises(ResourceBusyError): s.reserve("manual", ["labjack"])
+                with pytest.raises(ResourceBusyError):
+                    lease.release()
+                with pytest.raises(ResourceBusyError):
+                    s.close()
+                with pytest.raises(ResourceBusyError):
+                    s.reserve("manual", ["labjack"])
             finally:
                 release.set()
             future.result(timeout=3)
@@ -167,9 +185,13 @@ def test_inflight_lease_cannot_release_or_shutdown():
 def test_concurrent_reservation_has_single_winner():
     s, _ = setup_session()
     with s:
+
         def attempt(i):
-            try: return s.reserve(str(i), ["mirror"])
-            except ResourceBusyError: return None
+            try:
+                return s.reserve(str(i), ["mirror"])
+            except ResourceBusyError:
+                return None
+
         with ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(attempt, range(32)))
         winners = [r for r in results if r is not None]
@@ -178,68 +200,82 @@ def test_concurrent_reservation_has_single_winner():
 
 
 def test_factory_failure_releases_lease_without_fallback():
-    def fail(): raise OSError("factory")
+    def fail():
+        raise OSError("factory")
+
     with InstrumentSession({"a": fail}) as s:
-        with pytest.raises(OSError):
-            with s.reserve("map", ["a"]) as lease:
-                lease.call("a", "ping")
+        with pytest.raises(OSError), s.reserve("map", ["a"]) as lease:
+            lease.call("a", "ping")
         assert s.reservations() == {}
 
 
 @pytest.mark.parametrize("resources", [[], ["unknown"], "mirror"])
 def test_invalid_reservations(resources):
     s, _ = setup_session()
-    with s:
-        with pytest.raises(ValueError): s.reserve("manual", resources)
+    with s, pytest.raises(ValueError):
+        s.reserve("manual", resources)
 
 
 def test_recursive_worker_call_rejected_without_deadlock():
     class Device:
-        def recurse(self): return lease.call("a", "recurse")
-        def close(self): pass
-    with InstrumentSession({"a": Device}) as s:
-        with s.reserve("map", ["a"]) as lease:
-            with pytest.raises(RuntimeError, match="Recursive"):
-                lease.call("a", "recurse")
+        def recurse(self):
+            return lease.call("a", "recurse")
+
+        def close(self):
+            pass
+
+    with InstrumentSession({"a": Device}) as s, s.reserve("map", ["a"]) as lease:
+        with pytest.raises(RuntimeError, match="Recursive"):
+            lease.call("a", "recurse")
 
 
 def test_queued_command_does_not_run_after_prior_failure():
     import time
+
     entered, release = Event(), Event()
     calls = []
+
     class Device:
         def fail(self):
             entered.set()
             assert release.wait(5)
             raise OSError("first command")
-        def move(self): calls.append("must not run")
-        def close(self): pass
-    with InstrumentSession({"a": Device}) as s:
-        with s.reserve("map", ["a"]) as lease:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                first = pool.submit(lease.call, "a", "fail")
-                try:
-                    assert entered.wait(3)
-                    second = pool.submit(lease.call, "a", "move")
-                    deadline = time.monotonic() + 3
-                    while True:
-                        with s._lock:
-                            queued = s._leases[lease._token][2] == 2
-                        if queued: break
-                        assert time.monotonic() < deadline
-                        time.sleep(.001)
-                finally:
-                    release.set()
-                with pytest.raises(OSError): first.result(timeout=3)
-                with pytest.raises(RuntimeError, match="faulted"): second.result(timeout=3)
-            assert calls == []
+
+        def move(self):
+            calls.append("must not run")
+
+        def close(self):
+            pass
+
+    with InstrumentSession({"a": Device}) as s, s.reserve("map", ["a"]) as lease:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(lease.call, "a", "fail")
+            try:
+                assert entered.wait(3)
+                second = pool.submit(lease.call, "a", "move")
+                deadline = time.monotonic() + 3
+                while True:
+                    with s._lock:
+                        queued = s._leases[lease._token][2] == 2
+                    if queued:
+                        break
+                    assert time.monotonic() < deadline
+                    time.sleep(0.001)
+            finally:
+                release.set()
+            with pytest.raises(OSError):
+                first.result(timeout=3)
+            with pytest.raises(RuntimeError, match="faulted"):
+                second.result(timeout=3)
+        assert calls == []
 
 
 def test_import_has_no_native_dependencies(tmp_path):
     import os
-    from pathlib import Path
     import subprocess
     import sys
+    from pathlib import Path
+
     code = """
 import importlib.abc, sys
 class Block(importlib.abc.MetaPathFinder):
@@ -251,7 +287,13 @@ from labtools.runtime.session import InstrumentSession
 with InstrumentSession({'a': object}):
     pass
 """
-    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / 'src'))
-    result = subprocess.run([sys.executable, '-c', code], cwd=tmp_path, env=env,
-                            capture_output=True, text=True, timeout=20)
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"))
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
     assert result.returncode == 0, result.stdout + result.stderr

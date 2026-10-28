@@ -1,4 +1,5 @@
 """Manual mirror backend factory; importing this module opens no hardware."""
+
 import math
 
 MIN_V = -10.0
@@ -15,12 +16,13 @@ def open_real_mirror():
     """Return (owned connection, mirror); send no movement on connection."""
     from labtools.devices.labjack_u6 import LabJackU6
     from labtools.devices.scanning_mirror import ScanningMirror
+
     device = LabJackU6()
     try:
         return device, ScanningMirror(device, dio_pin=DIO_PIN)
     except BaseException as exc:
         try:
             device.close()
-        except Exception as close_error:
+        except Exception as close_error:  # noqa: BLE001 - preserve connection failure
             exc.add_note(f"Mirror connection cleanup failed: {close_error!r}")
         raise

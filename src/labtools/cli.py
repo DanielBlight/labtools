@@ -1,4 +1,5 @@
 """Operator CLI with lazy GUI, simulation and hardware imports."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,7 +9,11 @@ from dataclasses import asdict
 from pathlib import Path
 
 from labtools.config.anneal_workspace import (
-    initialise_workspace, load_profile, load_recipe, profile_path, validate_recipe,
+    initialise_workspace,
+    load_profile,
+    load_recipe,
+    profile_path,
+    validate_recipe,
 )
 from labtools.launchers import GUI_MODULES, launch_gui
 
@@ -37,6 +42,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args, remaining = parser.parse_known_args(argv)
     if args.command == "simulate":
         from labtools.simulation.intensity_map import main as simulate
+
         simulate(remaining)
         return
     if remaining:
@@ -60,9 +66,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             print("Recipe valid. No hardware was opened.")
             return
         if not args.confirm_optical_path:
-            parser.error("Hardware execution requires --confirm-optical-path after physical checks")
-        from labtools.config.anneal_workspace import build_config
+            parser.error(
+                "Hardware execution requires --confirm-optical-path after physical checks"
+            )
         from labtools.acquisition.laser_anneal import run_laser_anneal
+        from labtools.config.anneal_workspace import build_config
+
         print(run_laser_anneal(build_config(recipe, profile), status_callback=print))
     except (ValueError, OSError) as exc:
         parser.exit(2, f"Error: {exc}\n")

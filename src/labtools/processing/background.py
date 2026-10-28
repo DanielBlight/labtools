@@ -37,7 +37,11 @@ def parse_background_csv(path: str | Path) -> tuple[np.ndarray, np.ndarray]:
         If the file is empty or does not contain any wavelength/intensity pairs.
     """
     with open(path, newline="") as fh:
-        rows = [row for row in csv.reader(fh) if row and not all(cell.strip() == "" for cell in row)]
+        rows = [
+            row
+            for row in csv.reader(fh)
+            if row and not all(cell.strip() == "" for cell in row)
+        ]
     if not rows:
         raise ValueError("Background CSV is empty.")
 
@@ -86,11 +90,15 @@ def apply_background_subtraction(
         not match ``x_data``.
     """
     if background_spectrum is None:
-        raise ValueError("No background spectrum available. Capture a dark frame or load a background CSV first.")
+        raise ValueError(
+            "No background spectrum available. Capture a dark frame or load a background CSV first."
+        )
 
     bg_x, bg_y = background_spectrum
     x_arr = np.asarray(x_data)
     if bg_x.shape != x_arr.shape or not np.allclose(bg_x, x_arr, rtol=0, atol=1e-8):
-        raise ValueError("Background wavelength values must be identical to the acquired spectrum wavelength values.")
+        raise ValueError(
+            "Background wavelength values must be identical to the acquired spectrum wavelength values."
+        )
 
     return np.asarray(y_data, dtype=float) - np.asarray(bg_y, dtype=float)

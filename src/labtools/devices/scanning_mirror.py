@@ -19,16 +19,17 @@ class _LJTickDAC:
 
     def _to_double(self, buff) -> float:
         right, left = struct.unpack("<Ii", struct.pack("B" * 8, *buff[0:8]))
-        return float(left) + float(right) / (2 ** 32)
+        return float(left) + float(right) / (2**32)
 
     def _load_cal_constants(self) -> None:
         data = self.device.i2c(
-            self.EEPROM_ADDRESS, [64],
+            self.EEPROM_ADDRESS,
+            [64],
             NumI2CBytesToReceive=36,
             SDAPinNum=self.sda_pin,
             SCLPinNum=self.scl_pin,
         )
-        response = data['I2CBytes']
+        response = data["I2CBytes"]
         if 255 in response:
             raise RuntimeError(
                 "LJTick-DAC calibration constants look invalid. "
