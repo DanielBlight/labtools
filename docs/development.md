@@ -71,3 +71,11 @@ cases and window cases with the existing Qt lifecycle suite. The implementation
 environment ran QtCore but could not load QtWidgets (libGL.so.1 missing). Local
 Windows execution must report actual passes, not skipped modules. Temporary validation
 tools were installed outside the repository; pyproject.toml and uv.lock are unchanged.
+
+## Lab-PC release and operator installation
+
+See [lab-PC deployment](lab-pc-deployment.md) for the proposed non-editable wheel,
+locked runtime bundle, protected accounts/paths and side-by-side update procedure.
+Keep development sync/editable installs separate from production operator use.
+The [current Qt gate](qt-gate-status.md) is not accepted: four QtWidgets modules skip.
+No collision-allocation code or automated deployment system is added by this checkpoint.

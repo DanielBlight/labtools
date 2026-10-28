@@ -149,3 +149,12 @@ scope. Once that gate passes, implement collision-safe intensity-map output-dire
 allocation in a separate checkpoint. Preserve the existing first timestamp name and
 all output/resume contracts; add immediate-retry and concurrent-allocation tests.
 Keep launcher Phase 7, persistent connection caching and device-wrapper reviews separate.
+
+## Subsequent gate rerun on the 17:06 snapshot
+
+The current input is HEAD `a439207b4b6d6aec2fbf3575d2fa155893d318a3`.
+No local Windows pass log was attached. The gate rerun produced 15 passed / 4 skipped;
+all QtWidgets modules remain blocked by missing libGL.so.1. Full suite remains
+318 passed / 4 skipped. See [gate status](qt-gate-status.md). The map directory
+collision fix has not advanced. Deployment guidance is now in the
+[lab-PC runbook](lab-pc-deployment.md); it is proposed, not an executed installation.

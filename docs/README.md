@@ -32,3 +32,8 @@ Avoid duplicating the same procedure in multiple places.
 
 - [Alignment lifecycle acceptance](alignment-lifecycle-acceptance.md): blocked-job
   tests, stop/fault/deferred-close contracts, installation and Windows acceptance.
+
+- [Lab-PC deployment](lab-pc-deployment.md): installation, protected operator access,
+  offline release bundles, updates and rollback (proposed maintainer runbook).
+- [Current Qt gate status](qt-gate-status.md): executed checks, skips and why map
+  directory collision changes have not advanced.

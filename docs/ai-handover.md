@@ -1,13 +1,18 @@
-# Development handover: comparative audit checkpoint
+# Development handover: deployment guidance and open Qt gate
 
 ## Starting identity and evidence
 
-Current input: `labtools_source_20261028_155354.txt`, created
-2026-10-28T15:53:54.2777808Z, branch `feature/shared-instrument-session`, HEAD
-`9f602792c048ef63b9598529637051ead04eccd2`, upstream +1/-0. The only recorded dirty path is the untracked
-`apply_labtools_comparative_audit.py`; index and tracked worktree are otherwise clean.
-This checkpoint does not touch that installer or mutate Git. Actual live status is
-always authoritative. The earlier comparative audit remains historical evidence.
+Current input: `labtools_source_20261028_170656.txt`, created
+2026-10-28T17:06:56.8575069Z, branch `feature/shared-instrument-session`, HEAD
+`a439207b4b6d6aec2fbf3575d2fa155893d318a3`, upstream +2/-0.
+Recorded dirty state: untracked `apply_labtools_alignment_lifecycle.py` and
+`apply_labtools_comparative_audit.py`; tracked worktree/index otherwise clean.
+No local Windows test output was attached. A commit containing test source is not
+proof that the QtWidgets acceptance cases ran. Actual live Git status is authoritative.
+
+This checkpoint adds deployment documentation only. No production/test Python, lockfile,
+profile, driver, account, ACL, installed lab-PC environment or hardware was changed.
+The collision-safe map allocation task remains blocked by the explicit Qt gate.
 
 Read [architecture](architecture.md), [audit](comparative-audit.md),
 [roadmap](refactor-roadmap.md) and [conventions](development-conventions.md).
@@ -44,7 +49,7 @@ Keep `io/`; map persistence extraction is a separate future task.
 
 ## Alignment lifecycle checkpoint: implementation and evidence
 
-The next bounded phase adds deterministic blocked-backend and Qt window regressions.
+The preceding lifecycle checkpoint added deterministic blocked-backend and Qt window regressions.
 Start cannot replace a still-owned job after Stop, while closing, or after accepted
 close. Faulted/closing/closed workers disable Start. Private-worker shutdown now has
 one closeEvent owner rather than duplicate calls during deferred close. Injected
@@ -107,3 +112,21 @@ Installer targets the exact current snapshot, including any future intended dirt
 state only if its affected bytes match. It does not stage/commit/merge/push/reset.
 Review changed files and preserve unrelated changes. Keep backups outside the repo.
 Do not merge until local Ruff/Qt acceptance and required physical review are recorded.
+
+## Deployment-documentation checkpoint and gate rerun
+
+See [lab-PC deployment](lab-pc-deployment.md) and [gate status](qt-gate-status.md).
+The guide proposes non-editable wheel releases, protected code/profile/launchers,
+standard operator accounts, writable recipes/data, offline bundles and side-by-side
+updates/rollback. It is a maintainer runbook, not University IT policy or an executed
+Windows installer. Windows commands/ACL examples require IT review and local acceptance.
+
+Gate rerun: 15 passed, 4 skipped. QtCore/headless cases pass; all four QtWidgets modules
+skip because libGL.so.1 is unavailable. Full offline suite: 318 passed, 4 skipped,
+172 inherited warnings. Existing lifecycle Python Ruff check passed (0.17.3).
+Do not implement collision allocation or launcher work until the QtWidgets cases
+execute and pass, or supplied local output explicitly establishes that result.
+
+Next task remains: run/fix the QtWidgets gate; then collision-safe map directory
+allocation in one bounded checkpoint. Keep output schemas/resume/determinism and
+0.065/0.1 s detector minima unchanged. No new runtime behaviour is claimed here.

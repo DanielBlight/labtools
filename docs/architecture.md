@@ -1,7 +1,7 @@
 # Current architecture
 
 This document describes the audited 28 October 2026 source, based on snapshot HEAD
-`9f602792c048ef63b9598529637051ead04eccd2`. Actual Git status is authoritative.
+`a439207b4b6d6aec2fbf3575d2fa155893d318a3`. Actual Git status is authoritative.
 See [handover](ai-handover.md), [roadmap](refactor-roadmap.md) and
 [audit](comparative-audit.md) for evidence and limitations.
 
@@ -114,3 +114,12 @@ window timer stops on accepted close. New blocked-backend and QtWidgets acceptan
 tests cover cleanup-delayed cancellation, busy conflicts, six failure stages and
 private/injected close. Headless and QtCore tests passed; QtWidgets execution remains
 blocked by missing libGL.so.1 here. See [acceptance](alignment-lifecycle-acceptance.md).
+
+## Proposed lab-PC deployment boundary
+
+The [deployment runbook](lab-pc-deployment.md) separates a protected non-editable
+release environment from writable operator recipes/data and the maintainer-controlled
+ProgramData profile. Side-by-side environments and protected launcher selection are
+recommended; no auto-updater, account provisioning or ACL mutation is implemented.
+Filesystem protection of the official installation is not a hardware security boundary
+against arbitrary Python or administrators. No runtime source changed in this checkpoint.

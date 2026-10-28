@@ -16,7 +16,7 @@ LABTOOLS_INSTRUMENT_PROFILE overrides the path for development/testing; it is NO
 boundary. An operator able to execute arbitrary Python can bypass these software guardrails.
 Do not treat the approved flag as independent evidence of calibration or safety.
 
-Run uv sync after source changes to refresh entry points. The cleanup does not edit uv.lock;
+For the DEVELOPMENT checkout only, run uv sync after source changes to refresh entry points. The cleanup does not edit uv.lock;
 review any lock changes produced by uv sync. Do not install development code editable in the
 protected deployment. Build/install a tested wheel with a separately created environment and
 machine-accessible Python. Keep vendor drivers/DLLs available to each account. Windows ACL
@@ -64,3 +64,11 @@ are not a security boundary. The cleanup does not modify those wrappers.
 Historical migration backups may exist in `.labtools-migrations`; keep them out
 of Git. Do not rerun older migration installers against the refactored source.
 The current cleanup uses `.labtools-refactor-backups` and its own guarded rollback.
+
+## Protected lab-PC deployment
+
+Use the [deployment runbook](lab-pc-deployment.md) for reviewed wheels, separate
+operator workspaces, standard accounts, protected profiles/code and side-by-side
+updates/rollback. Do not run uv sync against the production environment or install
+editable source for operators. The guide is proposed and requires local IT/Windows
+acceptance; it does not change permissions or deploy software by itself.

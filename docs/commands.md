@@ -88,3 +88,12 @@ Remove QT_QPA_PLATFORM=offscreen before interactive GUI checks.
 The exact focused test and validation commands are in the
 [lifecycle acceptance guide](alignment-lifecycle-acceptance.md). These tests use fake
 backends and do not require --run-hardware. No shared launcher command is introduced.
+
+## Protected lab-PC installation and updates
+
+The [deployment guide](lab-pc-deployment.md) provides proposed Windows packaging,
+offline installation, operator launch, permissions, updates and rollback commands.
+Development uv commands are not operator startup/update commands. Use the accepted
+release's full interpreter path and a non-editable installed wheel. No automatic
+updater or new shared-launcher command is introduced. The [Qt gate](qt-gate-status.md)
+remains open; do not deploy this branch as accepted production based on skipped tests.

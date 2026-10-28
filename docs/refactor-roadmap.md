@@ -1,6 +1,6 @@
 # Refactor roadmap: audited status
 
-Based on input snapshot HEAD `9f602792c048ef63b9598529637051ead04eccd2`.
+Based on input snapshot HEAD `a439207b4b6d6aec2fbf3575d2fa155893d318a3`.
 See [audit](comparative-audit.md) and [handover](ai-handover.md). Offline validation is
 not hardware acceptance. Existing wrapper matrix below remains the review backlog.
 
@@ -243,3 +243,12 @@ settings changes/stop/close; Windows DLL and actual camera preview REQUIRED.
 - OPEN: real profile schema for all instruments and persistent-worker reservation
   bridge details. Direction is fixed; bounded phases resolve implementation details.
 - Environment gap: no PyQt6/ruff/uv.lock/vendor tree here; no locked Windows test.
+
+## Deployment guidance checkpoint
+
+[Lab-PC deployment](lab-pc-deployment.md) is now documented as a proposed manual
+release procedure. It is not an implemented auto-updater or production installer.
+No new acquisition phase is complete: [Qt gate](qt-gate-status.md) reran with
+15 passed / 4 skipped; full suite 318 passed / 4 skipped. Collision-safe map allocation
+is still PLANNED/BLOCKED pending executed QtWidgets acceptance. Do not infer a pass
+from a committed test file, bytecode file or pytest exit code with skipped modules.
