@@ -43,6 +43,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.ruff]
+extend-exclude = ["vendor"]
+
 [tool.pytest.ini_options]
 markers = [
     "hardware: tests requiring connected laboratory hardware",

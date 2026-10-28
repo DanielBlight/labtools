@@ -106,6 +106,15 @@ of Git. Profile approval is not independent calibration or a security boundary.
 Use module logging consistent with adjacent code (existing loguru/stdlib). No
 root logger setup in reusable modules, no secrets, no hidden cleanup failures.
 
+## Vendored reference material
+
+`vendor/` contains third-party or manufacturer-supplied examples and is excluded
+from Ruff. Preserve it as reference evidence: do not reformat, rename, import it as
+application code, or silently repair apparent defects. First-party code may copy a
+verified protocol detail into `devices/` or a service only with a source note,
+reviewed validation and tests. Record upstream defects separately rather than making
+the vendored copy look locally authoritative.
+
 ## Testing and validation
 
 Unit-test wrappers with injected transports; service tests use fake/synthetic

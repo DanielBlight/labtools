@@ -137,7 +137,7 @@ run standalone tools against the same device concurrently.
 
 ## Canonical spectrum/dark service
 
-CURRENTLY IMPLEMENTED AND VALIDATED in the opt-in service, not legacy GUIs:
+CURRENTLY IMPLEMENTED AND VALIDATED in the service and ordinary spectrum GUI:
 
 1. SpectrumSettings validates finite positive exposure/slit, normalized increasing
    range, integer tokens/counts and existing reduction rules. The real wrapper
@@ -176,10 +176,11 @@ CURRENTLY IMPLEMENTED AND VALIDATED in the opt-in service, not legacy GUIs:
     Legacy DarkSpectrum CSV remains unchanged and lacks provenance. Do not attach
     current settings to a loaded CSV and pretend they describe its capture.
 
-Legacy spectrum GUI still uses DarkSpectrum and only axis checks; settings
-changes can leave stale darks. It allows two median frames although the wrapper
-requires three. Its worker bookkeeping and disconnect warning suppression need
-separate Qt/lifecycle review. Those problems are NOT fixed by an opt-in service.
+The ordinary spectrum GUI now uses SpectrumService and provenance-bearing NPZ
+darks. It requires three median frames, reports stale settings, retains dark data
+when subtraction is disabled, handles cancellation separately and keeps worker
+ownership until QThread.finished. Legacy CSV remains available only as unverified
+reference data and cannot become a validated DarkRecord.
 
 ## Alignment: AGREED TARGET DESIGN / OPEN evidence
 
@@ -257,8 +258,8 @@ combination is not invertible. Consequence: fresh-dark result exports mark raw
 unavailable until a reviewed low-level result API exposes actual raw frames.
 
 ### ADR-07: bounded additive slice instead of untestable GUI rewrite
-Reason: baseline passes offline tests but Qt is unavailable, alignment absent and
-real limits conflict with requested live floor. Consequence: legacy GUI dark issue
-remains explicit. Next task is service migration under fake Qt tests, not a new
-architecture. See roadmap for acceptance gates and remaining OPEN items.
-
+Reason: the migration preserved the per-operation backend lifecycle while fixing
+dark provenance and GUI worker ownership through a tested service seam. Consequence:
+live alignment still requires the planned persistent asyncio worker; the ordinary
+GUI must not be used as evidence that alignment performance or hardware timing is
+validated. See the roadmap for remaining acceptance gates and OPEN items.

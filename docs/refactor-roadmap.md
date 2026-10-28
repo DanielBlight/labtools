@@ -16,14 +16,18 @@ RangeBackend contract, real adapter delegating existing range functions, determi
 synthetic adapter, immutable provenance-bearing DarkRecord/SpectrumResult, strict
 NPZ dark load/save and result export, representative synthetic workflow, LabJack
 partial-startup cleanup/idempotent successful close, and 60 new offline test cases.
-Current validation: 263 passed, two Qt modules skipped; no hardware validation.
-The legacy spectrum GUI and its dark behavior remain unchanged. No alignment code
-was present to migrate. No new main GUI or persistent HORIBA worker was built.
+Subsequent checkpoints migrated the ordinary spectrum GUI to the service and
+composed manual mirror control plus intensity mapping around one application-owned
+InstrumentSession. The current clean snapshot at 5225d07 passes 267 offline tests
+with three Qt-dependent skips in the reconstruction environment; no physical
+hardware validation is claimed. No complete launcher, persistent HORIBA worker,
+shared IDQ ownership or alignment integration has been built.
 
 ## Phase 1: spectrum GUI service migration
 
-Status: IMPLEMENTED IN THIS CHECKPOINT; QT ACCEPTANCE STILL REQUIRED IN THE LAB ENVIRONMENT. Prerequisite: this foundation checkpoint and
-usable PyQt6 environment for fake/offscreen tests. Suitable model: GPT-6 or another
+Status: IMPLEMENTED AND TESTED IN THE WINDOWS DEVELOPMENT ENVIRONMENT; PHYSICAL
+HORIBA VALIDATION REMAINS REQUIRED. Prerequisite was the foundation checkpoint and
+a usable PyQt6 environment for fake/offscreen tests. Suitable model: GPT-6 or another
 capable coding model; use deeper reasoning for lifecycle failures.
 
 Files: gui/spectrum_gui_horiba.py, gui/async_runner.py if needed, new focused
@@ -61,8 +65,8 @@ Checkpoint: one reviewed commit, no main merge: "Route spectrum GUI through test
 
 ## Phase 2: shared manual/map application composition
 
-Status: IMPLEMENTED IN THIS CHECKPOINT; PHYSICAL LABJACK VALIDATION REQUIRED. Prerequisite: stable baseline
-session tests, Qt fake environment; may proceed independently of Phase 1.
+Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL LABJACK VALIDATION REQUIRED.
+Prerequisites were stable session tests and a Qt fake environment.
 Model: strong reasoning for composition, capable coding model for bounded wiring.
 Files: runtime/session.py diagnostic API if required, runtime/shared_map.py,
 gui/mirror_controller.py, gui/mirror_voltage_gui.py, gui/intensity_map_gui.py,
@@ -325,4 +329,3 @@ settings changes/stop/close; Windows DLL and actual camera preview REQUIRED.
 - OPEN: real profile schema for all instruments and persistent-worker reservation
   bridge details. Direction is fixed; bounded phases resolve implementation details.
 - Environment gap: no PyQt6/ruff/uv.lock/vendor tree here; no locked Windows test.
-
