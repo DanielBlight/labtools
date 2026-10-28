@@ -44,3 +44,19 @@ async def open_simulated_range(
         yield Backend()
     finally:
         closed = True
+
+
+@asynccontextmanager
+async def open_simulated_alignment(settings):
+    settings.validate()
+
+    class Backend:
+        actual_centre_nm = float(settings.centre_nm)
+
+        async def capture(self, subtract_dark):
+            x = np.linspace(settings.centre_nm - 5.0, settings.centre_nm + 5.0, 64)
+            raw = 100.0 + 900.0 * np.exp(-0.5 * ((x - settings.centre_nm) / 0.8) ** 2)
+            dark = np.full_like(raw, 10.0)
+            return x, raw - dark if subtract_dark else raw.copy(), raw
+
+    yield Backend()

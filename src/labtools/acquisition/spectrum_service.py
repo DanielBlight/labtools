@@ -98,6 +98,19 @@ class RangeBackend(Protocol):
 BackendFactory = Callable[[SpectrumSettings], AbstractAsyncContextManager[RangeBackend]]
 
 
+class AlignmentBackend(Protocol):
+    actual_centre_nm: float
+
+    async def capture(
+        self, subtract_dark: bool
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]: ...
+
+
+AlignmentBackendFactory = Callable[
+    [object], AbstractAsyncContextManager[AlignmentBackend]
+]
+
+
 class SpectrumService:
     """One acquisition path for real/synthetic range backends.
 
@@ -106,13 +119,43 @@ class SpectrumService:
     Context cleanup completes before a cancellation/error escapes.
     """
 
-    def __init__(self, backend_factory: BackendFactory) -> None:
+    def __init__(
+        self,
+        backend_factory: BackendFactory,
+        alignment_backend_factory: AlignmentBackendFactory | None = None,
+    ) -> None:
         self._backend_factory = backend_factory
+        self._alignment_backend_factory = alignment_backend_factory
 
     @staticmethod
     def _cancel(cancel_requested: Callable[[], bool] | None) -> None:
         if cancel_requested is not None and cancel_requested():
             raise asyncio.CancelledError("Spectrum operation cancelled")
+
+    async def acquire_alignment(
+        self,
+        settings,
+        *,
+        cancel_requested: Callable[[], bool] | None = None,
+    ):
+        """Acquire one immutable alignment frame through the service boundary."""
+        from labtools.acquisition.alignment_spectrum import AlignmentResult
+
+        settings.validate()
+        if self._alignment_backend_factory is None:
+            raise RuntimeError("Alignment is unavailable for this service")
+        self._cancel(cancel_requested)
+        async with self._alignment_backend_factory(settings) as backend:
+            wavelength, corrected, raw = await backend.capture(settings.subtract_dark)
+            self._cancel(cancel_requested)
+            return AlignmentResult(
+                settings,
+                wavelength,
+                corrected,
+                raw,
+                backend.actual_centre_nm,
+                settings.subtract_dark,
+            )
 
     async def test_connection(
         self,

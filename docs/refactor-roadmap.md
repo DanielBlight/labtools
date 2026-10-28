@@ -140,10 +140,15 @@ Checkpoint: "Add persistent HORIBA asyncio worker foundation".
 
 ## Phase 4b: alignment client integration
 
-Status: PLANNED. Inject the worker into the bounded alignment client, preserving the
-ordinary GUI and standalone lifecycle. Repeated acquisition, cancellation, close and
-restart must use the worker without adding hidden device persistence or GUI-to-vendor
-access.
+Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL ALIGNMENT VALIDATION REQUIRED.
+
+The recovered alignment window now submits complete single-centre SpectrumService
+jobs through SpectrumWorker. Repetition is reject-policy compatible and strictly
+sequential. Settings are snapshotted on the UI thread, immutable results drive the
+plot, and fresh-dark subtraction preserves raw/corrected identity. Busy is recoverable;
+real faults require application teardown. Close requests cooperative cancellation and
+waits for worker/backend cleanup. Injected workers remain application-owned; standalone
+windows close private workers. The ordinary spectrum GUI remains unchanged.
 Checkpoint: "Integrate alignment with the spectrum worker".
 
 ## Phase 5: wrapper reliability and hazardous-workflow review

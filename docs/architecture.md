@@ -99,6 +99,22 @@ connect/configure/operate/disconnect backend context, but all of those steps exe
 on the worker's single loop. Later application composition may assign persistent
 backend ownership only after real-SDK validation.
 
+### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: alignment worker integration
+
+The recovered bounded alignment window is now a SpectrumWorker client. Settings are
+snapshotted on the Qt thread and submitted as complete SpectrumService alignment-frame
+jobs with owner label `spectrum-alignment`. A QTimer observes only the thread-safe job
+handle; no QThread, asyncio loop, backend or vendor object reaches the GUI. Repetition
+submits the next frame only after the previous job and backend cleanup complete.
+Injected/application-owned workers survive window close; standalone windows own and
+close their private worker after active cancellation/cleanup.
+
+Alignment uses the detector preset exposure minima, matching ordinary spectrum
+requests. No alignment-specific minimum-exposure override is used. Alignment dark
+subtraction captures a fresh dark and signal in one complete service job and preserves
+raw plus corrected immutable arrays. Busy conflicts are recoverable; a real worker
+fault requires application-level teardown. No real failure falls back to simulation.
+
 ### CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION
 
 Real wrappers, shared LabJack service and the new real range adapter. The adapter

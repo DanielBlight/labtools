@@ -53,8 +53,10 @@ Historical refactor notes retain technical context but are not current task list
   maps and shared simulation keep their established counter composition.
 - A lazy spectrum worker owns one dedicated thread and asyncio loop and rejects
   concurrent complete SpectrumService jobs. It reports immutable lifecycle status,
-  retains busy ownership through service cleanup, faults after real operation failure
-  and tears down its loop/thread deterministically. It is not yet injected into a GUI.
+  retains busy ownership through service cleanup and faults after real operation
+  failure. The recovered alignment window is its first client: it snapshots settings
+  on the UI thread, submits sequential service jobs and distinguishes injected from
+  privately owned worker shutdown.
 
 These statements describe software behaviour exercised by fake/offline tests. They
 are not claims about physical hardware, calibration, optical safety or vendor SDKs.
@@ -130,10 +132,10 @@ functional migration; review changed-file fixes first and keep broad cleanup sep
 
 ## Next bounded task
 
-Implement Phase 4b only: inject the spectrum worker into the existing bounded
-alignment client and test repeated acquire/cancel/close/restart. Preserve the ordinary
-spectrum GUI and do not combine alignment integration with a complete launcher,
-cryostat/piezo wrappers, IDQ streaming or hardware diagnostics.
+Implement Phase 5a only: the minimum shared application launcher/composition surface
+for the already migrated manual mirror, map and alignment tools. Present truthful
+available/busy/faulted state and preserve standalone commands. Do not add cryostat or
+piezo wrappers, IDQ streaming, new experiment workflows or hardware diagnostics.
 
 ## Git/checkpoint workflow
 

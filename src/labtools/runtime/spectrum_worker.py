@@ -199,6 +199,15 @@ class SpectrumWorker:
             ),
         )
 
+    def acquire_alignment(self, settings, *, owner="spectrum-alignment") -> SpectrumJob:
+        return self._submit(
+            owner,
+            "alignment-frame",
+            lambda cancelled: self._service.acquire_alignment(
+                settings, cancel_requested=cancelled
+            ),
+        )
+
     def close(self) -> None:
         with self._lock:
             if self._state == "closed":
