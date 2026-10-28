@@ -7,7 +7,7 @@ from threading import RLock
 
 from labtools.acquisition.intensity_map import acquire_intensity_map
 from labtools.runtime.labjack_service import LabJackWiring, create_labjack_session
-from labtools.runtime.session import ResourceBusyError
+from labtools.runtime.session import InstrumentSession, ResourceBusyError
 from labtools.runtime.shared_map import SharedMapProvider
 
 
@@ -64,12 +64,34 @@ class SharedMirrorMapApplication:
         backend="real",
         counter_provider=None,
     ):
-        if backend != "real":
-            raise ValueError(
-                "Phase 2 shared composition supports real LabJack mode only"
-            )
+        if backend not in {"real", "simulation"}:
+            raise ValueError("backend must be real or simulation")
         wiring = LabJackWiring() if wiring is None else wiring
-        self.session = create_labjack_session(wiring, service_factory=service_factory)
+        self._simulation_service = None
+        if backend == "real":
+            self.session = create_labjack_session(
+                wiring, service_factory=service_factory
+            )
+        else:
+            if service_factory is not None or counter_provider is not None:
+                raise ValueError(
+                    "Shared simulation owns its service and synthetic counter provider"
+                )
+            from labtools.simulation.map_devices import SimulatedMapState
+            from labtools.simulation.shared_map import (
+                SharedSimulatedLabJackService,
+                synthetic_counter_provider,
+            )
+
+            state = SimulatedMapState()
+            service = SharedSimulatedLabJackService(state)
+            self._simulation_service = service
+            self.session = InstrumentSession(
+                {"labjack": lambda: service},
+                aliases={"mirror": "labjack", "gate": "labjack"},
+                cleanup_methods={"labjack": ("home", "close_gate")},
+            )
+            counter_provider = synthetic_counter_provider(state)
         self.manual_mirror = ManualMirrorService(self.session)
         self.map_provider = SharedMapProvider(
             self.session,
@@ -97,9 +119,19 @@ class SharedMirrorMapApplication:
     def status(self):
         return self.session.status()
 
+    def simulation_status(self):
+        """Return detached synthetic state, or None for the real composition."""
+        service = self._simulation_service
+        return None if service is None else service.snapshot()
+
     def close(self):
         if self.manual_mirror.connected:
             raise ResourceBusyError(
                 "Close the manual mirror tool before application shutdown"
             )
+        if self._simulation_service is not None:
+            status = self.session.status().resources[0]
+            if not status.connected:
+                with self.session.reserve("application-shutdown", ("mirror",)) as lease:
+                    lease.call("mirror", "snapshot")
         self.session.close()

@@ -44,6 +44,9 @@ Historical refactor notes retain technical context but are not current task list
   movement and status operations. Shared mode disables uncoordinated laser controls.
 - Detached status records report session/resource state without exposing handles or
   bypassing reservations.
+- Shared simulation composition now owns one synthetic mirror/gate state behind the
+  same session aliases as real mode. Manual and map tools share it without exposing
+  mutable state; deterministic counter behaviour remains per-map and config-bound.
 
 These statements describe software behaviour exercised by fake/offline tests. They
 are not claims about physical hardware, calibration, optical safety or vendor SDKs.
@@ -110,7 +113,6 @@ functional migration; review changed-file fixes first and keep broad cleanup sep
 
 ## Planned, not implemented
 
-- Application-owned shared synthetic mirror/gate state.
 - Central IDQ count ownership and, separately, streaming/DLT lifecycle migration.
 - Persistent HORIBA asyncio worker and alignment integration.
 - Complete shared launcher with truthful availability/busy/fault presentation.
@@ -120,11 +122,10 @@ functional migration; review changed-file fixes first and keep broad cleanup sep
 
 ## Next bounded task
 
-Implement Phase 3a only: application-owned shared synthetic mirror/gate state for the
-manual and map tools. Preserve `gaussian-scene-v1`, deterministic seeding, map output
-and resume signatures. Do not combine the task with IDQ ownership, the shared launcher,
-HORIBA alignment or wrapper cleanup. End with focused contract tests, the full offline
-suite, changed-file Ruff checks, documentation updates and one reviewed Git checkpoint.
+Implement Phase 3b only: application-owned IDQ count-service ownership keyed by
+physical address. Keep ZMQ socket creation, use and close on the owning thread. Do not
+combine count ownership with DLT streaming, persistent HORIBA work, alignment, the
+complete launcher, cryostat/piezo wrappers or broad cleanup.
 
 ## Git/checkpoint workflow
 

@@ -59,6 +59,16 @@ Do not overwrite the laboratory main branch or fabricate that missing code.
 ### CURRENTLY IMPLEMENTED AND VALIDATED: Phase 2 shared composition
 runtime/shared_application.py owns one process-local InstrumentSession and injects a narrow manual service plus SharedMapProvider-backed acquisition into the existing windows. Manual connect reserves only and remains lazy; disconnect/close releases only its lease. Shared-map mode disables laser controls because ITC ownership is not coordinated. Detached status records report available/busy owner/faulted/closing/closed and connected state without exposing handles or authorizing calls. Standalone launch composition remains unchanged.
 
+### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: shared simulation composition
+
+`SharedMirrorMapApplication(backend="simulation")` owns one synthetic mirror/gate
+state behind the same `InstrumentSession` alias model as the real LabJack. Manual
+moves and shared map acquisition observe that state through services only; GUI code
+does not receive the mutable state or simulated devices. A frozen diagnostic snapshot
+reports position, gate, measurement and closed state without granting access. The
+existing deterministic counter model remains config-bound and does not represent
+application-owned IDQ hardware.
+
 ### CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION
 
 Real wrappers, shared LabJack service and the new real range adapter. The adapter

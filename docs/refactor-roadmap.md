@@ -86,24 +86,30 @@ Risk: alias mismatch, manual conflict killing worker, unintended gate action.
 Implementation: added one application-owned composition boundary, a narrow manual-mirror service, shared map acquisition injection, detached session status snapshots, and shared-mode laser-control disabling. The standalone launch paths remain unchanged. Fake/offline tests validate lazy single-connection reuse, worker-thread calls, alias conflicts, recoverable busy state, fault truthfulness and shutdown refusal. Existing shared-map tests retain whole-map cleanup ownership. Qt execution remains environment-dependent and physical LabJack/mirror/gate behaviour is not validated.
 Checkpoint: "Compose shared mirror and map tools with one session".
 
-## Phase 3: shared simulation and IDQ ownership
+## Phase 3a: shared simulation composition
 
-Status: PLANNED. Prerequisite: Phase 2; model: strong reasoning for IDQ threading,
-capable coding model for explicit simulation adapters.
-Files: simulation/map_devices.py, runtime/shared_map.py, runtime/contracts.py,
-new counter service/factory and contract tests.
+Status: IMPLEMENTED AND OFFLINE VALIDATED; real hardware is unaffected.
 
-Create an application-owned synthetic mirror/gate state usable by manual/map tools;
-retain existing per-acquisition model/version/coordinate seeding and resume schema.
-Resolve counter ownership by physical address, with socket creation/use/close on
-its owner thread. Do not move existing ZMQ sockets across threads. Separate count
-service migration from streaming/DLT migration. Add explicit backend/profile
-selection; no fallback. Tests: shared synthetic state, resume equivalence, real/native
-import isolation, same-address counter conflict, failed connect/close. Acceptance:
-existing map datasets/signatures unchanged, full-job counter exclusion demonstrated.
-Hardware: IDQ count/configuration checks before deployment; no streaming validation
-claim. Risk: ZMQ affinity, global REC state, DLT subprocess lifecycle.
-Checkpoint: separate synthetic-state and IDQ-count-service commits.
+The shared manual/map composition owns one synthetic mirror/gate state behind the
+same InstrumentSession aliases as real mode. Manual control and map acquisition
+share that state without exposing mutable devices to GUI code. The existing
+config-bound deterministic counter remains per-map; it is not application-owned IDQ
+hardware. MODEL_VERSION, deterministic seed behaviour, checkpoint/output schema,
+resume signatures, paths and synthetic labelling remain unchanged. There is no
+real-to-simulation fallback.
+
+Tests cover native-import isolation, connect-without-motion, manual/map/manual state
+reuse, reservation conflicts, shutdown refusal, deterministic maps, stop/resume
+array equivalence, schema/model constants and real failure without fallback.
+Checkpoint: "Compose shared simulation state for mirror and map tools".
+
+## Phase 3b: IDQ count-service ownership
+
+Status: PLANNED. Key ownership by physical address and keep ZMQ socket creation, use
+and close on the owning thread. Do not move existing sockets across threads. DLT
+lifecycle, streaming analysis, histogram ownership, channel discovery, firmware
+compatibility, interlocks and safe state remain separate later work.
+Checkpoint: "Centralise IDQ count ownership".
 
 ## Phase 4: persistent HORIBA worker and alignment
 
