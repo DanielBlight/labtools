@@ -3,11 +3,28 @@
 Factories, device methods and close() run on one persistent worker thread.
 This is not an interlock, cross-process lock or blocked-driver timeout.
 """
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from threading import RLock, get_ident
 from uuid import uuid4
+
+
+@dataclass(frozen=True)
+class ResourceStatus:
+    name: str
+    state: str
+    owner: str | None
+    connected: bool
+    faulted: bool
+
+
+@dataclass(frozen=True)
+class SessionStatus:
+    state: str
+    resources: tuple[ResourceStatus, ...]
 
 
 class ResourceBusyError(RuntimeError):
@@ -69,18 +86,29 @@ class InstrumentSession:
             raise ValueError("Provide named callable resource factories")
         self._aliases = dict(aliases or {})
         if any(
-            not isinstance(k, str) or not k.strip()
-            or k in self._factories or v not in self._factories
+            not isinstance(k, str)
+            or not k.strip()
+            or k in self._factories
+            or v not in self._factories
             for k, v in self._aliases.items()
         ):
-            raise ValueError("Aliases must map new names directly to physical resources")
+            raise ValueError(
+                "Aliases must map new names directly to physical resources"
+            )
         self._cleanup_methods = {}
         for resource, methods in (cleanup_methods or {}).items():
             if resource not in self._factories or isinstance(methods, str):
-                raise ValueError("Cleanup allowlists use physical resource names and sequences")
+                raise ValueError(
+                    "Cleanup allowlists use physical resource names and sequences"
+                )
             allowed = frozenset(methods)
-            if any(not isinstance(name, str) or not name or name.startswith("_")
-                   or name in {"close", "connect", "disconnect"} for name in allowed):
+            if any(
+                not isinstance(name, str)
+                or not name
+                or name.startswith("_")
+                or name in {"close", "connect", "disconnect"}
+                for name in allowed
+            ):
                 raise ValueError("Invalid cleanup method name")
             self._cleanup_methods[resource] = allowed
         self._lock = RLock()
@@ -90,7 +118,9 @@ class InstrumentSession:
         self._faults = set()
         self._state = "open"
         self._worker_ident = None
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="labtools-session")
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="labtools-session"
+        )
 
     def _physical(self, name):
         physical = self._aliases.get(name, name)
@@ -106,7 +136,9 @@ class InstrumentSession:
         if not isinstance(owner, str) or not owner.strip():
             raise ValueError("Provide a nonempty owner label")
         if isinstance(resources, str):
-            raise ValueError("Pass a sequence of resource names, not a string")
+            raise ValueError(  # noqa: TRY004 - preserve public validation compatibility
+                "Pass a sequence of resource names, not a string"
+            )
         physical = frozenset(self._physical(name) for name in resources)
         if not physical:
             raise ValueError("Reserve at least one resource")
@@ -114,9 +146,13 @@ class InstrumentSession:
             self._open()
             conflicts = physical.intersection(self._owners)
             if conflicts:
-                raise ResourceBusyError(f"Resources already reserved: {sorted(conflicts)}")
+                raise ResourceBusyError(
+                    f"Resources already reserved: {sorted(conflicts)}"
+                )
             if physical.intersection(self._faults):
-                raise RuntimeError("Resource faulted; close the session before reconnecting")
+                raise RuntimeError(
+                    "Resource faulted; close the session before reconnecting"
+                )
             token = uuid4().hex
             self._leases[token] = [physical, owner, 0]
             for name in physical:
@@ -135,7 +171,9 @@ class InstrumentSession:
             if lease is None:
                 return
             if lease[2]:
-                raise ResourceBusyError("Cannot release a reservation with commands in flight")
+                raise ResourceBusyError(
+                    "Cannot release a reservation with commands in flight"
+                )
             for name in lease[0]:
                 del self._owners[name]
             del self._leases[token]
@@ -153,7 +191,11 @@ class InstrumentSession:
     def _call(self, token, resource, method, args, kwargs, *, cleanup=False):
         if get_ident() == self._worker_ident:
             raise RuntimeError("Recursive session calls from the worker are forbidden")
-        if not isinstance(method, str) or method.startswith("_") or method in {"close", "connect", "disconnect"}:
+        if (
+            not isinstance(method, str)
+            or method.startswith("_")
+            or method in {"close", "connect", "disconnect"}
+        ):
             raise ValueError("Lifecycle and private methods are session-owned")
         physical = self._physical(resource)
         if cleanup and method not in self._cleanup_methods.get(physical, ()):
@@ -166,15 +208,20 @@ class InstrumentSession:
             if not cleanup and physical in self._faults:
                 raise RuntimeError("Resource faulted; further commands are blocked")
             lease[2] += 1
+
             def execute():
                 try:
                     with self._lock:
                         if not cleanup and physical in self._faults:
-                            raise RuntimeError("Resource faulted before queued command ran")
+                            raise RuntimeError(
+                                "Resource faulted before queued command ran"
+                            )
                     if cleanup:
                         # Never construct/reconnect hardware just to perform cleanup.
                         if physical not in self._devices:
-                            raise RuntimeError("Cleanup requires an already-open resource")
+                            raise RuntimeError(
+                                "Cleanup requires an already-open resource"
+                            )
                         self._worker_ident = get_ident()
                         return getattr(self._devices[physical], method)()
                     return self._execute(physical, method, args, kwargs)
@@ -186,6 +233,7 @@ class InstrumentSession:
                 finally:
                     with self._lock:
                         lease[2] -= 1
+
             try:
                 future = self._executor.submit(execute)
             except BaseException:
@@ -194,10 +242,38 @@ class InstrumentSession:
         # A caller interruption does not release an executing command's lease.
         return future.result()
 
+    def status(self) -> SessionStatus:
+        """Return detached diagnostic state; never grants access or exposes devices."""
+        with self._lock:
+            resources = []
+            for name in sorted(self._factories):
+                token = self._owners.get(name)
+                owner = None if token is None else self._leases[token][1]
+                if self._state != "open":
+                    state = self._state
+                elif name in self._faults:
+                    state = "faulted"
+                elif token is not None:
+                    state = "busy"
+                else:
+                    state = "available"
+                resources.append(
+                    ResourceStatus(
+                        name=name,
+                        state=state,
+                        owner=owner,
+                        connected=name in self._devices,
+                        faulted=name in self._faults,
+                    )
+                )
+            return SessionStatus(self._state, tuple(resources))
+
     def reservations(self):
         """Return a detached diagnostic snapshot, never raw device handles."""
         with self._lock:
-            return {name: self._leases[token][1] for name, token in self._owners.items()}
+            return {
+                name: self._leases[token][1] for name, token in self._owners.items()
+            }
 
     def _close_devices(self):
         self._worker_ident = get_ident()
@@ -205,12 +281,14 @@ class InstrumentSession:
         for name, device in reversed(list(self._devices.items())):
             try:
                 device.close()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - aggregate independent close failures
                 exc.add_note(f"Session resource: {name}")
                 failures.append(exc)
         self._devices.clear()
         if failures:
-            raise ExceptionGroup("Session shutdown failed; physical state may be unknown", failures)
+            raise ExceptionGroup(
+                "Session shutdown failed; physical state may be unknown", failures
+            )
 
     def close(self):
         if get_ident() == self._worker_ident:
@@ -220,7 +298,9 @@ class InstrumentSession:
                 return
             self._open()
             if self._leases:
-                raise ResourceBusyError("Release all measurements before closing the session")
+                raise ResourceBusyError(
+                    "Release all measurements before closing the session"
+                )
             self._state = "closing"
             future = self._executor.submit(self._close_devices)
         try:

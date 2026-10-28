@@ -2,32 +2,19 @@
 
 from __future__ import annotations
 
-
 import sys
-
 import traceback
-
 from pathlib import Path
-
 from typing import Any
 
-
 import numpy as np
-
 from loguru import logger
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
-
 from matplotlib.colors import LogNorm, Normalize
-
 from matplotlib.figure import Figure
-
 from PyQt6.QtCore import Qt, pyqtSlot
-
 from PyQt6.QtGui import QFont
-
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -55,19 +42,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-
 from labtools.acquisition.intensity_map import (
     IntensityMapConfig,
     IntensityMapSnapshot,
-    acquire_intensity_map,
     config_from_resume_directory,
     estimated_minimum_duration_s,
 )
-
 from labtools.runtime.lazy_devices import LazyITC4000 as ITC4000
-
 from labtools.visualisation.intensity_map import update_map_axes
-
 
 MAX_LASER_CURRENT_A = 0.100
 
@@ -78,13 +60,13 @@ LASER_THRESHOLD_CURRENT_A = 0.049
 DEFAULT_OUTPUT_ROOT = Path("C:/LabData/IntensityMaps")
 
 
-from labtools.gui.map_controller import MapController, MapWorker  # compatibility export
+from labtools.gui.map_controller import MapController  # compatibility export
 
 
 class IntensityMapWindow(QMainWindow):
     """Main window for live count maps, resume, and laser control."""
 
-    def __init__(self, *, acquisition=None) -> None:
+    def __init__(self, *, acquisition=None, shared_mode=False) -> None:
 
         super().__init__()
 
@@ -95,6 +77,7 @@ class IntensityMapWindow(QMainWindow):
         self.setMinimumSize(1120, 720)
 
         self.map_controller = MapController(self, acquisition=acquisition)
+        self._shared_mode = bool(shared_mode)
         self.map_controller.progress.connect(self._on_progress)
         self.map_controller.finished.connect(self._on_finished)
         self.map_controller.failed.connect(self._on_failed)
@@ -270,12 +253,19 @@ class IntensityMapWindow(QMainWindow):
         self.statusBar().addWidget(self.status, 1)
 
         self._toggle_laser_controls(False)
+        if self._shared_mode:
+            self.laser_group.setEnabled(False)
+            self.laser_group.setToolTip(
+                "Laser ownership is not coordinated in shared Phase 2 mode."
+            )
 
         self._update_estimate()
 
         self._intensity_map_preferences_v1()
         self.simulation_banner = QLabel("SIMULATION — SYNTHETIC DATA ONLY")
-        self.simulation_banner.setStyleSheet("background:#fff3cd;color:#664d03;padding:6px;font-weight:bold;")
+        self.simulation_banner.setStyleSheet(
+            "background:#fff3cd;color:#664d03;padding:6px;font-weight:bold;"
+        )
         self.statusBar().addPermanentWidget(self.simulation_banner)
         self.simulation_banner.hide()
         self.simulation_mode.toggled.connect(self._simulation_changed)
@@ -1024,7 +1014,10 @@ class IntensityMapWindow(QMainWindow):
 
     def set_status(self, text: str) -> None:
 
-        if getattr(self, "simulation_mode", None) is not None and self.simulation_mode.isChecked():
+        if (
+            getattr(self, "simulation_mode", None) is not None
+            and self.simulation_mode.isChecked()
+        ):
             text = "SIMULATION — " + text
         self.status.setText(text)
 
@@ -1173,7 +1166,11 @@ class IntensityMapWindow(QMainWindow):
 
         selected = "simulation" if self.simulation_mode.isChecked() else "real"
         if config.backend != selected:
-            QMessageBox.warning(self, "Backend mismatch", "Select the matching real/simulation backend before choosing this checkpoint.")
+            QMessageBox.warning(
+                self,
+                "Backend mismatch",
+                "Select the matching real/simulation backend before choosing this checkpoint.",
+            )
             self._resume_directory = None
             return
         self._apply_config(config)
@@ -1186,7 +1183,11 @@ class IntensityMapWindow(QMainWindow):
             return
         selected = "simulation" if self.simulation_mode.isChecked() else "real"
         if config.backend != selected:
-            QMessageBox.warning(self, "Backend mismatch", "Select the matching backend before resuming this map.")
+            QMessageBox.warning(
+                self,
+                "Backend mismatch",
+                "Select the matching backend before resuming this map.",
+            )
             return
         try:
             config.validate()
@@ -1285,7 +1286,9 @@ class IntensityMapWindow(QMainWindow):
 
         box.exec()
 
-        self.set_status("Acquisition failed. Inspect error details and the output folder for a checkpoint.")
+        self.set_status(
+            "Acquisition failed. Inspect error details and the output folder for a checkpoint."
+        )
 
     @pyqtSlot()
     def _cleanup_worker(self) -> None:
@@ -1320,7 +1323,10 @@ class IntensityMapWindow(QMainWindow):
 
     def _toggle_laser_controls(self, enabled: bool) -> None:
 
-        if getattr(self, "simulation_mode", None) is not None and self.simulation_mode.isChecked():
+        if (
+            getattr(self, "simulation_mode", None) is not None
+            and self.simulation_mode.isChecked()
+        ):
             self.laser_group.setEnabled(False)
             return
         connected = self.laser is not None
@@ -1649,7 +1655,11 @@ class IntensityMapWindow(QMainWindow):
             previous = self.simulation_mode.blockSignals(True)
             self.simulation_mode.setChecked(not enabled)
             self.simulation_mode.blockSignals(previous)
-            QMessageBox.warning(self, "Backend locked", "Stop the map and disconnect the laser before switching backend.")
+            QMessageBox.warning(
+                self,
+                "Backend locked",
+                "Stop the map and disconnect the laser before switching backend.",
+            )
             return
         if enabled:
             self._real_output_root = self.output_root.text()
@@ -1657,11 +1667,14 @@ class IntensityMapWindow(QMainWindow):
         elif hasattr(self, "_real_output_root"):
             self.output_root.setText(self._real_output_root)
         self.simulation_banner.setVisible(enabled)
-        self.setWindowTitle("SIMULATION — Intensity Map" if enabled else "Intensity Map Acquisition")
+        self.setWindowTitle(
+            "SIMULATION — Intensity Map" if enabled else "Intensity Map Acquisition"
+        )
         self.laser_group.setEnabled(not enabled)
         self.set_laser_indicator(False)
-        self.set_status("SIMULATION — synthetic data only" if enabled else "Real hardware selected")
-
+        self.set_status(
+            "SIMULATION — synthetic data only" if enabled else "Real hardware selected"
+        )
 
 
 def main() -> None:

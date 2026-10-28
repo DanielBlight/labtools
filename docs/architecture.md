@@ -56,6 +56,9 @@ Do not overwrite the laboratory main branch or fabricate that missing code.
 - NEW LabJackU6 startup cleanup closes a returned U6 if calibration/delay fails,
   preserves the primary exception and makes successful close idempotent.
 
+### CURRENTLY IMPLEMENTED AND VALIDATED: Phase 2 shared composition
+runtime/shared_application.py owns one process-local InstrumentSession and injects a narrow manual service plus SharedMapProvider-backed acquisition into the existing windows. Manual connect reserves only and remains lazy; disconnect/close releases only its lease. Shared-map mode disables laser controls because ITC ownership is not coordinated. Detached status records report available/busy owner/faulted/closing/closed and connected state without exposing handles or authorizing calls. Standalone launch composition remains unchanged.
+
 ### CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION
 
 Real wrappers, shared LabJack service and the new real range adapter. The adapter
@@ -66,7 +69,7 @@ No physical device was used. See [roadmap](refactor-roadmap.md) for known defect
 
 ### PLANNED BUT NOT IMPLEMENTED
 
-Shared main GUI, production manual/map session injection, central IDQ ownership,
+Complete shared launcher, central IDQ ownership,
 shared-session synthetic map composition, persistent HORIBA asyncio worker,
 GUI use of SpectrumService/DarkRecord, alignment integration, general operator
 recipes/profiles, camera/laser/shutter/stage simulation and legacy cleanup review.
@@ -258,3 +261,4 @@ Reason: baseline passes offline tests but Qt is unavailable, alignment absent an
 real limits conflict with requested live floor. Consequence: legacy GUI dark issue
 remains explicit. Next task is service migration under fake Qt tests, not a new
 architecture. See roadmap for acceptance gates and remaining OPEN items.
+

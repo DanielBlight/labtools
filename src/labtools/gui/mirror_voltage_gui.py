@@ -4,6 +4,7 @@ User-requested software limits: -10 to +10 V; DIO pin 2.
 No instrument profile required. No movement on connect/disconnect/exit.
 Commands are not measured voltage readbacks. Native driver calls can block.
 """
+
 from __future__ import annotations
 
 import math
@@ -12,16 +13,24 @@ import sys
 from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QApplication, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout,
-    QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget,
+    QApplication,
+    QDoubleSpinBox,
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from labtools.runtime.mirror_backend import MIN_V, MAX_V, DIO_PIN, validate_target
 from labtools.gui.mirror_controller import HardwareThread
+from labtools.runtime.mirror_backend import MAX_V, MIN_V, validate_target
 
 
 class MirrorWindow(QWidget):
-    def __init__(self, *, backend_factory=None):
+    def __init__(self, *, backend_factory=None, manual_service=None):
         super().__init__()
         self.setWindowTitle("Labtools | Mirror")
         self.resize(410, 245)
@@ -30,7 +39,9 @@ class MirrorWindow(QWidget):
         self.closing = False
         self.fault = False
         self.settings = QSettings("labtools", "ManualMirrorVoltages")
-        self.worker = HardwareThread(self, backend_factory=backend_factory)
+        self.worker = HardwareThread(
+            self, backend_factory=backend_factory, manual_service=manual_service
+        )
         self.worker.done.connect(self.completed)
         self.worker.failed.connect(self.failed)
         self.worker.finished.connect(self.finished)
@@ -62,7 +73,9 @@ class MirrorWindow(QWidget):
         self.status = QLabel("Disconnected | -10 to +10 V | DIO 2")
         self.status.setWordWrap(True)
         self.status.setObjectName("status")
-        self.status.setToolTip("Commanded values only. No shutter control or automatic homing.")
+        self.status.setToolTip(
+            "Commanded values only. No shutter control or automatic homing."
+        )
         layout.addWidget(self.status)
         self.setStyleSheet("""
             QWidget { background: #f5f7fa; color: #102a43; }

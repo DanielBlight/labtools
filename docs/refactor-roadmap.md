@@ -61,7 +61,7 @@ Checkpoint: one reviewed commit, no main merge: "Route spectrum GUI through test
 
 ## Phase 2: shared manual/map application composition
 
-Status: PLANNED; baseline backend foundations exist. Prerequisite: stable baseline
+Status: IMPLEMENTED IN THIS CHECKPOINT; PHYSICAL LABJACK VALIDATION REQUIRED. Prerequisite: stable baseline
 session tests, Qt fake environment; may proceed independently of Phase 1.
 Model: strong reasoning for composition, capable coding model for bounded wiring.
 Files: runtime/session.py diagnostic API if required, runtime/shared_map.py,
@@ -79,6 +79,7 @@ cleanup, fault state, close one tool vs app shutdown, cancellation and blocked-j
 shutdown refusal. Acceptance: no duplicate connection, no release before cleanup,
 status truthful. Hardware: reviewed LabJack wiring/motion/gate tests before use.
 Risk: alias mismatch, manual conflict killing worker, unintended gate action.
+Implementation: added one application-owned composition boundary, a narrow manual-mirror service, shared map acquisition injection, detached session status snapshots, and shared-mode laser-control disabling. The standalone launch paths remain unchanged. Fake/offline tests validate lazy single-connection reuse, worker-thread calls, alias conflicts, recoverable busy state, fault truthfulness and shutdown refusal. Existing shared-map tests retain whole-map cleanup ownership. Qt execution remains environment-dependent and physical LabJack/mirror/gate behaviour is not validated.
 Checkpoint: "Compose shared mirror and map tools with one session".
 
 ## Phase 3: shared simulation and IDQ ownership

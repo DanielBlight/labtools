@@ -216,3 +216,10 @@ safe states, calibration, Windows drivers or native abort feasibility. Changed
 LabJack startup/close behavior and the real spectrum adapter require hardware
 acceptance before merging for laboratory use. External script consumers are OPEN.
 
+
+## Phase 2 checkpoint, 28 October 2026
+Implemented the bounded shared manual-mirror/map composition using the existing InstrumentSession and LabJackService path. Added detached status snapshots, a narrow ManualMirrorService, one SharedMirrorMapApplication composition root, injected map acquisition, and shared-mode laser-control disabling. Standalone launch paths and defaults are unchanged. No IDQ session ownership, HORIBA worker, alignment, complete launcher or broad wrapper cleanup was added.
+
+Offline validation in the reconstruction environment: focused Phase 2/session/shared-map tests and the full suite passed after one test-expectation correction; final exact results are recorded in the delivery report. Qt modules may skip where PyQt6/QtWidgets is unavailable. No hardware or diagnostic scripts were run. Physical LabJack connection reuse, mirror voltage behaviour, DIO gate polarity/timing and cleanup ordering still require reviewed laboratory acceptance.
+
+Next bounded task: Phase 3 shared simulation state as a separate checkpoint before IDQ count-service ownership, preserving map model/version and checkpoint signatures.
