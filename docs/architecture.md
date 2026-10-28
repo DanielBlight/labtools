@@ -1,321 +1,105 @@
-# Architecture
+# Current architecture
 
-Authoritative current/target design, 27 October 2026. Read [handover](ai-handover.md)
-and [conventions](development-conventions.md) before implementing a roadmap phase.
-Historical batch notes explain past changes, not current completion status.
+This document describes the audited 28 October 2026 source, based on snapshot HEAD
+`3e5a0c9f41edbbf692faabd9ef5cd6e9b2bc8aab`. Actual Git status is authoritative.
+See [handover](ai-handover.md), [roadmap](refactor-roadmap.md) and
+[audit](comparative-audit.md) for evidence and limitations.
 
-## Status vocabulary
+## Package boundaries
 
-- **CURRENTLY IMPLEMENTED AND VALIDATED** means offline software tests passed in
-  the recorded environment, not that physical hardware was validated.
-- **CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION** identifies real paths.
-- **AGREED TARGET DESIGN** is the chosen direction, not available functionality.
-- **PLANNED BUT NOT IMPLEMENTED** identifies migrations/features still absent.
-- **OPEN**, **REQUIRES DESIGN DECISION**, **REQUIRES HARDWARE VALIDATION** and
-  **REQUIRES OPERATOR-WORKFLOW VALIDATION** identify remaining evidence/decisions.
+- `cli.py` / `launchers.py`: lazy standalone dispatch, not a shared launcher.
+- `config/`: validated requests, profiles and recipes; native-free HORIBA option tokens.
+- `devices/`: physical wrappers; native imports remain inside real composition where possible.
+- `runtime/`: session ownership, narrow services, providers and spectrum loop worker.
+- `acquisition/`: measurement orchestration, cancellation, records and map checkpointing.
+- `processing/`: Qt/native-free numerical transforms and legacy dark arrays.
+- `io/`: pickle-free versioned spectrum/dark NPZ persistence. Keep this package.
+- `simulation/`: explicit deterministic toy backends, not calibrated instrument models.
+- `gui/`: Qt controls/controllers, settings snapshots and plotting of returned data.
+- `visualisation/`: plotting and colour transforms.
 
-## Current repository after this batch
+Map persistence still lives in `acquisition/intensity_map.py`. Extracting it to `io/`
+is deferred until a separate schema-/resume-compatible checkpoint, not mixed into this audit.
+Compatibility exports remain in `operator_cli`, `gui.background`, `config.recipe_ui`
+and `simulation.map_backend`; external users have not been inventoried for removal.
 
-The snapshot contains 99 exported files, on feature/shared-instrument-session,
-reported HEAD 385df0dbfbc58f61200030c6165238404d92bed2, with uncommitted shared-map
-work. That work is part of this baseline, not newly delivered by this batch.
-There is no original .git directory, lockfile or vendor tree in the export.
-Alignment appears in the HEAD..main difference report but NOT the file manifest
-or file bodies. Its implementation cannot be recovered from this snapshot.
-Do not overwrite the laboratory main branch or fabricate that missing code.
+## Shared synchronous ownership
 
-### CURRENTLY IMPLEMENTED AND VALIDATED: offline boundaries
+`InstrumentSession` is the process-local reservation authority for registered physical
+resources. Mirror and gate alias one `labjack`. Factories, commands and close execute
+on its worker. Whole-map reservations include checkpoint/home/gate cleanup. Faulted
+normal commands are rejected; reviewed argument-free cleanup remains allowlisted.
+Status snapshots are detached diagnostics, not authorization. Release does not close.
+Shutdown refuses active leases and attempts all opened resource closes independently.
+Zero-voltage home is movement, not a certified safe state. Native calls can block.
 
-- cli.py and launchers.py lazily dispatch existing standalone tools. Help does
-  not import Qt/native drivers. launchers.py is not a shared application.
-- config/ contains intensity-map configuration and strict annealing recipes /
-  maintainer profiles. config/recipe_ui.py remains a Qt compatibility shim.
-- acquisition/intensity_map.py owns the resumable loop, cooperative point-boundary
-  cancellation, checkpointing and independent checkpoint/home/gate cleanup.
-  Optional device_provider injection already exists in the supplied baseline.
-  IntensityMapConfig/SCHEMA_VERSION remain re-exported from acquisition; schema is
-  still 1. runtime.map_devices retains its real ExitStack order and explicit
-  synthetic-state context; io remains only a partial home for legacy outputs.
-- runtime/session.py owns process-local atomic exclusive whole-job reservations,
-  direct aliases and lazy connections on one persistent synchronous worker.
-  Resource failures latch faults. Only explicitly allowlisted argument-free
-  cleanup may run after a fault. Release does not disconnect. Active leases
-  prevent shutdown. Existing standalone windows do NOT use this session.
-- runtime/labjack_service.py and shared_map.py already provide opt-in mirror/gate
-  service adapters. Mirror and gate reserve the same physical LabJack. IDQ stays
-  per-map on the acquisition thread and is NOT globally coordinated.
-- simulation/map_devices.py provides the existing shared-per-map synthetic state,
-  deterministic coordinate/channel seeding and backend-specific resume checks.
-- processing/ owns Qt/native-free combination, background and dark arithmetic.
-  range_spectrum.py preserves legacy imports and loads vendor stitching lazily.
-- NEW config/spectrum.py, acquisition/spectrum_service.py, runtime/spectrum_backend.py,
-  simulation/spectrum.py and io/spectrum_records.py provide the opt-in headless
-  spectrum service, provenance-bearing darks, explicit real/synthetic composition
-  and pickle-free versioned archives. The representative workflow is
-  examples/experiments/simulate_spectrum_service.py. No GUI migration is claimed.
-- NEW LabJackU6 startup cleanup closes a returned U6 if calibration/delay fails,
-  preserves the primary exception and makes successful close idempotent.
+`SharedMirrorMapApplication` injects `ManualMirrorService` and `SharedMapProvider`.
+Manual connect reserves without motion; disconnect releases only the lease. Shared
+mode omits uncoordinated ITC laser control. Standalone tools do not join this session.
 
-### CURRENTLY IMPLEMENTED AND VALIDATED: Phase 2 shared composition
-runtime/shared_application.py owns one process-local InstrumentSession and injects a narrow manual service plus SharedMapProvider-backed acquisition into the existing windows. Manual connect reserves only and remains lazy; disconnect/close releases only its lease. Shared-map mode disables laser controls because ITC ownership is not coordinated. Detached status records report available/busy owner/faulted/closing/closed and connected state without exposing handles or authorizing calls. Standalone launch composition remains unchanged.
+Real composition registers one fixed `time-controller:<canonical-IPv4>` count service
+alongside LabJack. Maps reserve both atomically. IDQ construction/connect/configure/
+count/disconnect stay on the session worker. Partial connect failure attempts cleanup
+and retains its original error. The shared address policy is intentionally narrower
+than general socket hostname resolution: no DNS alias equivalence is claimed. Multiple
+addresses are possible in the session foundation, but this application exposes one
+fixed controller, not dynamic multi-controller discovery. DLT/histogram/stream ownership
+is not migrated. The legacy wrapper may swallow some disconnect errors internally.
 
-### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: shared simulation composition
+Simulation composition owns one synthetic mirror/gate state; counters remain per-map.
+Failure-injection measurement count resets per map. Position/gate ownership persists.
+`gaussian-scene-v1`, coordinate/channel seeding, schema 1 and resume signatures remain
+unchanged. Real failures never select simulation. Diagnostic snapshots are not hardware
+readbacks and do not certify calibration, timing or interlocks.
 
-`SharedMirrorMapApplication(backend="simulation")` owns one synthetic mirror/gate
-state behind the same `InstrumentSession` alias model as the real LabJack. Manual
-moves and shared map acquisition observe that state through services only; GUI code
-does not receive the mutable state or simulated devices. A frozen diagnostic snapshot
-reports position, gate, measurement and closed state without granting access. The
-existing deterministic counter model remains config-bound and does not represent
-application-owned IDQ hardware.
+## Spectrum service, records and loop ownership
 
-### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: shared IDQ count ownership
+`SpectrumService` is canonical orchestration for range and single-centre alignment.
+Range operations produce immutable `SpectrumResult`/`DarkRecord` with configuration
+identity. NPZ is authoritative; CSV/PNG are derivatives. Legacy CSV cannot acquire
+provenance by attaching current settings. Fresh-dark range results may have no raw
+array; alignment explicitly retains both raw and corrected arrays in `AlignmentResult`.
+Alignment is a separate single-centre result contract, not a range SpectrumResult.
 
-Real shared-map composition registers one lazy session resource named
-`time-controller:<canonical-ip>` alongside the application-owned LabJack. The fixed
-application address and each map configuration must resolve to the same canonical IP.
-Controller construction, connect, channel configuration, simultaneous counts and
-close all execute on the InstrumentSession worker. Acquisition receives only a
-lease-scoped count proxy; no controller or ZMQ socket crosses to GUI/acquisition
-threads. The shared map reserves LabJack aliases and IDQ atomically for the complete
-measurement and cleanup. Standalone maps retain their existing per-map controller.
-Shared simulation retains its config-bound deterministic counter and imports no IDQ
-or ZMQ implementation.
+`SpectrumWorker` is an explicit job executor, not a second general device registry.
+It owns one lazy thread/asyncio loop and rejects concurrent complete jobs. States are
+unopened, starting, available, busy, faulted, closing and closed. It does not own a
+persistent HORIBA connection: each service job still connects/configures/operates/
+disconnects on that loop. Separate worker instances are not mutually exclusive; only
+clients injected with the same worker coordinate. There is no cross-process exclusion.
 
-### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: spectrum asyncio worker foundation
+Request/backend mismatch is rejected before worker startup. Startup failure is
+published to callers; close/start races are serialized and self-join is rejected.
+Shutdown refuses an active job, then drains tasks/async generators/default executor,
+closes the loop and joins the thread. A blocked SDK/default-executor call can still
+block shutdown. No forced interrupt or bounded deadline is claimed.
 
-`runtime/spectrum_worker.py` provides one lazy dedicated thread and asyncio loop for
-complete `SpectrumService` jobs. Construction starts no thread or hardware. The first
-job starts the loop; concurrent jobs are rejected with diagnostic owner/job status,
-and sequential jobs cannot interleave. Cancellation remains cooperative at the
-existing service boundaries before backend open and after one complete backend
-operation; native SDK calls are not claimed interruptible. Real operation failures
-fault the worker until teardown. Shutdown refuses an active job, closes the loop and
-joins the thread, and is idempotent after success.
+Cancellation is cooperative before opening and after a complete backend operation,
+not per-frame or inside native calls. Busy ownership lasts through context cleanup.
+Real operation failure faults the worker. Cancellation with failed real disconnect
+also faults it while retaining CancelledError and cleanup notes. Teardown/reconstruction
+is required; no automatic reconnect or synthetic fallback exists.
 
-The foundation does not yet change the ordinary GUI and does not keep a real HORIBA
-connection open between jobs. Each submitted service operation still owns its current
-connect/configure/operate/disconnect backend context, but all of those steps execute
-on the worker's single loop. Later application composition may assign persistent
-backend ownership only after real-SDK validation.
+## GUI ownership and alignment
 
-### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: alignment worker integration
+The ordinary spectrum GUI retains its existing operation-scoped AsyncTaskRunner and
+standalone lifecycle; it does not automatically share SpectrumWorker with alignment.
+Alignment snapshots settings on the UI thread and submits sequential jobs through the
+worker. A Qt timer polls job completion; no raw vendor/loop object enters GUI code.
+Injected workers survive tool close; private standalone workers close after active
+cleanup. Busy is recoverable; real faults require application teardown. Stop/close
+waits for the job boundary. Alignment repeats full connect/disconnect jobs, so no
+high-rate persistent-connection performance is promised.
 
-The recovered bounded alignment window is now a SpectrumWorker client. Settings are
-snapshotted on the Qt thread and submitted as complete SpectrumService alignment-frame
-jobs with owner label `spectrum-alignment`. A QTimer observes only the thread-safe job
-handle; no QThread, asyncio loop, backend or vendor object reaches the GUI. Repetition
-submits the next frame only after the previous job and backend cleanup complete.
-Injected/application-owned workers survive window close; standalone windows own and
-close their private worker after active cancellation/cleanup.
+Native-free `config.horiba_presets` supplies the same gain/speed/default tokens to the
+wrapper and alignment controls. Syncerity minimum is 0.065 s; Symphony minimum is
+0.1 s. Alignment validation and both adapters enforce backend selection and exposure
+floors without a 0.02 s override. No slit/ROI/grating commands were changed by this audit.
 
-Alignment uses the detector preset exposure minima, matching ordinary spectrum
-requests. No alignment-specific minimum-exposure override is used. Alignment dark
-subtraction captures a fresh dark and signal in one complete service job and preserves
-raw plus corrected immutable arrays. Busy conflicts are recoverable; a real worker
-fault requires application-level teardown. No real failure falls back to simulation.
+## Evidence and outstanding work
 
-### CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION
-
-Real wrappers, shared LabJack service and the new real range adapter. The adapter
-calls existing connect/configure/range/dark/disconnect APIs without changing SDK
-commands, presets, voltage limits, acquisition order or successful timing.
-The LabJack failure-path fix adds a close attempt, not movement or gate commands.
-No physical device was used. See [roadmap](refactor-roadmap.md) for known defects.
-
-### PLANNED BUT NOT IMPLEMENTED
-
-Complete shared launcher, central IDQ ownership,
-shared-session synthetic map composition, persistent HORIBA asyncio worker,
-GUI use of SpectrumService/DarkRecord, alignment integration, general operator
-recipes/profiles, camera/laser/shutter/stage simulation and legacy cleanup review.
-
-## Dependency direction and module placement
-
-Composition (runtime factories, future application root) chooses implementations
-and injects dependencies into acquisition/services and GUI controllers.
-GUI -> acquisition/service contracts + config/data; acquisition -> processing +
-config + narrow contracts; runtime adapters -> wrappers + acquisition APIs;
-wrappers -> vendor SDKs. simulation -> config/data/processing, never native drivers.
-io -> data records/config, never GUI. The current spectrum records live beside
-their service; move only if an actual dependency cycle requires a data package.
-No acquisition module imports runtime/spectrum_backend.py. No wrapper imports GUI.
-Existing map config -> simulation model-version dependency is retained, not a new
-pattern to spread. Existing large windows remain legacy migration boundaries.
-
-## Instrument contracts and lifecycle: AGREED TARGET DESIGN
-
-Use structural Protocols for capabilities consumed by a real workflow. Keep the
-existing Mirror/Gate/Counter protocols and new RangeBackend; do not create a
-universal instrument ABC. A gate's close means output action, not disconnect.
-A service resource must expose close() for InstrumentSession. Async backends use
-an async context factory; do not force synchronous lifecycle methods onto them.
-
-New wrappers validate construction parameters before opening where possible;
-construction is normally inert, connect is explicit, connection state describes
-owned handles rather than certifying reachability. Existing eager LabJack/ITC
-constructors remain compatible until adapted at factories. Wrappers contain SDK
-objects, commands, units, readback checks and vendor error translation. Preserve
-causes; add context without swallowing errors. Document owner thread/loop where
-supported by evidence. No arbitrary new timeouts, limits or safe-state commands.
-Factories clean partial startup before returning. Wrapper close attempts all
-independent releases and reports failures; successful close is idempotent. Failed
-close must not be reported as a known physical safe state. Context managers must
-preserve a primary failure and attach cleanup failures. Legacy wrappers do not
-all meet this target yet; the migration matrix is explicit about that.
-Logging belongs at useful boundaries with device/operation context, never secrets
-or per-poll spam. Retain existing loguru/stdlib logging; no global configuration
-inside reusable modules. Application-level log routing is a later composition task.
-
-## Ownership and application lifecycle: AGREED TARGET DESIGN
-
-One application composition root owns sessions and approved profiles, not a global
-singleton. Resource keys represent physical connections, not GUI windows. Reserve
-all required resources atomically for a complete operation and its cleanup.
-Default exclusive access; any shared-read exception requires device-specific
-proof. Visibility of two tools is not permission for concurrent hardware commands.
-
-Keep the synchronous session for reviewed synchronous services. Do not put HORIBA
-coroutines on that worker or reuse objects across AsyncTaskRunner's fresh loops.
-A future persistent asyncio worker owns HORIBA connect/use/disconnect on one loop,
-serializes whole jobs and exposes data-only futures/signals. Its reservation
-integration must cover both detector presets sharing ICL/monochromator, not just
-individual CCDs. This worker is planned, not present.
-
-Tool close cancels its job and waits for cleanup/lease release; it does not close
-an application-owned connection. Application shutdown rejects new work, requests
-cooperative stops, waits for jobs, runs reviewed cleanup and closes resources on
-their owning worker. Blocked native calls remain a limitation, not something a
-mutex or Python cancellation can forcibly fix. Report unavailable/busy/faulted/
-closing states separately; do not auto-reconnect a fault or silently simulate it.
-Process-local reservations do not exclude other applications. Operators must not
-run standalone tools against the same device concurrently.
-
-## Canonical spectrum/dark service
-
-CURRENTLY IMPLEMENTED AND VALIDATED in the service and ordinary spectrum GUI:
-
-1. SpectrumSettings validates finite positive exposure/slit, normalized increasing
-   range, integer tokens/counts and existing reduction rules. The real wrapper
-   still enforces its own preset limits; this service does not override them.
-2. Each service operation opens/configures/uses/closes one backend context on its
-   caller's asyncio loop. There is no persistent connection or resource manager
-   hidden in SpectrumService. Concurrent real service calls are NOT coordinated.
-3. none acquires signal without subtraction. per_center/per_frame delegate the
-   existing range/wrapper capture order and reduction math unchanged.
-4. capture_dark produces an immutable owned DarkRecord with settings, UUID and
-   timezone-bearing capture timestamp. A stored dark is not an enable flag.
-5. pre_taken requires exact SpectrumSettings equality BEFORE opening hardware,
-   then matching finite 1D shapes and wavelength axis at existing 1e-8 nm absolute
-   tolerance. No interpolation, exposure scaling, clipping of negative results,
-   silent raw fallback or automatic replacement dark is performed.
-6. Every settings field participates, including frame reduction/count, overlap,
-   backend and configuration_id. This is deliberately conservative. A change
-   invalidates reuse; switching subtraction off retains the record for later
-   explicit use with matching settings. No mutable service dark cache exists.
-7. configuration_id is a required maintainer context identifier for preset/ROI/
-   grating/calibration changes not represented by fields. It is NOT an observed
-   temperature, verified calibration or safety attestation. Operator/hardware
-   validation remains necessary; no automatic age/temperature expiry is claimed.
-8. Result intensity is the requested display/export data. raw_intensity is kept
-   for none/pre_taken. Fresh-dark reductions do not expose raw frames in the
-   legacy API; raw_intensity is None, never reconstructed after nonlinear math.
-9. Cooperative cancellation checks occur before opening and after a whole backend
-   operation. Context cleanup completes before cancellation escapes. This is not
-   per-frame/centre cancellation or a native abort implementation. Acquisition,
-   shape and calibration errors propagate; failed results are not published.
-10. io/spectrum_records.py stores strict schema-v1 dark NPZ archives with JSON
-    metadata and allow_pickle=False; result exports include settings, correction
-    mode, dark identifier, raw availability and synthetic_data. Exclusive create
-    prevents overwrite; ordinary write failures remove partial files. Abrupt
-    process/power failure may leave a partial archive. No result loader yet.
-    Legacy DarkSpectrum CSV remains unchanged and lacks provenance. Do not attach
-    current settings to a loaded CSV and pretend they describe its capture.
-
-The ordinary spectrum GUI now uses SpectrumService and provenance-bearing NPZ
-darks. It requires three median frames, reports stale settings, retains dark data
-when subtraction is disabled, handles cancellation separately and keeps worker
-ownership until QThread.finished. Legacy CSV remains available only as unverified
-reference data and cannot become a validated DarkRecord.
-
-## Alignment: AGREED TARGET DESIGN / OPEN evidence
-
-Repeated alignment uses the same acquisition/correction policy, not a second dark
-implementation. A future persistent worker avoids reconnecting each frame; use a
-bounded latest-result channel rather than unbounded Qt signals. Stop cooperatively,
-finish cleanup, then release ownership. A stored dark may be reused only under
-matching settings; fresh-dark cadence must be explicit, not hidden in a GUI timer.
-The requested 0.02 s alignment floor conflicts with the uploaded wrapper's
-configure() minima: 0.065 s Syncerity and 0.100 s Symphony. Preserve these values.
-REQUIRES HARDWARE VALIDATION and review of the missing main-branch alignment code
-before deciding the supported live-acquisition floor. Do not bypass configure().
-
-## Configuration: AGREED TARGET DESIGN with annealing precedent
-
-- Maintainer profiles: connection identity, wiring, approved limits, calibration /
-  configuration IDs, allowed capabilities. Existing anneal profile uses protected
-  machine installation and LABTOOLS_INSTRUMENT_PROFILE development override.
-- Operator recipes: experiment ranges, dwell/exposure, channels and output choices
-  within profile limits. Strict JSON schema, finite values, reject unknown fields.
-- Preferences: per-user QSettings layout/display and convenience values; preserve
-  existing keys. Never persist output-enabled state or safety acknowledgement.
-- Session state: connections, leases, faults, dark records and running jobs; do not
-  restore these from preferences as if hardware were connected or safe.
-- Secrets/machine details: external deployment configuration, not source or recipes.
-  Existing IP/VISA defaults are retained; no credentials were added. Examples are
-  unapproved templates, not calibration. Do not commit data, profiles containing
-  secrets, .venv, caches, vendor binaries or migration backups.
-
-## Safety and cleanup
-
-Preserve reviewed measurement-specific ordering. Map cleanup remains checkpoint ->
-home -> gate close, independently attempted before release. Home is zero voltage,
-not universally safe. Shared LabJack shutdown gate-close is already an opt-in
-baseline behavior, not a new manual-GUI disconnect behavior. ITC close releases
-VISA but does not disable emission; SC10 close releases serial but does not prove
-shutter closure. Software output commands/readbacks cannot certify an optical path.
-Laser/shutter/stage restoration policies require explicit workflow review.
-Do not automatically run diagnostics, legacy hyperspectral scans or hardware tests.
-Software never replaces laboratory procedures, physical interlocks or beam checks.
-
-## Decisions and alternatives
-
-### ADR-01: retain existing session, no second universal manager
-Context: baseline already has reservations/fault cleanup. Alternative: replace
-with a universal device ABC/global singleton. Reason: avoid duplicate ownership
-and widespread unvalidated migrations. Consequence: adapters are incremental;
-legacy tools remain outside coordination. Validate shared GUI shutdown later.
-
-### ADR-02: capability protocols, not uniform wrapper inheritance
-Alternative: force all devices into connect/read/close. Reason: async HORIBA,
-borrowed gate/mirror and streaming IDQ have different lifecycles. Consequence:
-contracts grow only with consumers. Real/fake adapter tests share service behavior;
-SDK conformance still requires hardware.
-
-### ADR-03: per-operation spectrum lifecycle first
-Alternative: cache HORIBA immediately. Reason: current Qt runner uses fresh loops
-and no Qt runtime is available here. Consequence: reusable headless service now,
-no live-performance claim; persistent worker and GUI integration are later phases.
-
-### ADR-04: strict provenance-bearing darks, legacy API retained
-Alternative: infer CSV settings or scale exposure. Reason: axis equality alone
-cannot establish acquisition compatibility. Consequence: new service rejects
-unverified legacy darks; old APIs unchanged. Conservative full-settings equality
-may require extra captures. REQUIRES OPERATOR-WORKFLOW VALIDATION for GUI migration.
-
-### ADR-05: explicit synthetic adapter, never fallback
-Alternative: GUI-specific fakes or auto-simulation after failure. Reason: exercise
-one service path and keep measured/synthetic provenance distinct. Consequence:
-toy model validates software only; it has no SDK, noise, timing or stitching model.
-
-### ADR-06: no invented raw data
-Alternative: add dark back to reduced corrected output. Reason: nonlinear frame
-combination is not invertible. Consequence: fresh-dark result exports mark raw
-unavailable until a reviewed low-level result API exposes actual raw frames.
-
-### ADR-07: bounded additive slice instead of untestable GUI rewrite
-Reason: the migration preserved the per-operation backend lifecycle while fixing
-dark provenance and GUI worker ownership through a tested service seam. Consequence:
-live alignment still requires the planned persistent asyncio worker; the ordinary
-GUI must not be used as evidence that alignment performance or hardware timing is
-validated. See the roadmap for remaining acceptance gates and OPEN items.
+Offline fakes test orchestration, not SDK behaviour. QtWidgets tests are present but
+were skipped in the audit environment. Physical LabJack, IDQ, HORIBA, shutter timing,
+voltage calibration and optical safety remain unvalidated. Shared launcher integration,
+wrapper failure reviews, operator-profile generalization and additional simulation
+remain planned. Do not merge solely because headless tests pass.

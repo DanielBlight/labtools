@@ -21,3 +21,11 @@ setup with `LABTOOLS_SPECTRUM_CONFIGURATION_ID` set:
 ```powershell
 uv run --no-sync python -m labtools.gui.alignment_gui_horiba
 ```
+
+## Audit clarifications
+
+Preset controls are native-free and share token/minimum data with the wrapper. The
+settings and adapters reject under-minimum/opposite-backend requests before opening
+hardware. A cancelled real job with failed disconnect faults the worker. Qt-specific
+acceptance remains outstanding in the audit environment; no high-rate persistent
+connection performance is claimed.

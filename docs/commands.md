@@ -65,3 +65,20 @@ perform physical checks; follow the operator guide before using it.
 
 Additional short aliases are `labtools-spectrum`, `labtools-mirror` and
 `labtools-simulate-map`. They do not provide different connection behaviour.
+
+## Source-tree fallback and alignment
+
+If console entry points are absent in an existing unsynced environment, use the
+current source tree explicitly rather than guessing a missing executable:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+uv run --no-sync python -m labtools --help
+uv run --no-sync python -m labtools.simulation.intensity_map --gui
+```
+
+Alignment has a module entry point, not a registered `labtools gui alignment` command.
+Its ordinary module launch is real hardware and requires a reviewed configuration ID;
+see [alignment](horiba-alignment.md). Shared manual/map composition remains a Python
+injection API, not a permanent launcher. Separate standalone tools do not coordinate.
+Remove QT_QPA_PLATFORM=offscreen before interactive GUI checks.

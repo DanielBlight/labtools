@@ -152,3 +152,13 @@ implemented plugin API. Never open a competing connection in a tool constructor.
 Deprecation/removal requires a repository consumer search, documentation/example/
 entry-point review and operator confirmation for external scripts. No removal of
 compatibility code solely because internal imports have moved.
+
+## Audit continuation rules
+
+Native-free detector options live in `config.horiba_presets`; do not import a real
+wrapper merely to populate simulated GUI controls. Alignment validates exposure and
+backend before startup, and real/synthetic adapters reject opposite-backend requests.
+A persistent spectrum loop is not a persistent device connection. Cancellation with
+failed disconnect must retain the original cancellation and fault the real worker.
+Never label skipped Qt modules as validated. Keep the next task in the roadmap and
+handover consistent; do not rename the wrapper-review phase to a launcher phase.

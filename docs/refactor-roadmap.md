@@ -1,155 +1,35 @@
-# Refactor roadmap and wrapper migration matrix
+# Refactor roadmap: audited status
 
-Authoritative remaining work after the 27 October 2026 foundation batch.
-Design: [architecture](architecture.md). Rules: [conventions](development-conventions.md).
-Exact continuation prompts and validation evidence: [handover](ai-handover.md).
+Based on snapshot HEAD `3e5a0c9f41edbbf692faabd9ef5cd6e9b2bc8aab`.
+See [audit](comparative-audit.md) and [handover](ai-handover.md). Offline validation is
+not hardware acceptance. Existing wrapper matrix below remains the review backlog.
 
-## Completed work, with attribution
+## Completed foundations and status
 
-Baseline already implemented: package/CLI/documentation cleanup; explicit map
-simulation; map cleanup/controller extraction; spectrum processing extraction;
-InstrumentSession reservations/fault latch/cleanup allowlist; opt-in LabJack service
-and SharedMapProvider. These were NOT recreated in this batch.
+| Phase | Actual state | Remaining acceptance |
+|---|---|---|
+| Structural cleanup and processing | Implemented; offline tested | Standalone Windows/driver acceptance |
+| 1: spectrum service and ordinary GUI | Implemented; headless tests pass | Qt lifecycle/export tests skipped here |
+| 2: shared manual/map composition | Implemented opt-in, not a launcher | Qt/physical LabJack validation |
+| 3a: shared simulation | Implemented; deterministic/resume tests pass | Qt interaction acceptance; not a physical model |
+| 3b: IDQ count ownership | Implemented for one fixed canonical IPv4 in shared app | Physical socket/firmware validation; not DNS/multi-controller discovery |
+| 4a: spectrum loop worker | Implemented persistent loop only | No persistent connection; race fixes tested, SDK/Qt validation outstanding |
+| 4b: alignment client | Implemented with separate immutable single-centre result | Partial acceptance: Qt/fault/close coverage and physical shutter timing outstanding |
 
-This batch implemented: validated SpectrumSettings, reusable headless SpectrumService,
-RangeBackend contract, real adapter delegating existing range functions, deterministic
-synthetic adapter, immutable provenance-bearing DarkRecord/SpectrumResult, strict
-NPZ dark load/save and result export, representative synthetic workflow, LabJack
-partial-startup cleanup/idempotent successful close, and 60 new offline test cases.
-Subsequent checkpoints migrated the ordinary spectrum GUI to the service and
-composed manual mirror control plus intensity mapping around one application-owned
-InstrumentSession. The current clean snapshot at 5225d07 passes 267 offline tests
-with three Qt-dependent skips in the reconstruction environment; no physical
-hardware validation is claimed. No complete launcher, persistent HORIBA worker,
-shared IDQ ownership or alignment integration has been built.
+The audit corrected exposure/backend guards, native-free options, IDQ partial startup,
+worker startup/close races and cancellation-cleanup faulting. It did not implement a
+shared launcher, DLT/histogram ownership or persistent HORIBA connections.
 
-## Phase 1: spectrum GUI service migration
+## Next bounded checkpoint: Windows/Qt lifecycle acceptance
 
-Status: IMPLEMENTED AND TESTED IN THE WINDOWS DEVELOPMENT ENVIRONMENT; PHYSICAL
-HORIBA VALIDATION REMAINS REQUIRED. Prerequisite was the foundation checkpoint and
-a usable PyQt6 environment for fake/offscreen tests. Suitable model: GPT-6 or another
-capable coding model; use deeper reasoning for lifecycle failures.
+Run the skipped GUI modules and add deterministic blocked-job tests for busy,
+faulted, cancellation, deferred close and private/injected ownership. Resolve failures
+before adding a launcher. Preserve 0.065 s Syncerity and 0.1 s Symphony minima. Do not
+combine this checkpoint with new devices, persistent connection caching or UI redesign.
 
-Files: gui/spectrum_gui_horiba.py, gui/async_runner.py if needed, new focused
-GUI/controller tests, existing spectrum service/records only for demonstrated gaps.
-Inject SpectrumService rather than implementing a second acquisition path. Snapshot
-all settings on the UI thread before starting work; add a maintainer-provided
-configuration_id composition input (not an operator's arbitrary calibration claim).
-Capture/load provenance-bearing NPZ darks; legacy CSV may remain an unverified
-inspection/export path, but must not silently become a valid DarkRecord. Explain
-recapture requirement. Show dark validity after each relevant setting change.
-Fix median minimum to three to match the wrapper. Display raw/corrected identity
-and save immutable result metadata, not mutable widget values at completion.
-Retain legacy CSV/PNG exports as explicit derivatives, not provenance-bearing
-archives. Preserve window appearance, preset minima, laser controls and launch APIs.
-
-Handle cooperative CancelledError explicitly: current AsyncTaskRunner catches
-Exception only, while asyncio.CancelledError derives from BaseException. Ensure a
-cancelled operation terminates the thread and resets controls without an unhandled
-worker exception. Keep busy/worker ownership until QThread.finished, not just result
-emission. Do not introduce persistent connections or alignment in this phase.
-
-Tests/checks: fake service injection; no native imports in synthetic mode; invalid
-settings before device open; dark capture -> exposure/preset/gain/speed/slit/range/
-overlap/reduction change -> blocked reuse; disabled subtraction; NPZ roundtrip;
-legacy CSV rejection message; raw/corrected save metadata; cancel/error/close/restart;
-thread ownership until finished; full offline suite and changed-file lint/format.
-Implementation: the ordinary GUI now injects SpectrumService and a required maintainer configuration_id, snapshots immutable settings on the UI thread, uses provenance-bearing NPZ darks, reports stale darks, retains dark data when subtraction is disabled, exports immutable SpectrumResult metadata, and keeps worker ownership until QThread.finished. Legacy CSV is inspection-only and requires recapture. Median now requires three frames.
-
-Validation here: full offline suite 263 passed, 3 skipped, with 172 inherited warnings. The three skipped modules require PyQt6/QtWidgets, including the new offscreen Phase 1 window suite; therefore GUI acceptance is NOT claimed. Compile/build and changed-file formatting checks are recorded in the handover.
-
-Acceptance remains: the new fake Qt tests must execute (not skip) on the laboratory environment and pass with no regressions. Hardware is not
-required for software tests; laboratory acceptance IS required before release.
-Risk: CSV workflow change, signal ordering, premature busy reset, Qt cancellation.
-Checkpoint: one reviewed commit, no main merge: "Route spectrum GUI through tested spectrum service".
-
-## Phase 2: shared manual/map application composition
-
-Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL LABJACK VALIDATION REQUIRED.
-Prerequisites were stable session tests and a Qt fake environment.
-Model: strong reasoning for composition, capable coding model for bounded wiring.
-Files: runtime/session.py diagnostic API if required, runtime/shared_map.py,
-gui/mirror_controller.py, gui/mirror_voltage_gui.py, gui/intensity_map_gui.py,
-new application composition module and tests.
-
-Add data-only status snapshots (busy owner/fault/connected/closing), an injected
-manual-mirror adapter and one application owner of both windows. Busy is an expected
-conflict, not a reason to kill the manual worker or reset the session. Preserve
-standalone defaults and manual no-move-on-connect/disconnect/exit behavior. Shared
-mode must not open a second LabJack. Explicitly disable or separately compose laser
-controls; do not claim all resources are coordinated while ITC/IDQ remain independent.
-Tests: manual -> map -> manual same fake connection, conflict during count and
-cleanup, fault state, close one tool vs app shutdown, cancellation and blocked-job
-shutdown refusal. Acceptance: no duplicate connection, no release before cleanup,
-status truthful. Hardware: reviewed LabJack wiring/motion/gate tests before use.
-Risk: alias mismatch, manual conflict killing worker, unintended gate action.
-Implementation: added one application-owned composition boundary, a narrow manual-mirror service, shared map acquisition injection, detached session status snapshots, and shared-mode laser-control disabling. The standalone launch paths remain unchanged. Fake/offline tests validate lazy single-connection reuse, worker-thread calls, alias conflicts, recoverable busy state, fault truthfulness and shutdown refusal. Existing shared-map tests retain whole-map cleanup ownership. Qt execution remains environment-dependent and physical LabJack/mirror/gate behaviour is not validated.
-Checkpoint: "Compose shared mirror and map tools with one session".
-
-## Phase 3a: shared simulation composition
-
-Status: IMPLEMENTED AND OFFLINE VALIDATED; real hardware is unaffected.
-
-The shared manual/map composition owns one synthetic mirror/gate state behind the
-same InstrumentSession aliases as real mode. Manual control and map acquisition
-share that state without exposing mutable devices to GUI code. The existing
-config-bound deterministic counter remains per-map; it is not application-owned IDQ
-hardware. MODEL_VERSION, deterministic seed behaviour, checkpoint/output schema,
-resume signatures, paths and synthetic labelling remain unchanged. There is no
-real-to-simulation fallback.
-
-Tests cover native-import isolation, connect-without-motion, manual/map/manual state
-reuse, reservation conflicts, shutdown refusal, deterministic maps, stop/resume
-array equivalence, schema/model constants and real failure without fallback.
-Checkpoint: "Compose shared simulation state for mirror and map tools".
-
-## Phase 3b: IDQ count-service ownership
-
-Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL IDQ VALIDATION REQUIRED.
-
-Real shared composition owns one lazy count service per canonical IP resource key,
-`time-controller:<canonical-ip>`. The current wrapper accepts an IP address only, so
-canonicalisation strips surrounding whitespace and uses Python's strict IP textual
-form; hostnames and invented aliases are rejected. The map configuration must match
-the composition address. Controller construction, connect, configure, count and close
-run on the InstrumentSession worker. Map reservation atomically includes LabJack and
-IDQ for the whole measurement and cleanup. Busy conflicts report their owner and do
-not open or fault either service. Standalone composition and deterministic shared
-simulation are unchanged; no real-to-synthetic fallback exists.
-
-DLT process ownership, timestamp streaming, streaming analysis, histogram and
-coincidence ownership, channel discovery and firmware policy remain planned. No
-physical controller or ZMQ endpoint was contacted.
-Checkpoint: "Centralise IDQ count ownership in the shared session".
-
-## Phase 4a: persistent HORIBA asyncio-worker foundation
-
-Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL HORIBA VALIDATION REQUIRED.
-
-One lazy dedicated thread/asyncio loop serializes complete SpectrumService jobs. The
-policy rejects concurrent submissions rather than queuing them. Busy conflicts report
-owner and job labels and do not fault or duplicate the worker. Cancellation is
-cooperative only at existing service boundaries; native SDK calls are not claimed
-interruptible. Real operation failures fault the worker until teardown. Successful
-shutdown stops/closes the loop, joins the thread and is idempotent.
-
-The ordinary standalone GUI remains unchanged and operation-scoped backend contexts
-still connect/configure/operate/disconnect within each job on the worker loop. No
-hidden global connection, alignment feature or physical HORIBA contact was added.
-Checkpoint: "Add persistent HORIBA asyncio worker foundation".
-
-## Phase 4b: alignment client integration
-
-Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL ALIGNMENT VALIDATION REQUIRED.
-
-The recovered alignment window now submits complete single-centre SpectrumService
-jobs through SpectrumWorker. Repetition is reject-policy compatible and strictly
-sequential. Settings are snapshotted on the UI thread, immutable results drive the
-plot, and fresh-dark subtraction preserves raw/corrected identity. Busy is recoverable;
-real faults require application teardown. Close requests cooperative cancellation and
-waits for worker/backend cleanup. Injected workers remain application-owned; standalone
-windows close private workers. The ordinary spectrum GUI remains unchanged.
-Checkpoint: "Integrate alignment with the spectrum worker".
+Phase 7 remains the shared launcher phase. Earlier handover references to a "Phase 5a"
+launcher were inconsistent with the established Phase 5 wrapper review and are superseded.
+A launcher may be considered after this acceptance checkpoint; it is not implemented.
 
 ## Phase 5: wrapper reliability and hazardous-workflow review
 

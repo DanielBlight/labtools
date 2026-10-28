@@ -1,145 +1,99 @@
-# AI handover
+# Development handover: comparative audit checkpoint
 
-Start here. `labtools` controls physical laboratory instruments. Reliability,
-resource ownership, deterministic cleanup, explicit backend selection and truthful
-failure reporting take priority over architectural uniformity.
+## Starting identity and evidence
 
-## Repository state
+Current snapshot: `labtools_source_20261028_150404.txt`, created
+2026-10-28T15:04:04.4560095Z, branch `feature/shared-instrument-session`, HEAD
+`3e5a0c9f41edbbf692faabd9ef5cd6e9b2bc8aab`, clean index/worktree and upstream +0/-0.
+Baseline snapshot: `labtools_source_20261027_175907.txt`, created
+2026-10-27T17:59:07.2679251+00:00, HEAD
+`385df0dbfbc58f61200030c6165238404d92bed2`, with recorded uncommitted shared-backend work.
+These are snapshot identities, not a claim about the user's live checkout. Inspect
+actual Git status before any edit. No Git mutation or hardware operation was performed.
 
-This handover describes the repository at commit `5225d07` on
-`feature/shared-instrument-session` after the spectrum-service and shared
-mirror/map checkpoints. Inspect the actual code and Git status before changing it;
-this document never overrides a newer implementation.
+Read [architecture](architecture.md), [audit](comparative-audit.md),
+[roadmap](refactor-roadmap.md) and [conventions](development-conventions.md).
+Historical batch notes are not current task lists.
 
-Canonical sources:
+## Implemented
 
-- [Architecture](architecture.md): current and target dependency/lifecycle model.
-- [Development conventions](development-conventions.md): mandatory implementation rules.
-- [Roadmap](refactor-roadmap.md): completed and remaining bounded phases.
-- [Commands](commands.md): supported entry points and operator commands.
+- Lazy standalone CLI/launchers and compatibility exports.
+- InstrumentSession reservations, aliases, lazy services, fault latching and reviewed cleanup.
+- Shared manual mirror/map composition, shared synthetic mirror/gate state and fixed-address
+  shared IDQ count service. Standalone paths remain independent.
+- SpectrumService, immutable range/dark records, NPZ persistence and ordinary GUI migration.
+- Dedicated spectrum asyncio-loop worker, but operation-scoped backend connections.
+- Alignment service/worker client with fresh-dark subtraction and immutable raw/corrected data.
+- Native-free detector option data shared by wrapper and alignment; minima 0.065/0.1 s.
 
-Historical refactor notes retain technical context but are not current task lists.
+Audit corrections: partial IDQ startup cleanup; alignment exposure/backend guards;
+worker startup/close race and startup-error reporting; worker request/backend guard;
+failed-disconnect cancellation faulting; native-free alignment construction; per-map
+synthetic failure counter; clearer alignment submission/fault presentation.
 
-## Currently implemented and offline validated
+## Ownership rules and compatibility
 
-- Lazy CLI/standalone launchers for annealing, intensity maps, spectra and manual
-  mirror control.
-- Strict annealing recipes and maintainer-controlled instrument profiles.
-- Resumable intensity-map acquisition with cooperative point-boundary cancellation,
-  checkpointing and independently attempted checkpoint/home/gate cleanup.
-- Explicit map simulation with deterministic model/version, coordinate/channel seeds
-  and resume-signature validation.
-- Process-local `InstrumentSession` reservations, physical-resource aliasing, lazy
-  connection, worker-thread ownership, fault latching and reviewed cleanup allowlists.
-- Shared `LabJackService` and `SharedMapProvider` adapters.
-- `SpectrumService`, validated immutable settings/results, explicit real/synthetic
-  backends, provenance-bearing NPZ dark records and result exports.
-- The ordinary HORIBA spectrum GUI uses the spectrum service. It snapshots settings
-  on the UI thread, rejects legacy CSV as validated dark provenance, reports stale
-  darks, keeps dark enablement separate from stored data, exports immutable result
-  metadata, handles cancellation separately and retains worker ownership until
-  `QThread.finished`.
-- `SharedMirrorMapApplication` composes manual mirror control and intensity mapping
-  around one application-owned session. `ManualMirrorService` exposes only lease,
-  movement and status operations. Shared mode disables uncoordinated laser controls.
-- Detached status records report session/resource state without exposing handles or
-  bypassing reservations.
-- Shared simulation composition now owns one synthetic mirror/gate state behind the
-  same session aliases as real mode. Manual and map tools share it without exposing
-  mutable state; deterministic counter behaviour remains per-map and config-bound.
-- Real shared-map composition owns a lazy IDQ count service keyed as
-  `time-controller:<canonical-ip>`. IDQ construction/use/close stays on the session
-  worker, and maps reserve LabJack plus IDQ atomically through cleanup. Standalone
-  maps and shared simulation keep their established counter composition.
-- A lazy spectrum worker owns one dedicated thread and asyncio loop and rejects
-  concurrent complete SpectrumService jobs. It reports immutable lifecycle status,
-  retains busy ownership through service cleanup and faults after real operation
-  failure. The recovered alignment window is its first client: it snapshots settings
-  on the UI thread, submits sequential service jobs and distinguishes injected from
-  privately owned worker shutdown.
+InstrumentSession remains the synchronous resource authority. Hold leases through all
+cleanup. Tool close is not application shutdown. IDQ sockets belong to the session
+worker. HORIBA objects belong to the job's asyncio loop; never cache them across
+AsyncTaskRunner loops. Only clients sharing the same SpectrumWorker coordinate jobs.
+Worker close refuses active jobs. Native calls are not forcibly interruptible.
 
-These statements describe software behaviour exercised by fake/offline tests. They
-are not claims about physical hardware, calibration, optical safety or vendor SDKs.
+Keep physical commands/units/pins/limits, QSettings, CLI/import paths, schema 1,
+resume signatures, deterministic model and raw/dark provenance. No real failure may
+fall back to simulation. No 0.02 s alignment override. Negative corrected values stay.
+Keep `io/`; map persistence extraction is a separate future task.
 
-## Implemented but requiring physical hardware validation
+## Validation in this audit environment
 
-- Real HORIBA connection/configure/acquire/disconnect through the service adapter.
-- LabJack partial-startup cleanup and application-owned manual/map connection reuse.
-- Mirror voltage movement, installed DAC calibration, DIO wiring and gate polarity.
-- SC10, ITC4000, rotation-stage, camera and IDQ wrapper lifecycle behaviour.
-
-Do not run `--run-hardware`, vendor diagnostics or legacy hyperspectral acquisition
-without an operator-reviewed setup. Software does not replace interlocks or laboratory
-procedures. Zero-voltage mirror home is not universally a safe optical state.
-
-## Non-negotiable design rules
-
-- Use the existing `InstrumentSession`; do not introduce a global singleton or a
-  second resource manager.
-- Reserve physical resources for the whole operation and its cleanup. Mirror and
-  SPAD gate alias the same LabJack resource.
-- GUI code receives services/controllers. It must not construct competing device
-  connections in shared mode or contain the canonical experiment implementation.
-- Do not return raw vendor handles to GUI code.
-- HORIBA connect/use/disconnect remains on one asyncio loop. Persistent reuse needs
-  the planned dedicated asyncio worker; do not cache objects across `AsyncTaskRunner`
-  jobs.
-- Select real or simulated backends explicitly. Never fall back to simulation after
-  a real connection failure, and never describe simulation as hardware validation.
-- Preserve vendor commands, units, limits, pin defaults, timing, QSettings keys,
-  output formats and checkpoint signatures unless an intentional change is separately
-  reviewed, documented and tested.
-- Preserve primary failures and report cleanup failures. Broad catches are permitted
-  only at reviewed GUI/worker/cleanup boundaries and must be documented locally.
-- Do not manufacture dark provenance, calibration identity, raw frames after nonlinear
-  reduction, or a known safe state after failed cleanup.
-- Treat `vendor/` as reference material. Do not reformat or silently correct it;
-  copy understood behaviour into first-party wrappers with tests and source notes.
-
-## Validation baseline
-
-The 28 October 2026 source snapshot was clean at `5225d07`. In the reconstruction
-environment the full offline suite reported `267 passed, 3 skipped` with inherited
-Matplotlib/pyparsing warnings. Python compilation and CLI help passed. PyQt6 and Ruff
-were unavailable in that environment, so use the checked-in `uv.lock` and the actual
-Windows development environment for final Qt and Ruff acceptance.
-
-Run before every checkpoint:
+Python 3.12.15, installed scientific packages rather than a reproduced uv.lock environment.
+Baseline: 203 passed, 2 skipped, 172 warnings.
+Current before fixes: 292 passed, 4 skipped, 172 warnings.
+Corrected: 303 passed, 4 skipped, 172 warnings.
+New audit regressions: 11 passed. Earlier focused affected selection: 62 passed.
+Four Qt-dependent modules skipped because PyQt6 is unavailable. Ruff unavailable;
+no Ruff-clean claim. Matplotlib/pyparsing deprecation warnings remain.
+Compilation, CLI help, local Markdown links, TOML parsing, native-free smoke and wheel
+build are recorded in the audit report. Lockfile/pyproject were inspected and unchanged;
+the exact Windows locked environment still requires local validation.
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
 $env:QT_QPA_PLATFORM = "offscreen"
 $env:MPLBACKEND = "Agg"
 uv run --no-sync python -m pytest -q
-uv run --no-sync ruff format --check src tests
-uv run --no-sync ruff check src tests
+uv run --no-sync python -m compileall -q src tests examples
 uv run --no-sync python -m labtools --help
 git diff --check
 git status --short
 ```
 
-Repository-wide Ruff excludes `vendor/`. Do not auto-fix the whole tree inside a
-functional migration; review changed-file fixes first and keep broad cleanup separate.
+Run Ruff on the installer's changed Python list, then the intended repository policy.
+Do not use unsafe fixes or mix a whole-tree formatting sweep into this checkpoint.
+Remove QT_QPA_PLATFORM=offscreen before interactive GUI testing.
 
-## Planned, not implemented
+## Physical validation still required
 
-- IDQ DLT/timestamp streaming, histogram and coincidence ownership.
-- Persistent HORIBA asyncio worker and alignment integration.
-- Complete shared launcher with truthful availability/busy/fault presentation.
-- General instrument-profile/recipe coverage and additional device simulations.
-- Remaining wrapper reliability work and eventual compatibility retirement after
-  internal and external consumers are checked.
+LabJack wiring/voltage calibration and gate timing; IDQ firmware/channel/timeout/socket
+lifecycle; HORIBA preset discovery, shutter/dark correctness, exposure timing and SDK
+loop teardown. Existing SC10/ITC/camera/stage and hazardous anneal/hyperspectral paths
+are not certified by these tests. No physical endpoint was contacted.
 
 ## Next bounded task
 
-Implement Phase 5a only: the minimum shared application launcher/composition surface
-for the already migrated manual mirror, map and alignment tools. Present truthful
-available/busy/faulted state and preserve standalone commands. Do not add cryostat or
-piezo wrappers, IDQ streaming, new experiment workflows or hardware diagnostics.
+Finish Windows/Qt acceptance and alignment lifecycle hardening before a shared launcher:
+run the skipped modules, test busy/fault/deferred close with blocked fake operations,
+and verify repeated start/stop/private-versus-injected ownership. Address any failures
+in one checkpoint. Do not combine this with persistent HORIBA connections, new launcher
+UI, IDQ streaming, profile generalization or broad wrapper rewrites.
 
-## Git/checkpoint workflow
+Known follow-ups: same-second map output-directory collision; fixed shared IDQ IPv4
+policy and explicit counter-provider compatibility; native wrapper disconnect-error
+visibility; tracked migration/data artifacts. No deletion of those artifacts was made.
 
-Work on a feature branch. Inspect and preserve unrelated changes. Do not have an
-assistant commit, merge, push, reset or switch branches. After validation, inspect
-`git diff --check`, `git diff --stat` and `git status --short`; commit one bounded
-checkpoint yourself. Record unavailable checks and physical validation separately.
+## Git workflow
+
+Installer targets the exact current snapshot, including any future intended dirty
+state only if its affected bytes match. It does not stage/commit/merge/push/reset.
+Review changed files and preserve unrelated changes. Keep backups outside the repo.
+Do not merge until local Ruff/Qt acceptance and required physical review are recorded.

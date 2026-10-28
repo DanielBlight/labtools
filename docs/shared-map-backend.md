@@ -1,5 +1,10 @@
 # Shared mirror/map backend: opt-in integration boundary
 
+> Historical checkpoint record. Some status and installer references below are superseded.
+> Use [current architecture](architecture.md), [handover](ai-handover.md) and
+> [roadmap](refactor-roadmap.md) for implemented status and the next task.
+
+
 > Historical batch/backlog note. Current implementation status and task order are
 > authoritative in [architecture](architecture.md), [roadmap](refactor-roadmap.md)
 > and [handover](ai-handover.md). Technical details below are retained for context.

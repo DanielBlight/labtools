@@ -31,18 +31,13 @@ from PyQt6.QtWidgets import (
 )
 
 from labtools.acquisition.alignment_spectrum import AlignmentSettings
+from labtools.config.horiba_presets import detector_options
 from labtools.runtime.spectrum_backend import create_spectrum_service
 from labtools.runtime.spectrum_worker import (
     SpectrumWorker,
     SpectrumWorkerBusyError,
     SpectrumWorkerFaultedError,
 )
-
-
-def detector_options(preset):
-    from labtools.devices.horiba_spectrometer import HoribaSpectrometer
-
-    return HoribaSpectrometer.preset_options(preset)
 
 
 class HoribaAlignmentWindow(QMainWindow):
@@ -70,6 +65,8 @@ class HoribaAlignmentWindow(QMainWindow):
         self._backend = backend
         self._options_provider = options_provider
         self._owns_worker = worker is None
+        if worker is not None and worker.status().backend != backend:
+            raise ValueError("Alignment backend does not match injected worker")
         self._worker = worker or SpectrumWorker(
             create_spectrum_service(backend=backend), backend=backend
         )
@@ -204,6 +201,8 @@ class HoribaAlignmentWindow(QMainWindow):
             self._finish(f"Spectrum resource busy: {exc}")
         except SpectrumWorkerFaultedError:
             self._finish("Spectrum worker faulted; application teardown is required")
+        except (RuntimeError, ValueError) as exc:
+            self._finish(f"Cannot start alignment: {exc}")
 
     @pyqtSlot()
     def _poll_job(self):
@@ -219,7 +218,12 @@ class HoribaAlignmentWindow(QMainWindow):
             self._finish("Spectrum worker faulted; application teardown is required")
         except BaseException:  # noqa: BLE001 - GUI reports worker job failures
             details = traceback.format_exc()
-            self._finish("Alignment failed")
+            message = "Alignment failed"
+            if self._worker.status().state == "faulted":
+                message += "; application teardown is required"
+            self._finish(message)
+            if self._close_pending:
+                return
             box = QMessageBox(self)
             box.setWindowTitle("Alignment failed")
             box.setIcon(QMessageBox.Icon.Critical)

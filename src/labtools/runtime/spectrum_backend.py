@@ -74,6 +74,8 @@ async def open_real_range(
             if primary is None:
                 raise
             primary.add_note(f"HORIBA disconnect also failed: {exc!r}")
+            # A cancelled job with failed cleanup must not advertise a healthy worker.
+            primary._labtools_cleanup_failed = True
 
 
 def create_spectrum_service(*, backend: str) -> SpectrumService:
@@ -93,8 +95,9 @@ def create_spectrum_service(*, backend: str) -> SpectrumService:
 @asynccontextmanager
 async def open_real_alignment(settings, *, spectrometer_factory=None):
     """One single-centre frame using the detector preset's normal exposure floor."""
-    import numpy as np
-
+    settings.validate()
+    if settings.backend != "real":
+        raise ValueError("Real alignment adapter refuses simulation settings")
     if spectrometer_factory is None:
         from labtools.devices.horiba_spectrometer import HoribaSpectrometer
 
@@ -150,3 +153,5 @@ async def open_real_alignment(settings, *, spectrometer_factory=None):
             if primary is None:
                 raise
             primary.add_note(f"HORIBA disconnect also failed: {exc!r}")
+            # A cancelled job with failed cleanup must not advertise a healthy worker.
+            primary._labtools_cleanup_failed = True

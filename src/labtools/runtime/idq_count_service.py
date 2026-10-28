@@ -30,7 +30,14 @@ class IDQCountService:
             controller_factory = IDQTimeController
         self.address = address
         self._controller = controller_factory(address)
-        self._controller.connect()
+        try:
+            self._controller.connect()
+        except BaseException as primary:
+            try:
+                self._controller.disconnect()
+            except BaseException as cleanup:  # noqa: BLE001 - retain partial-startup cleanup failure
+                primary.add_note(f"Partial IDQ startup cleanup failed: {cleanup!r}")
+            raise
         self._closed = False
 
     def configure_channel(self, channel, *, threshold_v, edge, enabled=True):

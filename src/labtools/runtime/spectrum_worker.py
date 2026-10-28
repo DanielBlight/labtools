@@ -71,6 +71,8 @@ class SpectrumWorker:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ready = Event()
         self._active: Future | None = None
+        self._close_lock = RLock()
+        self._startup_error: BaseException | None = None
 
     def status(self) -> SpectrumWorkerStatus:
         with self._lock:
@@ -79,14 +81,24 @@ class SpectrumWorker:
             )
 
     def _thread_main(self) -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        with self._lock:
-            self._loop = loop
-            self._thread_id = get_ident()
-            if self._state == "starting":
-                self._state = "available"
-        self._ready.set()
+        loop = None
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            with self._lock:
+                self._loop = loop
+                self._thread_id = get_ident()
+                if self._state == "starting":
+                    self._state = "available"
+        except BaseException as exc:  # noqa: BLE001 - publish startup failure to waiting callers
+            with self._lock:
+                self._startup_error = exc
+                self._state = "faulted"
+            if loop is not None:
+                loop.close()
+            return
+        finally:
+            self._ready.set()
         try:
             loop.run_forever()
         finally:
@@ -97,6 +109,8 @@ class SpectrumWorker:
                 loop.run_until_complete(
                     asyncio.gather(*pending, return_exceptions=True)
                 )
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.run_until_complete(loop.shutdown_default_executor())
             loop.close()
 
     def _ensure_started(self) -> None:
@@ -113,6 +127,15 @@ class SpectrumWorker:
             elif self._state in {"closing", "closed"}:
                 raise RuntimeError(f"Spectrum worker is {self._state}")
         self._ready.wait()
+        if self._startup_error is not None:
+            raise RuntimeError(
+                "Spectrum worker startup failed"
+            ) from self._startup_error
+
+    def _validate_request(self, settings) -> None:
+        settings.validate()
+        if settings.backend != self._backend:
+            raise ValueError("Spectrum settings backend does not match worker")
 
     def _submit(
         self,
@@ -149,7 +172,14 @@ class SpectrumWorker:
             except BaseException as exc:  # noqa: BLE001 - preserve job failure after state cleanup
                 failure = exc
             with self._lock:
-                if failure is None or cancelled or self._backend == "simulation":
+                cleanup_failed = bool(
+                    getattr(failure, "_labtools_cleanup_failed", False)
+                )
+                if (
+                    failure is None
+                    or (cancelled and not cleanup_failed)
+                    or self._backend == "simulation"
+                ):
                     self._state = "available"
                 else:
                     self._state = "faulted"
@@ -162,12 +192,12 @@ class SpectrumWorker:
                 result_future.set_exception(failure)
 
         assert loop is not None
-        active = asyncio.run_coroutine_threadsafe(run(), loop)
         with self._lock:
-            self._active = active
+            self._active = asyncio.run_coroutine_threadsafe(run(), loop)
         return SpectrumJob(result_future, cancel_event)
 
     def test_connection(self, settings, *, owner="spectrum") -> SpectrumJob:
+        self._validate_request(settings)
         return self._submit(
             owner,
             "test-connection",
@@ -177,6 +207,7 @@ class SpectrumWorker:
         )
 
     def capture_dark(self, settings, *, owner="spectrum") -> SpectrumJob:
+        self._validate_request(settings)
         return self._submit(
             owner,
             "capture-dark",
@@ -188,6 +219,7 @@ class SpectrumWorker:
     def acquire(
         self, settings, *, owner="spectrum", dark_mode="none", dark=None
     ) -> SpectrumJob:
+        self._validate_request(settings)
         return self._submit(
             owner,
             "acquire",
@@ -200,6 +232,7 @@ class SpectrumWorker:
         )
 
     def acquire_alignment(self, settings, *, owner="spectrum-alignment") -> SpectrumJob:
+        self._validate_request(settings)
         return self._submit(
             owner,
             "alignment-frame",
@@ -209,24 +242,31 @@ class SpectrumWorker:
         )
 
     def close(self) -> None:
-        with self._lock:
-            if self._state == "closed":
-                return
-            if self._state == "busy":
-                raise SpectrumWorkerBusyError(
-                    f"Spectrum worker busy; owner={self._owner!r}, job={self._job!r}"
-                )
-            self._state = "closing"
-            loop, thread = self._loop, self._thread
-        if loop is not None:
-            loop.call_soon_threadsafe(loop.stop)
-        if thread is not None:
-            thread.join()
-        with self._lock:
-            self._loop = None
-            self._thread = None
-            self._thread_id = None
-            self._state = "closed"
+        """Refuse active jobs; serialize shutdown and join after lazy startup."""
+        if get_ident() == self._thread_id:
+            raise RuntimeError("Cannot close spectrum worker from its own thread")
+        with self._close_lock:
+            with self._lock:
+                if self._state == "closed":
+                    return
+                if self._state == "busy":
+                    raise SpectrumWorkerBusyError(
+                        f"Spectrum worker busy; owner={self._owner!r}, job={self._job!r}"
+                    )
+                self._state = "closing"
+                thread = self._thread
+            if thread is not None:
+                self._ready.wait()
+                with self._lock:
+                    loop = self._loop
+                if loop is not None and not loop.is_closed():
+                    loop.call_soon_threadsafe(loop.stop)
+                thread.join()
+            with self._lock:
+                self._loop = None
+                self._thread = None
+                self._thread_id = None
+                self._state = "closed"
 
     def is_alive(self) -> bool:
         with self._lock:

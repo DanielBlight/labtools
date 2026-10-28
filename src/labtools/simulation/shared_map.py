@@ -88,6 +88,9 @@ def synthetic_counter_provider(state: SimulatedMapState):
     def provide(config):
         if state.closed:
             raise RuntimeError("Simulated application state is closed")
+        # Reservations exclude manual/map mutation throughout this provider scope.
+        # The legacy model's failure limit counts points in this map, not app lifetime.
+        state.measurements = 0
         yield SimulatedTimeController(state, config)
 
     return provide

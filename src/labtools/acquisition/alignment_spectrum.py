@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from labtools.acquisition.spectrum_service import owned_vector
+from labtools.config.horiba_presets import detector_options
 
 
 @dataclass(frozen=True)
@@ -37,8 +38,12 @@ class AlignmentSettings:
                 raise ValueError(f"{name} must be finite")
         if not 0 <= self.centre_nm <= 2200:
             raise ValueError("Centre must be between 0 and 2200 nm")
-        if not 0 < self.exposure_s <= 1000:
-            raise ValueError("Exposure must be positive and no greater than 1000 s")
+        minimum = detector_options(self.preset)["minimum_exposure_s"]
+        if not minimum <= self.exposure_s <= 1000:
+            raise ValueError(
+                f"Exposure for {self.preset} must be at least {minimum:g} s "
+                "and no greater than 1000 s"
+            )
         if type(self.subtract_dark) is not bool:
             raise ValueError("subtract_dark must be a boolean")
         if type(self.gain) is not int or type(self.speed) is not int:

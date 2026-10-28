@@ -11,6 +11,7 @@ from horiba_sdk.devices.device_manager import DeviceManager
 from horiba_sdk.devices.single_devices.monochromator import Monochromator
 from loguru import logger
 
+from labtools.config.horiba_presets import detector_options
 from labtools.processing.spectrum import CombineMode, combine_frames
 
 # CCD indices in device_manager.charge_coupled_devices
@@ -44,6 +45,7 @@ class HoribaSpectrometer:
 
     PRESETS: ClassVar[dict[str, dict[str, object]]] = {
         "syncerity": {
+            **detector_options("syncerity"),
             "ccd_index": CCD_SYNCERITY,
             "expected_device_type": "HORIBA Syncerity",
             "expected_chip_width": 1024,
@@ -58,22 +60,9 @@ class HoribaSpectrometer:
                 "y_size": 256,
                 "y_bin": 256,
             },
-            "default_gain": 2,
-            "default_speed": 0,
-            "gains": (
-                ("Best Dynamic Range", 1),
-                ("High Sensitivity", 2),
-                ("High Light", 0),
-            ),
-            "speeds": (
-                ("1 MHz", 1),
-                ("1 MHz Ultra", 2),
-                ("500 kHz Wrap", 127),
-                ("45 kHz", 0),
-            ),
-            "minimum_exposure_s": 0.065,
         },
         "symphony": {
+            **detector_options("symphony"),
             "ccd_index": CCD_SYMPHONY,
             "expected_device_type": "HORIBA Synapse / Symphony II",
             "expected_chip_width": 512,
@@ -88,20 +77,8 @@ class HoribaSpectrometer:
                 "y_size": 1,
                 "y_bin": 1,
             },
-            "default_gain": 2,
-            "default_speed": 0,
-            "gains": (
-                ("High Dynamic Range", 1),
-                ("High Sensitivity", 2),
-            ),
-            "speeds": (
-                ("1.5 MHz", 1),
-                ("500 kHz Wrap", 127),
-                ("300 kHz", 0),
-            ),
             # No detector-specific continuous shutter minimum was supplied.
             # Use the same conservative GUI floor as the Syncerity.
-            "minimum_exposure_s": 0.100,
         },
     }
 

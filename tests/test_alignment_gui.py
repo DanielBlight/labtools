@@ -62,3 +62,39 @@ def test_injected_worker_repeat_stop_and_close(monkeypatch):
     spin(app, lambda: not w.isVisible())
     assert worker.is_alive()  # injected/application-owned
     worker.close()
+
+
+def test_default_simulated_window_needs_no_vendor_import(monkeypatch):
+    import builtins
+
+    app = QApplication.instance() or QApplication([])
+    original = builtins.__import__
+
+    def guarded(name, *args, **kwargs):
+        if name.startswith(("horiba_sdk", "labtools.devices.horiba_spectrometer")):
+            raise AssertionError("Native import during simulated alignment")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded)
+    window = HoribaAlignmentWindow(configuration_id="test", backend="simulation")
+    assert window.exposure_box.minimum() == pytest.approx(0.065)
+    window.preset_combo.setCurrentText("symphony")
+    assert window.exposure_box.minimum() == pytest.approx(0.1)
+    window.close()
+    app.processEvents()
+    assert not window._worker.is_alive()
+
+
+def test_injected_worker_backend_mismatch_is_rejected():
+    app = QApplication.instance() or QApplication([])
+    worker = SpectrumWorker(
+        create_spectrum_service(backend="simulation"), backend="simulation"
+    )
+    try:
+        with pytest.raises(ValueError, match="backend"):
+            HoribaAlignmentWindow(
+                worker=worker, configuration_id="test", backend="real"
+            )
+    finally:
+        worker.close()
+    app.processEvents()

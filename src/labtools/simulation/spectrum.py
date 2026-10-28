@@ -49,6 +49,8 @@ async def open_simulated_range(
 @asynccontextmanager
 async def open_simulated_alignment(settings):
     settings.validate()
+    if settings.backend != "simulation":
+        raise ValueError("Synthetic alignment adapter refuses real settings")
 
     class Backend:
         actual_centre_nm = float(settings.centre_nm)
