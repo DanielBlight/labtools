@@ -29,3 +29,6 @@ Avoid duplicating the same procedure in multiple places.
 - [Spectrum processing refactor](spectrum-refactor.md): processing boundaries, compatibility and offline tests.
 
 - [Comparative audit](comparative-audit.md): baseline/current findings, corrections and validation limits.
+
+- [Alignment lifecycle acceptance](alignment-lifecycle-acceptance.md): blocked-job
+  tests, stop/fault/deferred-close contracts, installation and Windows acceptance.

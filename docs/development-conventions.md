@@ -162,3 +162,11 @@ A persistent spectrum loop is not a persistent device connection. Cancellation w
 failed disconnect must retain the original cancellation and fault the real worker.
 Never label skipped Qt modules as validated. Keep the next task in the roadmap and
 handover consistent; do not rename the wrapper-review phase to a launcher phase.
+
+## Alignment lifecycle test discipline
+
+Use explicit threading Events to block acquisition and cleanup independently. Never
+replace an owned SpectrumJob on restart. Disabled widgets are not sufficient API
+guards. Tests must release both gates in teardown and join private workers. Window
+close and injected-worker shutdown are distinct. QtWidgets skips are not acceptance;
+record platform/library blockers and execute the supplied cases on Windows.

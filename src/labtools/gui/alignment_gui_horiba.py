@@ -73,6 +73,7 @@ class HoribaAlignmentWindow(QMainWindow):
         self._job = None
         self._running = False
         self._close_pending = False
+        self._closed = False
         self._sequence = 0
         self._latest = None
         self.setWindowTitle("HORIBA Spectrum Alignment")
@@ -173,7 +174,18 @@ class HoribaAlignmentWindow(QMainWindow):
         return settings
 
     def start_alignment(self):
-        if self._running:
+        # Stop requests leave the active job owned until its cleanup completes.
+        # Guard the API as well as disabled buttons: never overwrite that handle.
+        if (
+            self._running
+            or self._job is not None
+            or self._close_pending
+            or self._closed
+        ):
+            return
+        state = self._worker.status().state
+        if state in {"faulted", "closing", "closed"}:
+            self._finish(f"Spectrum worker {state}; application teardown is required")
             return
         try:
             settings = self._snapshot_settings()
@@ -266,12 +278,16 @@ class HoribaAlignmentWindow(QMainWindow):
         self._job = None
         self.timer.stop()
         self.setup_group.setEnabled(True)
-        self.start_button.setEnabled(True)
+        state = self._worker.status().state
+        self.start_button.setEnabled(
+            not self._close_pending
+            and not self._closed
+            and state not in {"faulted", "closing", "closed"}
+        )
         self.stop_button.setEnabled(False)
         self.status_label.setText(message)
         if self._close_pending:
-            if self._owns_worker:
-                self._worker.close()
+            # closeEvent owns private-worker shutdown, exactly once per close.
             self.close()
 
     def closeEvent(self, event):
@@ -282,6 +298,9 @@ class HoribaAlignmentWindow(QMainWindow):
             return
         if self._owns_worker:
             self._worker.close()
+        self.timer.stop()
+        self._closed = True
+        self.start_button.setEnabled(False)
         event.accept()
 
 

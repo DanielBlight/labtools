@@ -82,3 +82,9 @@ Its ordinary module launch is real hardware and requires a reviewed configuratio
 see [alignment](horiba-alignment.md). Shared manual/map composition remains a Python
 injection API, not a permanent launcher. Separate standalone tools do not coordinate.
 Remove QT_QPA_PLATFORM=offscreen before interactive GUI checks.
+
+## Alignment lifecycle acceptance
+
+The exact focused test and validation commands are in the
+[lifecycle acceptance guide](alignment-lifecycle-acceptance.md). These tests use fake
+backends and do not require --run-hardware. No shared launcher command is introduced.

@@ -1,7 +1,7 @@
 # Current architecture
 
 This document describes the audited 28 October 2026 source, based on snapshot HEAD
-`3e5a0c9f41edbbf692faabd9ef5cd6e9b2bc8aab`. Actual Git status is authoritative.
+`9f602792c048ef63b9598529637051ead04eccd2`. Actual Git status is authoritative.
 See [handover](ai-handover.md), [roadmap](refactor-roadmap.md) and
 [audit](comparative-audit.md) for evidence and limitations.
 
@@ -103,3 +103,14 @@ were skipped in the audit environment. Physical LabJack, IDQ, HORIBA, shutter ti
 voltage calibration and optical safety remain unvalidated. Shared launcher integration,
 wrapper failure reviews, operator-profile generalization and additional simulation
 remain planned. Do not merge solely because headless tests pass.
+
+## Alignment lifecycle hardening checkpoint
+
+The window retains the job handle after Stop until polling observes completion. Start
+is guarded against active handles, pending close and accepted close, not only the
+repeat flag or disabled button. A faulted/closing/closed worker disables Start. Private
+worker shutdown is owned by closeEvent alone; injected workers remain external. The
+window timer stops on accepted close. New blocked-backend and QtWidgets acceptance
+tests cover cleanup-delayed cancellation, busy conflicts, six failure stages and
+private/injected close. Headless and QtCore tests passed; QtWidgets execution remains
+blocked by missing libGL.so.1 here. See [acceptance](alignment-lifecycle-acceptance.md).

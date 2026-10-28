@@ -29,3 +29,13 @@ settings and adapters reject under-minimum/opposite-backend requests before open
 hardware. A cancelled real job with failed disconnect faults the worker. Qt-specific
 acceptance remains outstanding in the audit environment; no high-rate persistent
 connection performance is claimed.
+
+## Stop, restart and close acceptance
+
+Stop does not release the current job immediately. Start remains blocked until that
+job's cleanup finishes, including programmatic calls. A worker fault disables Start
+and requires application teardown. Closing an active window waits for cleanup; an
+injected worker survives, while a private worker closes once from closeEvent. An
+accepted closed window cannot submit another job. See
+[lifecycle acceptance](alignment-lifecycle-acceptance.md) for offline tests and local
+Windows acceptance. No exposure minimum or hardware command changes are introduced.

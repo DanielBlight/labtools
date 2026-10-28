@@ -63,3 +63,11 @@ connectivity, physical shutter/gate timing, calibration or safety. With the
 optical path made safe and only one tool owning each instrument, verify the
 existing GUIs and real-device operations on the laboratory system before
 merging. Test simulation and real operation separately.
+
+## Alignment lifecycle checkpoint
+
+See [acceptance guide](alignment-lifecycle-acceptance.md). Run the new blocked-backend
+cases and window cases with the existing Qt lifecycle suite. The implementation
+environment ran QtCore but could not load QtWidgets (libGL.so.1 missing). Local
+Windows execution must report actual passes, not skipped modules. Temporary validation
+tools were installed outside the repository; pyproject.toml and uv.lock are unchanged.

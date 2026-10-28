@@ -1,6 +1,6 @@
 # Refactor roadmap: audited status
 
-Based on snapshot HEAD `3e5a0c9f41edbbf692faabd9ef5cd6e9b2bc8aab`.
+Based on input snapshot HEAD `9f602792c048ef63b9598529637051ead04eccd2`.
 See [audit](comparative-audit.md) and [handover](ai-handover.md). Offline validation is
 not hardware acceptance. Existing wrapper matrix below remains the review backlog.
 
@@ -20,16 +20,27 @@ The audit corrected exposure/backend guards, native-free options, IDQ partial st
 worker startup/close races and cancellation-cleanup faulting. It did not implement a
 shared launcher, DLT/histogram ownership or persistent HORIBA connections.
 
-## Next bounded checkpoint: Windows/Qt lifecycle acceptance
+## Alignment lifecycle acceptance checkpoint
 
-Run the skipped GUI modules and add deterministic blocked-job tests for busy,
-faulted, cancellation, deferred close and private/injected ownership. Resolve failures
-before adding a launcher. Preserve 0.065 s Syncerity and 0.1 s Symphony minima. Do not
-combine this checkpoint with new devices, persistent connection caching or UI redesign.
+Status: IMPLEMENTED AND PARTIALLY VALIDATED. Blocked-backend tests pass; QtCore tests
+run. QtWidgets/Windows acceptance remains BLOCKED in the implementation environment
+by missing libGL.so.1. The twelve new window cases must execute locally, not skip.
 
-Phase 7 remains the shared launcher phase. Earlier handover references to a "Phase 5a"
-launcher were inconsistent with the established Phase 5 wrapper review and are superseded.
-A launcher may be considered after this acceptance checkpoint; it is not implemented.
+The window rejects start while an old job/close remains owned, disables Start after
+worker fault/close, and shuts a private worker from closeEvent only. Stop remains
+cooperative; ownership lasts through backend cleanup. Injected workers survive close.
+Validation: 318 passed, 4 skipped; changed-file Ruff passes. See
+[lifecycle acceptance](alignment-lifecycle-acceptance.md). No hardware was contacted.
+
+## Next bounded implementation after the local Qt gate
+
+Collision-safe map output directories: preserve the legacy first timestamp directory,
+allocate a distinct directory on collision, never overwrite data, and test immediate
+retry plus concurrent allocation. Keep schemas/resume/model unchanged. Do not bundle
+launcher work or map persistence extraction into this reliability fix.
+
+Phase 7 remains the shared launcher phase. Phase 5 remains wrapper reliability. Neither
+is declared complete by these tests. Persistent HORIBA connections remain unimplemented.
 
 ## Phase 5: wrapper reliability and hazardous-workflow review
 

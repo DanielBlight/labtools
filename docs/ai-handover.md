@@ -2,14 +2,12 @@
 
 ## Starting identity and evidence
 
-Current snapshot: `labtools_source_20261028_150404.txt`, created
-2026-10-28T15:04:04.4560095Z, branch `feature/shared-instrument-session`, HEAD
-`3e5a0c9f41edbbf692faabd9ef5cd6e9b2bc8aab`, clean index/worktree and upstream +0/-0.
-Baseline snapshot: `labtools_source_20261027_175907.txt`, created
-2026-10-27T17:59:07.2679251+00:00, HEAD
-`385df0dbfbc58f61200030c6165238404d92bed2`, with recorded uncommitted shared-backend work.
-These are snapshot identities, not a claim about the user's live checkout. Inspect
-actual Git status before any edit. No Git mutation or hardware operation was performed.
+Current input: `labtools_source_20261028_155354.txt`, created
+2026-10-28T15:53:54.2777808Z, branch `feature/shared-instrument-session`, HEAD
+`9f602792c048ef63b9598529637051ead04eccd2`, upstream +1/-0. The only recorded dirty path is the untracked
+`apply_labtools_comparative_audit.py`; index and tracked worktree are otherwise clean.
+This checkpoint does not touch that installer or mutate Git. Actual live status is
+always authoritative. The earlier comparative audit remains historical evidence.
 
 Read [architecture](architecture.md), [audit](comparative-audit.md),
 [roadmap](refactor-roadmap.md) and [conventions](development-conventions.md).
@@ -44,23 +42,33 @@ resume signatures, deterministic model and raw/dark provenance. No real failure 
 fall back to simulation. No 0.02 s alignment override. Negative corrected values stay.
 Keep `io/`; map persistence extraction is a separate future task.
 
-## Validation in this audit environment
+## Alignment lifecycle checkpoint: implementation and evidence
 
-Python 3.12.15, installed scientific packages rather than a reproduced uv.lock environment.
-Baseline: 203 passed, 2 skipped, 172 warnings.
-Current before fixes: 292 passed, 4 skipped, 172 warnings.
-Corrected: 303 passed, 4 skipped, 172 warnings.
-New audit regressions: 11 passed. Earlier focused affected selection: 62 passed.
-Four Qt-dependent modules skipped because PyQt6 is unavailable. Ruff unavailable;
-no Ruff-clean claim. Matplotlib/pyparsing deprecation warnings remain.
-Compilation, CLI help, local Markdown links, TOML parsing, native-free smoke and wheel
-build are recorded in the audit report. Lockfile/pyproject were inspected and unchanged;
-the exact Windows locked environment still requires local validation.
+The next bounded phase adds deterministic blocked-backend and Qt window regressions.
+Start cannot replace a still-owned job after Stop, while closing, or after accepted
+close. Faulted/closing/closed workers disable Start. Private-worker shutdown now has
+one closeEvent owner rather than duplicate calls during deferred close. Injected
+workers remain application-owned. The timer is stopped after accepted close.
+
+New tests: seven native-/Qt-free blocked-backend cases, and twelve QtWidgets cases
+covering stop/restart, external busy owner, cleanup-delayed close, six failure stages,
+private/injected ownership, settings snapshot thread and plot/result identity.
+
+Validation: focused backend/worker/audit/QtCore selection 32 passed. Full offline suite
+318 passed, 4 skipped, 172 inherited Matplotlib/pyparsing warnings. Changed-file Ruff
+format/check passed with Ruff 0.17.3. Compileall, CLI help, TOML parsing, wheel build and
+relative Markdown target checks passed. Python 3.12.15, PyQt6 6.11.0 installed only in a
+temporary validation directory, not a reproduced uv.lock/Windows environment.
+QtCore tests now run (8 passed); QtWidgets cannot load because libGL.so.1 is missing.
+Skipped modules: alignment GUI, ordinary spectrum GUI, GUI lifecycle and new alignment
+window acceptance. Windows/QtWidgets and physical acceptance are NOT complete.
+See [lifecycle acceptance](alignment-lifecycle-acceptance.md) for exact commands.
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
 $env:QT_QPA_PLATFORM = "offscreen"
 $env:MPLBACKEND = "Agg"
+uv run --no-sync python -m pytest tests/test_alignment_lifecycle_acceptance.py tests/test_alignment_window_acceptance.py tests/test_alignment_gui.py tests/test_spectrum_gui_phase1.py tests/test_gui_lifecycle.py tests/test_qt_controllers.py -q -rs
 uv run --no-sync python -m pytest -q
 uv run --no-sync python -m compileall -q src tests examples
 uv run --no-sync python -m labtools --help
@@ -68,9 +76,9 @@ git diff --check
 git status --short
 ```
 
-Run Ruff on the installer's changed Python list, then the intended repository policy.
-Do not use unsafe fixes or mix a whole-tree formatting sweep into this checkpoint.
-Remove QT_QPA_PLATFORM=offscreen before interactive GUI testing.
+Keep 0.065 s Syncerity and 0.1 s Symphony minima. No new backend, launcher, persistent
+connection or device command was added. Remove QT_QPA_PLATFORM=offscreen before
+interactive GUI checks. Do not treat a skipped module as acceptance.
 
 ## Physical validation still required
 
@@ -81,15 +89,17 @@ are not certified by these tests. No physical endpoint was contacted.
 
 ## Next bounded task
 
-Finish Windows/Qt acceptance and alignment lifecycle hardening before a shared launcher:
-run the skipped modules, test busy/fault/deferred close with blocked fake operations,
-and verify repeated start/stop/private-versus-injected ownership. Address any failures
-in one checkpoint. Do not combine this with persistent HORIBA connections, new launcher
-UI, IDQ streaming, profile generalization or broad wrapper rewrites.
+First run the supplied QtWidgets acceptance cases on the Windows checkout and fix only
+failures from that gate. If they all execute and pass, the next implementation task is
+collision-safe intensity-map output-directory allocation: two new runs in the same
+second must not fail or overwrite data. Preserve the legacy first directory name,
+metadata, checkpoint/resume schema and deterministic output. Add concurrent-allocation
+and immediate-retry tests. Keep this separate from launcher Phase 7, persistent HORIBA
+connections, IDQ streaming and broad wrapper rewrites.
 
-Known follow-ups: same-second map output-directory collision; fixed shared IDQ IPv4
-policy and explicit counter-provider compatibility; native wrapper disconnect-error
-visibility; tracked migration/data artifacts. No deletion of those artifacts was made.
+Remaining reviews: shared IDQ explicit counter-provider compatibility and IPv4 policy;
+native disconnect-error visibility; tracked artifacts; physical acceptance. No unrelated
+artifact was deleted. The comparative audit is a historical record, not current counts.
 
 ## Git workflow
 

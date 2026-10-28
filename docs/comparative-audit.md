@@ -1,5 +1,9 @@
 # Comparative labtools audit and correction checkpoint
 
+> Historical audit of the 15:04 snapshot. For subsequent lifecycle work and current
+> validation use [handover](ai-handover.md) and
+> [alignment acceptance](alignment-lifecycle-acceptance.md). Counts below are historical.
+
 ## 1. Executive assessment
 
 The recent work establishes useful service/ownership seams and substantially improves
