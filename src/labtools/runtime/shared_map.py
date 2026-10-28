@@ -20,6 +20,32 @@ class SessionMirror:
         self._lease.cleanup("mirror", "home")
 
 
+class SessionCounter:
+    """Lease-scoped IDQ count interface; raw services never leave the session."""
+
+    def __init__(self, lease, resource):
+        self._lease = lease
+        self._resource = resource
+
+    def configure_channel(self, channel, *, threshold_v, edge, enabled=True):
+        return self._lease.call(
+            self._resource,
+            "configure_channel",
+            channel,
+            threshold_v=threshold_v,
+            edge=edge,
+            enabled=enabled,
+        )
+
+    def get_simultaneous_counts(self, channels, integration_time_s):
+        return self._lease.call(
+            self._resource,
+            "get_simultaneous_counts",
+            channels,
+            integration_time_s,
+        )
+
+
 class SessionGate:
     def __init__(self, lease):
         self._lease = lease
@@ -55,6 +81,8 @@ class SharedMapProvider:
         wiring=None,
         backend="real",
         counter_provider=None,
+        counter_resource=None,
+        counter_address=None,
         owner="intensity-map",
     ):
         wiring = LabJackWiring() if wiring is None else wiring
@@ -71,6 +99,10 @@ class SharedMapProvider:
         self.counter_provider = (
             real_counter if counter_provider is None else counter_provider
         )
+        if counter_provider is not None and counter_resource is not None:
+            raise ValueError("Choose a counter provider or a session counter resource")
+        self.counter_resource = counter_resource
+        self.counter_address = counter_address
         self.owner = owner
 
     @contextmanager
@@ -78,12 +110,27 @@ class SharedMapProvider:
         config.validate()
         if config.backend != self.backend:
             raise ValueError("Map backend does not match shared provider")
+        if self.counter_address is not None:
+            from labtools.runtime.idq_count_service import canonical_idq_address
+
+            if (
+                canonical_idq_address(config.time_controller_address)
+                != self.counter_address
+            ):
+                raise ValueError("Map IDQ address does not match shared application")
         if (config.mirror_dio_pin, config.spad_gate_pin) != (
             self.wiring.mirror_dio_pin,
             self.wiring.spad_gate_pin,
         ):
             raise ValueError("Map wiring does not match the application-owned LabJack")
-        with self.session.reserve(self.owner, ("mirror", "gate")) as lease:
+        resources = ["mirror", "gate"]
+        if self.counter_resource is not None:
+            resources.append(self.counter_resource)
+        with self.session.reserve(self.owner, resources) as lease:
+            if self.counter_resource is not None:
+                counter = SessionCounter(lease, self.counter_resource)
+                yield SessionMirror(lease), SessionGate(lease), counter
+                return
             manager = self.counter_provider(config)
             counter = manager.__enter__()
             try:
@@ -93,7 +140,6 @@ class SharedMapProvider:
                     manager.__exit__(type(primary), primary, primary.__traceback__)
                 except BaseException as cleanup:  # noqa: BLE001 - preserve cancellation/primary failure
                     primary.add_note(f"Counter close also failed: {cleanup!r}")
-                # A counter context must not suppress a measurement failure.
                 raise
             else:
                 manager.__exit__(None, None, None)

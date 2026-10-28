@@ -6,7 +6,7 @@ from functools import partial
 from threading import RLock
 
 from labtools.acquisition.intensity_map import acquire_intensity_map
-from labtools.runtime.labjack_service import LabJackWiring, create_labjack_session
+from labtools.runtime.labjack_service import LabJackWiring, open_labjack_service
 from labtools.runtime.session import InstrumentSession, ResourceBusyError
 from labtools.runtime.shared_map import SharedMapProvider
 
@@ -63,14 +63,32 @@ class SharedMirrorMapApplication:
         service_factory=None,
         backend="real",
         counter_provider=None,
+        time_controller_address="169.254.99.159",
+        idq_service_factory=None,
     ):
         if backend not in {"real", "simulation"}:
             raise ValueError("backend must be real or simulation")
         wiring = LabJackWiring() if wiring is None else wiring
         self._simulation_service = None
+        counter_resource = None
+        counter_address = None
         if backend == "real":
-            self.session = create_labjack_session(
-                wiring, service_factory=service_factory
+            from labtools.runtime.idq_count_service import (
+                IDQCountService,
+                canonical_idq_address,
+                idq_resource_name,
+            )
+
+            counter_address = canonical_idq_address(time_controller_address)
+            counter_resource = idq_resource_name(counter_address)
+            labjack_factory = service_factory or partial(open_labjack_service, wiring)
+            idq_factory = idq_service_factory or partial(
+                IDQCountService, counter_address
+            )
+            self.session = InstrumentSession(
+                {"labjack": labjack_factory, counter_resource: idq_factory},
+                aliases={"mirror": "labjack", "gate": "labjack"},
+                cleanup_methods={"labjack": ("home", "close_gate")},
             )
         else:
             if service_factory is not None or counter_provider is not None:
@@ -98,6 +116,8 @@ class SharedMirrorMapApplication:
             wiring=wiring,
             backend=backend,
             counter_provider=counter_provider,
+            counter_resource=counter_resource,
+            counter_address=counter_address,
         )
         self.map_acquisition = partial(
             acquire_intensity_map, device_provider=self.map_provider

@@ -146,9 +146,11 @@ class InstrumentSession:
             self._open()
             conflicts = physical.intersection(self._owners)
             if conflicts:
-                raise ResourceBusyError(
-                    f"Resources already reserved: {sorted(conflicts)}"
-                )
+                owners = {
+                    name: self._leases[self._owners[name]][1]
+                    for name in sorted(conflicts)
+                }
+                raise ResourceBusyError(f"Resources already reserved: {owners}")
             if physical.intersection(self._faults):
                 raise RuntimeError(
                     "Resource faulted; close the session before reconnecting"

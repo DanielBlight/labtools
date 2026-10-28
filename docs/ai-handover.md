@@ -47,6 +47,10 @@ Historical refactor notes retain technical context but are not current task list
 - Shared simulation composition now owns one synthetic mirror/gate state behind the
   same session aliases as real mode. Manual and map tools share it without exposing
   mutable state; deterministic counter behaviour remains per-map and config-bound.
+- Real shared-map composition owns a lazy IDQ count service keyed as
+  `time-controller:<canonical-ip>`. IDQ construction/use/close stays on the session
+  worker, and maps reserve LabJack plus IDQ atomically through cleanup. Standalone
+  maps and shared simulation keep their established counter composition.
 
 These statements describe software behaviour exercised by fake/offline tests. They
 are not claims about physical hardware, calibration, optical safety or vendor SDKs.
@@ -113,7 +117,7 @@ functional migration; review changed-file fixes first and keep broad cleanup sep
 
 ## Planned, not implemented
 
-- Central IDQ count ownership and, separately, streaming/DLT lifecycle migration.
+- IDQ DLT/timestamp streaming, histogram and coincidence ownership.
 - Persistent HORIBA asyncio worker and alignment integration.
 - Complete shared launcher with truthful availability/busy/fault presentation.
 - General instrument-profile/recipe coverage and additional device simulations.
@@ -122,10 +126,10 @@ functional migration; review changed-file fixes first and keep broad cleanup sep
 
 ## Next bounded task
 
-Implement Phase 3b only: application-owned IDQ count-service ownership keyed by
-physical address. Keep ZMQ socket creation, use and close on the owning thread. Do not
-combine count ownership with DLT streaming, persistent HORIBA work, alignment, the
-complete launcher, cryostat/piezo wrappers or broad cleanup.
+Implement Phase 4's persistent HORIBA asyncio worker foundation only, without yet
+integrating alignment. One dedicated asyncio loop must own connect/use/disconnect and
+serialize complete jobs. Do not combine it with GUI redesign, IDQ streaming,
+cryostat/piezo wrappers or hardware diagnostics.
 
 ## Git/checkpoint workflow
 

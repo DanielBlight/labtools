@@ -105,11 +105,22 @@ Checkpoint: "Compose shared simulation state for mirror and map tools".
 
 ## Phase 3b: IDQ count-service ownership
 
-Status: PLANNED. Key ownership by physical address and keep ZMQ socket creation, use
-and close on the owning thread. Do not move existing sockets across threads. DLT
-lifecycle, streaming analysis, histogram ownership, channel discovery, firmware
-compatibility, interlocks and safe state remain separate later work.
-Checkpoint: "Centralise IDQ count ownership".
+Status: IMPLEMENTED AND OFFLINE VALIDATED; PHYSICAL IDQ VALIDATION REQUIRED.
+
+Real shared composition owns one lazy count service per canonical IP resource key,
+`time-controller:<canonical-ip>`. The current wrapper accepts an IP address only, so
+canonicalisation strips surrounding whitespace and uses Python's strict IP textual
+form; hostnames and invented aliases are rejected. The map configuration must match
+the composition address. Controller construction, connect, configure, count and close
+run on the InstrumentSession worker. Map reservation atomically includes LabJack and
+IDQ for the whole measurement and cleanup. Busy conflicts report their owner and do
+not open or fault either service. Standalone composition and deterministic shared
+simulation are unchanged; no real-to-synthetic fallback exists.
+
+DLT process ownership, timestamp streaming, streaming analysis, histogram and
+coincidence ownership, channel discovery and firmware policy remain planned. No
+physical controller or ZMQ endpoint was contacted.
+Checkpoint: "Centralise IDQ count ownership in the shared session".
 
 ## Phase 4: persistent HORIBA worker and alignment
 

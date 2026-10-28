@@ -69,6 +69,19 @@ reports position, gate, measurement and closed state without granting access. Th
 existing deterministic counter model remains config-bound and does not represent
 application-owned IDQ hardware.
 
+### CURRENTLY IMPLEMENTED AND OFFLINE VALIDATED: shared IDQ count ownership
+
+Real shared-map composition registers one lazy session resource named
+`time-controller:<canonical-ip>` alongside the application-owned LabJack. The fixed
+application address and each map configuration must resolve to the same canonical IP.
+Controller construction, connect, channel configuration, simultaneous counts and
+close all execute on the InstrumentSession worker. Acquisition receives only a
+lease-scoped count proxy; no controller or ZMQ socket crosses to GUI/acquisition
+threads. The shared map reserves LabJack aliases and IDQ atomically for the complete
+measurement and cleanup. Standalone maps retain their existing per-map controller.
+Shared simulation retains its config-bound deterministic counter and imports no IDQ
+or ZMQ implementation.
+
 ### CURRENTLY IMPLEMENTED BUT REQUIRES HARDWARE VALIDATION
 
 Real wrappers, shared LabJack service and the new real range adapter. The adapter
