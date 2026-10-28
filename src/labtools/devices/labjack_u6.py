@@ -19,9 +19,17 @@ class LabJackU6:
     """
 
     def __init__(self):
+        self._closed = False
         self._dev = u6.U6()
-        self._dev.getCalibrationData()
-        time.sleep(0.5)
+        try:
+            self._dev.getCalibrationData()
+            time.sleep(0.5)
+        except BaseException as primary:
+            try:
+                self.close()
+            except Exception as cleanup:
+                primary.add_note(f"Partial LabJack startup cleanup failed: {cleanup!r}")
+            raise
 
     # ------------------------------------------------------------------
     # Low-level pass-throughs used by device wrappers
@@ -39,7 +47,9 @@ class LabJackU6:
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        self._dev.close()
+        if not self._closed:
+            self._dev.close()
+            self._closed = True
 
     def __enter__(self) -> LabJackU6:
         return self

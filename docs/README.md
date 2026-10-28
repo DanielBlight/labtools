@@ -10,10 +10,16 @@
 
 ## Maintaining the software
 
-- [Architecture](architecture.md): current responsibilities and future session design.
+Start with [AI handover](ai-handover.md). The canonical documents are
+[architecture](architecture.md), [development conventions](development-conventions.md)
+and [refactor roadmap / wrapper matrix](refactor-roadmap.md). Historical batch notes
+below retain technical context, not competing current task lists.
+
+
+- [Architecture](architecture.md): current implementation, target design and architectural decisions.
 - [Development](development.md): offline checks and explicit hardware opt-in.
 - [Refactor notes](refactor-notes.md): changes, compatibility and remaining work.
-- [Future refactoring](future-refactoring.md): prioritised follow-up work, not implemented features.
+- [Future refactoring](future-refactoring.md): historical backlog; use the canonical roadmap for current order.
 
 The README is the quick start. Detailed instrument procedures belong in the
 hardware reference; simulation behaviour belongs in the simulation guide.

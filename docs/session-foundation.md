@@ -1,5 +1,9 @@
 # Session foundation (opt-in, not GUI integration)
 
+> Historical batch/backlog note. Current implementation status and task order are
+> authoritative in [architecture](architecture.md), [roadmap](refactor-roadmap.md)
+> and [handover](ai-handover.md). Technical details below are retained for context.
+
 Adds runtime/session.py and offline fake-device tests. Existing GUI, acquisition,
 wrappers, limits, output and checkpoint files are untouched.
 

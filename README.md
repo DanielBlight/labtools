@@ -4,6 +4,10 @@ Python tools for laboratory instrument control, acquisition, processing and
 experimental diagnostics. Workflows include HORIBA spectra, scanning-mirror
 intensity maps, laser annealing and an explicitly synthetic intensity-map backend.
 
+Maintainers and coding models: start with [the repository handover](docs/ai-handover.md).
+A headless synthetic spectrum-service example is also available; existing spectrum
+GUI behavior is not yet migrated to that service.
+
 ## Setup
 
 Use Python 3.12 or newer and the project's existing uv environment:

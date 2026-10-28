@@ -1,5 +1,9 @@
 # Project cleanup and migration notes
 
+> Historical batch/backlog note. Current implementation status and task order are
+> authoritative in [architecture](architecture.md), [roadmap](refactor-roadmap.md)
+> and [handover](ai-handover.md). Technical details below are retained for context.
+
 ## Implemented
 
 - Canonical `labtools gui TOOL` and `labtools simulate intensity-map` commands,

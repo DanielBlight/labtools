@@ -1,5 +1,8 @@
 # Development and validation
 
+Current implementation rules are in [development conventions](development-conventions.md);
+current status, validation limitations and next task are in [handover](ai-handover.md).
+
 ## Environment
 
 ```powershell

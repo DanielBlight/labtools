@@ -1,5 +1,9 @@
 # Shared mirror/map backend: opt-in integration boundary
 
+> Historical batch/backlog note. Current implementation status and task order are
+> authoritative in [architecture](architecture.md), [roadmap](refactor-roadmap.md)
+> and [handover](ai-handover.md). Technical details below are retained for context.
+
 ## Scope
 
 This batch extends the committed session foundation at 385df0d. It adds a narrow

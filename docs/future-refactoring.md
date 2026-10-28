@@ -1,5 +1,9 @@
 # Future refactoring
 
+> Historical batch/backlog note. Current implementation status and task order are
+> authoritative in [architecture](architecture.md), [roadmap](refactor-roadmap.md)
+> and [handover](ai-handover.md). Technical details below are retained for context.
+
 This is a backlog, not a list of implemented features. See architecture.md for
 current boundaries and refactor-notes.md for the completed cleanup.
 
