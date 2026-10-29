@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "kind": "alignment",
+  "recipe": {
+    "settings": {
+      "configuration_id": "toy-scene-v1",
+      "preset": "syncerity",
+      "centre_nm": 690.0,
+      "exposure_s": 0.065,
+      "subtract_dark": false,
+      "gain": 2,
+      "speed": 0,
+      "backend": "simulation"
+    },
+    "owner": "recipe-alignment"
+  }
+}

@@ -147,3 +147,7 @@ The Qt-free resumable intensity-map facade is implemented; see [checkpoint](meas
 ## Unified measurement runtime
 
 A Qt-free `MeasurementRuntime` now composes the existing spectrum and map runtimes without changing their ownership models; see [checkpoint](measurements-runtime-checkpoint.md).
+
+## Versioned measurement recipes
+
+Strict schema-version-1 JSON recipes now cover the implemented spectrum, dark, alignment and intensity-map facades; see [checkpoint](measurements-recipes-checkpoint.md) and [usage](scripted-measurements.md).

@@ -70,3 +70,9 @@ The public package now exports frozen `AlignmentRequest`/`AlignmentMeasurement` 
 ## Unified measurement runtime
 
 `MeasurementRuntime` now lazily composes the existing `SpectrumRuntime` and `IntensityMapRuntime` for sequential scripted workflows. It does not merge their ownership models: spectrum continues to own its service/worker, while map composition continues to use its provider/application and `InstrumentSession` reservations. Injected runtimes are borrowed and never closed; lazily created runtimes are owned and independently closed. Backend identity is shared and explicit. Native imports remain deferred until the child runtime or real backend is used.
+
+## Versioned measurement recipes
+
+Schema-version-1 JSON recipes are now available for the implemented `spectrum`, `dark`, `alignment`, and `intensity_map` facades. Loading is strict and data-only: the root and kind-specific fields must match exactly; unknown fields and schema/kind changes are rejected. Recipes preserve explicit backend, reviewed spectrum/alignment configuration IDs, unit-bearing field names, map schema-compatible configuration, optional map resume directory, and an optional pre-taken dark NPZ path. A pre-taken dark is loaded through the existing pickle-free NPZ reader and must exactly match the spectrum settings before the recipe is returned.
+
+Examples are under `examples/measurements/recipes/`. Use `load_recipe(path)` and dispatch only on the returned `kind`; recipe loading never executes Python or imports Qt/native SDK modules.

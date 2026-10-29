@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "spectrum",
+  "recipe": {
+    "settings": {
+      "configuration_id": "toy-scene-v1", "preset": "syncerity", "exposure_s": 0.065,
+      "gain": 0, "speed": 0, "slit_width_mm": 0.1, "start_nm": 500.0, "end_nm": 600.0,
+      "overlap_pixels": 20, "n_frames": 1, "combine_mode": "single", "backend": "simulation"
+    },
+    "owner": "recipe-spectrum", "dark_mode": "none", "dark_record_path": null
+  }
+}
