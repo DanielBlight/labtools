@@ -280,3 +280,7 @@ Combined hyperspectral acquisition and persistence failures retain the acquisiti
 The public hyperspectral facade is a thin wrapper over the reviewed internal service. It adds immutable request/measurement provenance, explicit runtime ownership, MeasurementRuntime composition, strict recipe loading, dispatch and guarded CLI routing without duplicating acquisition, reservations, persistence, simulation or dark logic.
 
 The hardened public facade validates overwrite refusal before constructing a runtime and keeps package exports limited to acquisition contracts. Runtime cleanup follows the repository convention: all owned cleanup is attempted, non-ordinary primary exceptions remain primary, and ordinary multiple failures use `ExceptionGroup`.
+
+## Simulation-first hyperspectral GUI
+
+`HyperspectralController` runs only the public `acquire_hyperspectral_map_async` facade on a QThread and forwards typed progress, completion and failure signals. `HyperspectralWindow` builds validated public requests, exposes simulation only, supports cooperative cancellation, and never imports or calls acquisition services, sessions or device wrappers directly.

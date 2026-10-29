@@ -400,3 +400,5 @@ The first reviewed Qt-free hyperspectral service boundary is implemented with de
 - Hyperspectral scripted facade/recipe/dispatch/CLI exposure is implemented. Follow with a focused public-contract hardening pass before considering GUI integration.
 
 - Public hyperspectral API hardening is complete offline. GUI integration may now be considered as a separate checkpoint against the frozen facade; physical and Qt acceptance remain separate gates.
+
+- A simulation-first hyperspectral Qt boundary now exercises the public facade. Follow with GUI hardening/operator acceptance before any controlled real-hardware preparation.

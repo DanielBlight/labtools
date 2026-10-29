@@ -279,3 +279,7 @@ The final offline hyperspectral matrix adds startup/exit, combined persistence, 
 Hyperspectral is now additively exposed for scripted measurement, strict version-1 recipes and guarded single-recipe dispatch. GUI integration, resume, pipelines and anneal remain unsupported. Real confirmation is intent-only and does not establish laser, shutter, optical-path, sample or hardware safety.
 
 The public hyperspectral contract is hardened: exact additive exports are tested, existing output paths reject before runtime creation, borrowed ownership is preserved, cleanup handles multiple failures, and cancelled partial results survive operation-context exit.
+
+### Simulation-first hyperspectral GUI
+
+A minimal Qt window/controller now consumes the frozen public facade, exposes unit-bearing simulation inputs, progress, cancellation and synthetic result summaries. It has no real-mode control, resume, laser/shutter policy or physical acceptance.
