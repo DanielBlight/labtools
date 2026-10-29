@@ -240,3 +240,7 @@ Qt-free dark capture, immutable reuse and NPZ helpers are implemented; see [chec
 ## Scripted alignment frames
 
 Qt-free sync/async alignment acquisition is implemented; see [checkpoint](measurements-alignment-checkpoint.md).
+
+## Scripted intensity maps
+
+The Qt-free resumable intensity-map facade is implemented; see [checkpoint](measurements-intensity-map-checkpoint.md). Map algorithms, schema and persistence are unchanged.

@@ -62,3 +62,7 @@ The spectrum facade now exports `capture_dark`, `capture_dark_async`, `save_dark
 ## Alignment-frame facade
 
 The public package now exports frozen `AlignmentRequest`/`AlignmentMeasurement` plus synchronous and async `acquire_alignment_frame` entry points. They delegate to the existing `SpectrumWorker.acquire_alignment` and `SpectrumService.acquire_alignment`, preserve configuration/backend provenance, detector minima, raw/corrected immutable arrays, actual centre readback, progress and cooperative cancellation.
+
+## Intensity-map facade
+
+`labtools.measurements` now exports frozen `IntensityMapRequest`, `IntensityMapProvenance`, `IntensityMapMeasurement`, explicit `IntensityMapRuntime`, sync/async acquisition and `request_from_resume`. The facade delegates unchanged to `acquisition.acquire_intensity_map`; schema 1, checkpoint signatures, output directory, progress snapshots, cancellation checkpoints and deterministic `gaussian-scene-v1` simulation remain authoritative there.
