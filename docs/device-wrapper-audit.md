@@ -526,3 +526,6 @@ A/B protocol and calibration maths remain unchanged. Channel-B ordinary failure 
 reports uncertain partial movement with no rollback/home. Validation: 11 dedicated,
 89 focused, full 404 passed / 5 skipped. PyQt6 is absent, so Qt remains gated. See
 [W5 checkpoint](scanning-mirror-preflight-checkpoint.md). IDQ P0 remains open.
+## UC480 lifecycle status
+
+UC480 partial setup/start cleanup is implemented/offline-tested at HEAD `b4be98c4f619526a421af54f795365f14d95ac54`. Validation: 16 dedicated; 27 camera+regression; full 420 passed / 5 skipped. PyQt6 absent, so Qt remains gated. See [UC480 checkpoint](uc480-lifecycle-checkpoint.md). IDQ P0 remains open.

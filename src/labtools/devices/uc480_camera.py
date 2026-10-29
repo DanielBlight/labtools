@@ -40,6 +40,8 @@ class ThorlabsUC480Camera:
         self.mirror_horizontal = bool(mirror_horizontal)
         self._camera = None
         self._live = False
+        self._acquisition_state = "idle"
+        self._teardown_started = False
 
     @staticmethod
     def _module():
@@ -70,43 +72,81 @@ class ThorlabsUC480Camera:
     def is_connected(self) -> bool:
         return self._camera is not None
 
+    @staticmethod
+    def _retain_cleanup(primary: BaseException, cleanup: BaseException) -> None:
+        previous = getattr(primary, "_uc480_cleanup_failures", ())
+        primary._uc480_cleanup_failures = (*previous, cleanup)
+        primary.add_note(f"UC480 cleanup also failed: {cleanup!r}")
+
+    def _ensure_usable(self) -> None:
+        if self._teardown_started:
+            raise UC480CameraError(
+                "UC480 teardown started; reconnect and commands are refused"
+            )
+
     def connect(self) -> None:
-        """Open the first available UC480 camera and apply the exposure."""
+        """Open camera zero and apply exposure, cleaning partial startup."""
+        self._ensure_usable()
         if self.is_connected:
             return
         try:
             self._camera = self._module().UC480Camera(cam_id=0, backend="uc480")
             self.set_exposure(self.exposure_s)
-        except Exception as exc:
-            self.close()
-            raise UC480CameraError(f"Could not open UC480 camera: {exc}") from exc
+        except BaseException as primary:
+            try:
+                self.close()
+            except BaseException as cleanup:  # noqa: BLE001 - preserve primary/cancellation
+                self._retain_cleanup(primary, cleanup)
+            raise
 
     def close(self) -> None:
-        """Attempt both shutdown stages and retain every failure."""
+        """Attempt stop and close independently, retaining uncertain ownership."""
         import logging
 
-        camera, live = self._camera, self._live
-        self._camera, self._live = None, False
+        if getattr(self, "_teardown_started", False) and self._camera is None:
+            return
+        self._teardown_started = True
+        camera = self._camera
         if camera is None:
+            self._live = False
+            self._acquisition_state = "idle"
             return
         failures = []
-        if live:
+        state = getattr(self, "_acquisition_state", "live" if self._live else "idle")
+        if state in {"setup", "live"}:
             try:
                 camera.stop_acquisition()
-            except Exception as exc:
+            except BaseException as exc:
                 logging.getLogger(__name__).exception("UC480 stop failed")
                 failures.append(exc)
+            else:
+                self._acquisition_state = "idle"
+                self._live = False
         try:
             camera.close()
-        except Exception as exc:
+        except BaseException as exc:
             logging.getLogger(__name__).exception("UC480 close failed")
             failures.append(exc)
+        else:
+            self._live = False
+            self._acquisition_state = "idle"
+        self._camera = None
+        self._live = False
         if failures:
+            primary = next(
+                (error for error in failures if not isinstance(error, Exception)), None
+            )
+            if primary is not None:
+                for failure in failures:
+                    if failure is not primary:
+                        self._retain_cleanup(primary, failure)
+                raise primary
             raise UC480CameraError("Camera cleanup failed") from ExceptionGroup(
                 "UC480 shutdown failures", failures
             )
 
     def _connected_camera(self):
+        self._ensure_usable()
         if self._camera is None:
             raise UC480CameraError("UC480 camera is not connected")
         return self._camera
@@ -149,8 +189,20 @@ class ThorlabsUC480Camera:
         if self._live:
             return
         camera = self._connected_camera()
-        camera.setup_acquisition(nframes=int(buffer_frames))
-        camera.start_acquisition()
+        try:
+            camera.setup_acquisition(nframes=int(buffer_frames))
+            self._acquisition_state = "setup"
+            camera.start_acquisition()
+        except BaseException as primary:
+            if self._acquisition_state == "setup":
+                try:
+                    camera.stop_acquisition()
+                except BaseException as cleanup:  # noqa: BLE001 - preserve primary/cancellation
+                    self._retain_cleanup(primary, cleanup)
+                else:
+                    self._acquisition_state = "idle"
+            raise
+        self._acquisition_state = "live"
         self._live = True
 
     def stop_live(self) -> None:
@@ -158,6 +210,7 @@ class ThorlabsUC480Camera:
         if self._live:
             self._connected_camera().stop_acquisition()
             self._live = False
+            self._acquisition_state = "idle"
 
     def read_latest(self, *, timeout_s: float = 1.0) -> NDArray[np.generic]:
         """Wait for a frame and return the newest buffered image."""
@@ -188,5 +241,10 @@ class ThorlabsUC480Camera:
         self.connect()
         return self
 
-    def __exit__(self, *_: object) -> None:
-        self.close()
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            self.close()
+        except BaseException as cleanup:
+            if exc_value is None:
+                raise
+            self._retain_cleanup(exc_value, cleanup)
