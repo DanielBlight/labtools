@@ -54,3 +54,5 @@ Avoid duplicating the same procedure in multiple places.
 - [Scanning-mirror W5 checkpoint](scanning-mirror-preflight-checkpoint.md): DAC preflight, partial-movement reporting, tests and installer.
 
 - [UC480 lifecycle checkpoint](uc480-lifecycle-checkpoint.md): partial-start rollback, cleanup evidence and installer.
+
+- [SC10 lifecycle checkpoint](sc10-lifecycle-checkpoint.md): serial ownership, transcript tests and installer.

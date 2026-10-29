@@ -67,7 +67,12 @@ class SC10:
         self.port = port
         self.baud_rate = int(baud_rate)
         self.timeout_s = float(timeout_s)
+        if self.baud_rate <= 0:
+            raise ValueError("baud_rate must be greater than zero")
+        if self.timeout_s <= 0:
+            raise ValueError("timeout_s must be greater than zero")
         self._serial: serial.Serial | None = None
+        self._teardown_started = False
         if auto_connect:
             self.connect()
 
@@ -83,6 +88,8 @@ class SC10:
         return self._serial is not None and self._serial.is_open
 
     def connect(self) -> None:
+        if self._teardown_started:
+            raise SC10Error("SC10 teardown started; reconnect is refused")
         if self.is_connected:
             return
         try:
@@ -101,39 +108,46 @@ class SC10:
             self._serial.reset_input_buffer()
             self._serial.reset_output_buffer()
             identifier = self.identify()
-        except Exception:
-            self.close()
+        except BaseException as primary:
+            try:
+                self.close()
+            except BaseException as cleanup:  # noqa: BLE001 - retain primary/cancellation
+                primary.add_note(f"SC10 cleanup also failed: {cleanup!r}")
+                primary._sc10_cleanup_failures = (cleanup,)
             raise
         if "SC10" not in identifier.upper():
-            self.close()
-            raise SC10Error(f"Device on {self.port} is not an SC10: {identifier!r}")
+            primary = SC10Error(f"Device on {self.port} is not an SC10: {identifier!r}")
+            try:
+                self.close()
+            except BaseException as cleanup:  # noqa: BLE001 - retain identity failure
+                primary.add_note(f"SC10 cleanup also failed: {cleanup!r}")
+                primary._sc10_cleanup_failures = (cleanup,)
+            raise primary
 
     def close(self) -> None:
-        """Cancel pending serial I/O and release the SC10 connection."""
+        """Cancel pending I/O and release transport without shutter commands."""
         connection = self._serial
+        if connection is None:
+            self._teardown_started = True
+            return
+        self._teardown_started = True
+        failures = []
+        if connection.is_open:
+            for operation in ("cancel_read", "cancel_write", "close"):
+                try:
+                    getattr(connection, operation)()
+                except (AttributeError, OSError) as exc:
+                    if operation == "close":
+                        failures.append(exc)
+        if failures:
+            raise SC10Error("SC10 serial close failed") from ExceptionGroup(
+                "SC10 shutdown failures", failures
+            )
         self._serial = None
 
-        if connection is None:
-            return
-
-        try:
-            if connection.is_open:
-                try:
-                    connection.cancel_read()
-                except (AttributeError, OSError):
-                    pass
-
-                try:
-                    connection.cancel_write()
-                except (AttributeError, OSError):
-                    pass
-
-                connection.close()
-
-        finally:
-            self._serial = None
-
     def _connection(self) -> serial.Serial:
+        if self._teardown_started:
+            raise SC10Error("SC10 teardown started; commands are refused")
         if self._serial is None or not self._serial.is_open:
             raise SC10Error("SC10 is not connected")
         return self._serial
@@ -244,5 +258,11 @@ class SC10:
         self.connect()
         return self
 
-    def __exit__(self, *_: object) -> None:
-        self.close()
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            self.close()
+        except BaseException as cleanup:
+            if exc_value is None:
+                raise
+            exc_value.add_note(f"SC10 cleanup also failed: {cleanup!r}")
+            exc_value._sc10_cleanup_failures = (cleanup,)
