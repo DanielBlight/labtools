@@ -1,6 +1,6 @@
 # Refactor roadmap: audited status
 
-Based on input snapshot HEAD `ad2a95b9813bc8407d54120a3997571c24d52450`.
+Based on input snapshot HEAD `8293c1677d43e94fc9b50ede778cc5853dca5db7`.
 See [audit](comparative-audit.md) and [handover](ai-handover.md). Offline validation is
 not hardware acceptance. Existing wrapper matrix below remains the review backlog.
 
@@ -302,3 +302,36 @@ rerun 318 passed / 4 skipped. QtWidgets still cannot load libGL.so.1. Changed-fi
 format/check, compileall, CLI/native-free smoke, TOML and wheel build passed. See
 [itc lifecycle checkpoint](itc4000-lifecycle-checkpoint.md) for exact evidence, inventory,
 installer/rollback/commit commands and remaining Windows/physical acceptance.
+
+## W2 HORIBA lifecycle checkpoint (current)
+
+Input snapshot: `labtools_source_20261029_084624.txt`, created
+2026-10-29T08:46:24.4544246Z, HEAD `8293c1677d43e94fc9b50ede778cc5853dca5db7`,
+branch `feature/shared-instrument-session`, upstream +2/-0. Tracked index/worktree
+recorded clean; five earlier installers are untracked and preserved. Live Git is authoritative.
+
+W2 is IMPLEMENTED and OFFLINE-VALIDATED, not physically accepted. Manager construction/
+start, monochromator/CCD open, configuration and detector identity now share one startup
+cleanup boundary. Disconnect attempts CCD close, the established one-second mono wait+
+close, and manager stop independently. Ordinary cleanup failures are visible as
+ExceptionGroup; cancellation/interrupt remains primary, with other cleanup failures in
+_horiba_cleanup_failures and notes. Backend contexts now also preserve operation/cancellation
+when disconnect raises BaseException and mark cleanup failure for real-worker faulting.
+
+Teardown permanently refuses reconnect. Public mono/CCD/manager references are cleared;
+failed handles remain private uncertain handles for explicit disconnect-only retry.
+Successful stages are not repeated. Retained handles do not imply usability, especially
+if manager stop succeeded. Successful disconnect is idempotent. No persistent connection,
+automatic reconnect, command retry or timeout policy was added.
+
+Preserved: public API/imports, detector identity/presets, optical tokens/units/readbacks,
+command order, CCD/mono wait loops, one-second mono-close delay, capture/dark/reduction,
+exposure setter/cache policy and 0.065/0.1 s minima. No 0.02 s override. ITC W1b, IDQ
+P0 eval parser and all other wrappers remain separate; no map/launcher/profile/schema change.
+
+Validation: 39 whole-module fake-SDK/backend/worker tests pass; focused selection
+135 passed; full offline suite 393 passed / 5 skipped, 172 warnings. This environment
+had no PyQt6, so QtCore plus four QtWidgets modules skipped; acquisition remains gated.
+Changed-file Ruff, compileall, CLI/native-free smoke, TOML and wheel build passed.
+See [W2 checkpoint](horiba-lifecycle-checkpoint.md) for exact inventory, limitations,
+installer/rollback/commit commands and physical acceptance.

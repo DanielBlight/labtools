@@ -97,3 +97,12 @@ structured _itc4000_cleanup_failures. Teardown blocks commands permanently; expl
 close retries only failed handles, with no guarantee a manager-invalidated handle can
 recover. No physical output commands are added. Do not auto-reconnect or silently retry
 commands. Whole-module fake-PyVISA tests supplement historical AST/adapter probes.
+
+## HORIBA W2 lifecycle contract
+
+See [W2 checkpoint](horiba-lifecycle-checkpoint.md). Real wrapper startup/teardown now
+retains primary/cancellation and independently attempts CCD, mono and manager cleanup.
+Failed handles are uncertain and only explicit disconnect retries them; reconnect and
+commands after teardown are refused by cleared public handles/teardown state. Do not
+add timeout/exposure/persistent-connection changes to this checkpoint. Whole-module
+fake SDK tests supplement adapter fakes; neither establishes physical SDK/shutter safety.

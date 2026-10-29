@@ -374,3 +374,12 @@ This does not certify output state, drivers, SDK teardown or physical safety. Pr
 protected core/profile/launchers and writable operator recipes/data. Do not deploy as
 physically accepted based on offline tests. The IDQ eval parser and other wrapper
 findings remain open; acquisition Qt gate is still unmet. No lab-PC deployment occurred.
+
+## HORIBA W2 release caveat
+
+[W2 lifecycle](horiba-lifecycle-checkpoint.md) is offline fake-SDK validated only. Cleanup failures are now
+visible, but native calls may block and retained failed handles remain uncertain.
+Optical commands, shutter behaviour, SDK sleeps and exposure minima are unchanged.
+No driver/physical acceptance or deployment occurred. Keep the prior accepted lab
+release and protected-core/writable-workspace boundary. Qt acquisition gate and other
+wrapper findings remain open.

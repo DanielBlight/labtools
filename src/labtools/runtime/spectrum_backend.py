@@ -10,6 +10,14 @@ from labtools.acquisition.spectrum_service import RangeBackend, SpectrumService
 from labtools.config.spectrum import SpectrumSettings
 
 
+def _retain_disconnect_failure(primary: BaseException, cleanup: BaseException) -> None:
+    """Retain backend teardown without replacing operation/cancellation failure."""
+    previous = getattr(primary, "_horiba_cleanup_failures", ())
+    primary._horiba_cleanup_failures = (*previous, cleanup)
+    primary.add_note(f"HORIBA disconnect also failed: {cleanup!r}")
+    primary._labtools_cleanup_failed = True
+
+
 @asynccontextmanager
 async def open_real_range(
     settings: SpectrumSettings,
@@ -70,12 +78,10 @@ async def open_real_range(
     finally:
         try:
             await spec.disconnect()
-        except Exception as exc:
+        except BaseException as cleanup:
             if primary is None:
                 raise
-            primary.add_note(f"HORIBA disconnect also failed: {exc!r}")
-            # A cancelled job with failed cleanup must not advertise a healthy worker.
-            primary._labtools_cleanup_failed = True
+            _retain_disconnect_failure(primary, cleanup)
 
 
 def create_spectrum_service(*, backend: str) -> SpectrumService:
@@ -149,9 +155,7 @@ async def open_real_alignment(settings, *, spectrometer_factory=None):
     finally:
         try:
             await spec.disconnect()
-        except Exception as exc:
+        except BaseException as cleanup:
             if primary is None:
                 raise
-            primary.add_note(f"HORIBA disconnect also failed: {exc!r}")
-            # A cancelled job with failed cleanup must not advertise a healthy worker.
-            primary._labtools_cleanup_failed = True
+            _retain_disconnect_failure(primary, cleanup)

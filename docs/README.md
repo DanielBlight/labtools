@@ -47,3 +47,6 @@ Avoid duplicating the same procedure in multiple places.
 
 - [ITC4000 lifecycle W1 checkpoint](itc4000-lifecycle-checkpoint.md): implementation,
   fake-transport evidence, exact inventory, install/rollback/commit and next task.
+
+- [HORIBA lifecycle W2 checkpoint](horiba-lifecycle-checkpoint.md): implementation,
+  fake-SDK/backend/worker evidence, exact inventory, installer and next task.

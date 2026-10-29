@@ -111,3 +111,10 @@ transport lifecycle. Full suite now 362 passed / 4 skipped; the same four QtWidg
 modules cannot load libGL.so.1. No supplied local pass log was embedded. The acquisition
 gate remains unmet. See [W1 checkpoint](itc4000-lifecycle-checkpoint.md); no map collision
 fix or launcher change was made. Earlier gate counts above are historical.
+
+## HORIBA W2 independent repair lane
+
+W2 changes wrapper/backend cleanup only. Full suite 393 passed / 5 skipped in an
+environment without PyQt6; QtCore and four QtWidgets modules skipped. This is not Qt
+acceptance. No map allocation or launcher work was done. See
+[W2 checkpoint](horiba-lifecycle-checkpoint.md). Earlier counts above are historical.

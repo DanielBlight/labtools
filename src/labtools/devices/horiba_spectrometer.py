@@ -109,6 +109,8 @@ class HoribaSpectrometer:
             else self._preset.get("ccd_index", CCD_SYNCERITY)
         )
         self._device_manager = None
+        self._teardown_started = False
+        self._uncertain_handles: dict[str, object] = {}
         self._exposure_time = None
         self.mono = None
         self.ccd = None
@@ -123,12 +125,33 @@ class HoribaSpectrometer:
     # Connection
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _retain_cleanup(primary: BaseException, cleanup: BaseException) -> None:
+        """Retain cleanup structurally without replacing startup/cancellation."""
+        previous = getattr(primary, "_horiba_cleanup_failures", ())
+        primary._horiba_cleanup_failures = (*previous, cleanup)
+        primary.add_note(f"HORIBA cleanup also failed: {cleanup!r}")
+        primary._labtools_cleanup_failed = True
+
+    def _ensure_usable(self) -> None:
+        if self._teardown_started:
+            raise RuntimeError(
+                "HORIBA teardown started; commands and reconnect are refused."
+            )
+
     async def connect(self) -> None:
         """Start ICL, open the monochromator and verify the selected detector."""
-        self._device_manager = DeviceManager(start_icl=True)
-        await self._device_manager.start()
-
+        self._ensure_usable()
+        if (
+            self._device_manager is not None
+            or self.mono is not None
+            or self.ccd is not None
+        ):
+            raise RuntimeError("HORIBA connection already started.")
         try:
+            self._device_manager = DeviceManager(start_icl=True)
+            await self._device_manager.start()
+
             monos = list(self._device_manager.monochromators)
             ccds = list(self._device_manager.charge_coupled_devices)
 
@@ -150,9 +173,11 @@ class HoribaSpectrometer:
 
             self._ccd_configuration = await self.ccd.get_configuration()
             self._verify_detector_identity(self._ccd_configuration)
-
-        except Exception:
-            await self.disconnect()
+        except BaseException as primary:
+            try:
+                await self.disconnect()
+            except BaseException as cleanup:  # noqa: BLE001 - preserve startup/cancellation
+                self._retain_cleanup(primary, cleanup)
             raise
 
     def _verify_detector_identity(self, configuration: dict) -> None:
@@ -194,22 +219,68 @@ class HoribaSpectrometer:
             )
 
     async def disconnect(self) -> None:
-        """Close devices and stop ICL."""
-        try:
-            if self.ccd is not None:
-                await self.ccd.close()
-            if self.mono is not None:
+        """Independently close owned SDK handles on their current event loop.
+
+        Cleanup failures retain uncertain handles for an explicit disconnect-only
+        retry. Teardown permanently refuses commands and reconnect. A successfully
+        stopped manager may invalidate retained device handles, so retention records
+        uncertainty rather than a usable connection or guaranteed recovery.
+        """
+        if (
+            self._teardown_started
+            and self.ccd is None
+            and self.mono is None
+            and self._device_manager is None
+            and not self._uncertain_handles
+        ):
+            return
+        self._teardown_started = True
+        handles = {
+            "ccd": self.ccd or self._uncertain_handles.pop("ccd", None),
+            "mono": self.mono or self._uncertain_handles.pop("mono", None),
+            "manager": self._device_manager
+            or self._uncertain_handles.pop("manager", None),
+        }
+        self.ccd = None
+        self.mono = None
+        self._device_manager = None
+        failures: list[BaseException] = []
+
+        async def attempt(name: str, operation) -> None:
+            if handles[name] is None:
+                return
+            try:
+                await operation()
+            except BaseException as exc:  # noqa: BLE001 - attempt all owned cleanup
+                self._uncertain_handles[name] = handles[name]
+                failures.append(exc)
+
+        await attempt("ccd", handles["ccd"].close if handles["ccd"] else None)
+        if handles["mono"] is not None:
+
+            async def close_mono() -> None:
                 await asyncio.sleep(
                     1
-                )  # SDK examples recommend a brief wait before closing mono
-                await self.mono.close()
-        except Exception:  # noqa: BLE001
-            logger.exception(
-                "Error closing devices — ICL may not have stopped cleanly."
+                )  # preserve SDK-recommended wait before mono close
+                await handles["mono"].close()
+
+            await attempt("mono", close_mono)
+        await attempt(
+            "manager", handles["manager"].stop if handles["manager"] else None
+        )
+
+        if failures:
+            primary = next(
+                (error for error in failures if not isinstance(error, Exception)), None
             )
-        finally:
-            if self._device_manager is not None:
-                await self._device_manager.stop()
+            if primary is not None:
+                for failure in failures:
+                    if failure is not primary:
+                        self._retain_cleanup(primary, failure)
+                raise primary
+            error = ExceptionGroup("HORIBA SDK cleanup failed", failures)
+            error._labtools_cleanup_failed = True
+            raise error
 
     # ------------------------------------------------------------------
     # Configuration
@@ -651,5 +722,10 @@ class HoribaSpectrometer:
         await self.connect()
         return self
 
-    async def __aexit__(self, *_) -> None:
-        await self.disconnect()
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            await self.disconnect()
+        except BaseException as cleanup:
+            if exc_value is None:
+                raise
+            self._retain_cleanup(exc_value, cleanup)

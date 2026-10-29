@@ -232,3 +232,9 @@ P0 parser checkpoint instead. Acquisition lane remains Qt gate then collision al
 
 No files are deleted. Only one production wrapper changes; all other runtime,
 acquisition, simulation, profiles, vendor files and dependency metadata remain unchanged.
+
+## Subsequent W2 status
+
+HORIBA W2 is now implemented at input HEAD `8293c1677d43e94fc9b50ede778cc5853dca5db7`.
+ITC W1 behaviour is unchanged. See [W2 checkpoint](horiba-lifecycle-checkpoint.md).
+IDQ P0 and ITC W1b remain open; acquisition gate remains unmet.
