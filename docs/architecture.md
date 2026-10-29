@@ -260,3 +260,7 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 ## Hyperspectral acquisition service boundary
 
 `labtools.acquisition.hyperspectral` is an internal, Qt-free service boundary. It composes the existing `SpectrumService` with a whole-operation mirror context, preserves row-major legacy scan order, reports typed scientific-boundary progress, and writes atomic schema-version-1 NPZ datasets with explicit completion masks and synthetic provenance. It deliberately does not alter the public measurements package, recipe dispatcher, CLI, or GUI.
+
+### Hyperspectral real-resource composition
+
+The operation-scoped `HyperspectralMirrorProvider` leases the session `mirror` resource, including its LabJack, before any device opens and releases it only after context cleanup. HORIBA ownership remains within `SpectrumService`; the current session cannot truthfully reserve that separately. Failures surface as `HyperspectralAcquisitionError` with an immutable partial result and the original exception as cause.

@@ -134,12 +134,17 @@ def test_backend_identity_mismatch(config):
     async def bad_factory():
         yield Bad()
 
-    with pytest.raises(ValueError, match="backend identity"):
+    from labtools.acquisition.hyperspectral import HyperspectralAcquisitionError
+
+    with pytest.raises(
+        HyperspectralAcquisitionError, match="acquisition failed"
+    ) as caught:
         run(
             HyperspectralService(
                 create_spectrum_service(backend="simulation"), bad_factory
             ).acquire(config)
         )
+    assert isinstance(caught.value.__cause__, ValueError)
 
 
 def test_borrowed_and_owned_service_close(config):
@@ -178,3 +183,80 @@ blocked = [n for n in sys.modules if n.startswith(('PyQt', 'labtools.devices', '
 assert not blocked, blocked
 """
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_failure_exposes_immutable_partial_result(config):
+    from contextlib import asynccontextmanager
+
+    from labtools.acquisition.hyperspectral import HyperspectralAcquisitionError
+
+    class FailingSpectra:
+        calls = 0
+
+        async def acquire(self, settings, **kwargs):
+            self.calls += 1
+            if self.calls == 2:
+                raise OSError("detector failed")
+            return await create_spectrum_service(backend="simulation").acquire(settings)
+
+    class Mirror:
+        backend_identity = "simulation:test"
+
+        async def move_to(self, x_v, y_v):
+            pass
+
+        async def home(self):
+            pass
+
+    @asynccontextmanager
+    async def mirrors():
+        yield Mirror()
+
+    with pytest.raises(HyperspectralAcquisitionError) as caught:
+        run(HyperspectralService(FailingSpectra(), mirrors).acquire(config))
+    assert isinstance(caught.value.__cause__, OSError)
+    assert caught.value.partial_result.status == "failed"
+    assert caught.value.partial_result.completed_points == 1
+    assert not caught.value.partial_result.intensity.flags.writeable
+
+
+def test_session_provider_reserves_before_open_and_releases_after_operation():
+    from labtools.runtime.hyperspectral import HyperspectralMirrorProvider
+    from labtools.runtime.session import InstrumentSession
+
+    opened = []
+
+    class Device:
+        def move(self, x, y):
+            opened.append((x, y))
+
+        def home(self):
+            opened.append("home")
+
+        def close(self):
+            opened.append("close")
+
+    session = InstrumentSession(
+        {"mirror": lambda: Device()}, cleanup_methods={"mirror": ("home",)}
+    )
+    provider = HyperspectralMirrorProvider(session)
+    with session.reserve("conflict", ("mirror",)):
+
+        async def conflict():
+            async with provider():
+                pass
+
+        with pytest.raises(RuntimeError):
+            run(conflict())
+        assert opened == []
+
+    async def use():
+        async with provider() as mirror:
+            assert session.reservations() == {"mirror": "hyperspectral-service"}
+            await mirror.move_to(0.1, 0.2)
+            await mirror.home()
+        assert session.reservations() == {}
+
+    run(use())
+    session.close()
+    assert opened == [(0.1, 0.2), "home", "close"]

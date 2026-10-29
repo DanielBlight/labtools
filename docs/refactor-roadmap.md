@@ -388,3 +388,5 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 ### Hyperspectral service checkpoint
 
 The first reviewed Qt-free hyperspectral service boundary is implemented with deterministic offline simulation and versioned partial-output persistence. Public facade/recipe/dispatcher/CLI exposure remains a separate gated checkpoint after real-backend reservation and cleanup acceptance.
+
+- Hyperspectral hardening now covers session-owned mirror reservation and partial-result failure propagation. Public exposure remains gated on a truthful operation-wide spectrometer ownership design and physical acceptance.

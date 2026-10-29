@@ -95,6 +95,14 @@ class HyperspectralResult:
             value.setflags(write=False)
 
 
+class HyperspectralAcquisitionError(RuntimeError):
+    """Acquisition failed after producing an immutable diagnostic result."""
+
+    def __init__(self, message: str, *, partial_result: HyperspectralResult) -> None:
+        super().__init__(message)
+        self.partial_result = partial_result
+
+
 ProgressCallback = Callable[[HyperspectralProgress], None]
 CancelCallback = Callable[[], bool]
 MirrorFactory = Callable[[], AbstractAsyncContextManager[HyperspectralMirror]]
@@ -231,7 +239,7 @@ class HyperspectralService:
         total = config.x_points * config.y_points
         mirror_identity = "unknown"
         status = "failed"
-        failure: BaseException | None = None
+        failure: Exception | None = None
 
         def emit(
             phase: str, done: int, iy: int | None = None, ix: int | None = None
@@ -328,7 +336,6 @@ class HyperspectralService:
                         cube[iy, ix] = values
                         completed[iy, ix] = True
                         emit("point_completed", int(completed.sum()), iy, ix)
-                await mirror.home()
                 status = "complete"
         except asyncio.CancelledError:
             status = "cancelled"
@@ -354,5 +361,10 @@ class HyperspectralService:
                     raise
         emit(status, final.completed_points)
         if failure is not None:
-            raise failure
+            error = HyperspectralAcquisitionError(
+                "Hyperspectral acquisition failed", partial_result=final
+            )
+            for note in getattr(failure, "__notes__", ()):
+                error.add_note(note)
+            raise error from failure
         return final

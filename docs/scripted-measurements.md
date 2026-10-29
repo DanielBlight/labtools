@@ -135,3 +135,5 @@ physical confirmation and acceptance requirements.
 ## Hyperspectral status
 
 A reviewed internal Qt-free service now exists, but it is not exported from `labtools.measurements`, accepted by strict recipes or dispatch, or exposed through `labtools measure`. Use it only for service-level development and offline simulation until the next acceptance checkpoint.
+
+The internal hyperspectral service now reserves the shared mirror/LabJack for its mirror context and exposes failed partial results through a dedicated causal exception. It remains intentionally absent from public measurements, recipes, dispatch, CLI and GUI.

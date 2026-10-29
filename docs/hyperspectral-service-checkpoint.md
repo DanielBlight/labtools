@@ -17,3 +17,9 @@ uv run --no-sync python -m pytest -q tests/test_hyperspectral_service.py
 uv run --no-sync python -m pytest -q
 uv run --no-sync python -m ruff check src/labtools/config/hyperspectral.py src/labtools/acquisition/hyperspectral.py src/labtools/simulation/hyperspectral.py tests/test_hyperspectral_service.py
 ```
+
+## Real-resource hardening boundary
+
+`HyperspectralMirrorProvider` now holds the shared `mirror` reservation, which represents the scanning mirror and its backing LabJack, for the complete mirror context. Conflicts are rejected before the device factory opens. The current `InstrumentSession` does not own the HORIBA spectrometer, so this checkpoint deliberately does not claim an enforceable cross-service spectrometer reservation. `SpectrumService` remains the spectrometer owner and native imports remain lazy.
+
+Acquisition failures now raise `HyperspectralAcquisitionError` from the original exception and carry the immutable failed partial result. Persistence and backend cleanup diagnostics remain attached without replacing the causal exception. Laser current, enable/disable, warm-up, shutter and optical-path confirmation remain responsibilities of a future higher-level hazardous physical workflow.

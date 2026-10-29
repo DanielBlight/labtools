@@ -259,3 +259,7 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 ## Latest checkpoint: internal hyperspectral service
 
 A Qt-free internal hyperspectral configuration/service/result boundary now composes `SpectrumService` with an operation-scoped mirror factory. It has deterministic synthetic provenance, point-boundary cancellation, atomic pickle-free NPZ persistence, and no public measurement/recipe/CLI/GUI exposure. Resume and a reviewed real mirror/session adapter remain intentionally unimplemented.
+
+### Hyperspectral hardening follow-up
+
+The service now has an operation-scoped session mirror provider and a dedicated acquisition error carrying immutable partial data. Offline tests prove conflict-before-open and reservation lifetime. A unified enforceable HORIBA reservation is still absent and physical acceptance remains outstanding.
