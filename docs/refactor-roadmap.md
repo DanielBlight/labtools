@@ -392,3 +392,5 @@ The first reviewed Qt-free hyperspectral service boundary is implemented with de
 - Hyperspectral hardening now covers session-owned mirror reservation and partial-result failure propagation. Public exposure remains gated on a truthful operation-wide spectrometer ownership design and physical acceptance.
 
 - Hyperspectral now has truthful in-process operation-wide ownership of both the session mirror/LabJack and the actual persistent HORIBA range backend. Cross-process exclusion and physical acceptance remain future gates.
+
+- The internal hyperspectral failure matrix is now covered offline. Public exposure may be considered next, subject to a separate facade/recipe/CLI checkpoint and explicit retention of physical-policy gates.

@@ -268,3 +268,7 @@ The operation-scoped `HyperspectralMirrorProvider` leases the session `mirror` r
 ### Persistent hyperspectral spectrum ownership
 
 `SpectrumService.operation` is the narrow multi-acquisition contract: one exact `SpectrumSettings` value, one live range backend, normal SpectrumService validation/dark/result semantics, and outer-context teardown. `open_real_range` ties a process-local exclusive ownership lock to the actual HORIBA object's lifetime. `open_hyperspectral_service` acquires mirror ownership before spectrum ownership and lends both dependencies without transferring closure responsibility.
+
+### Hyperspectral failure contract
+
+Ordinary point acquisition failures are exposed as `HyperspectralAcquisitionError` with the immutable partial result and original exception as cause. Cancellation returns an immutable cancelled partial result. `KeyboardInterrupt` and `SystemExit` bypass ordinary failure wrapping. Ownership cleanup diagnostics attach to the primary error rather than replacing it.

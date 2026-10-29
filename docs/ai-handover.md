@@ -267,3 +267,7 @@ The service now has an operation-scoped session mirror provider and a dedicated 
 ### HORIBA operation ownership resolved in-process
 
 Hyperspectral composition now uses `SpectrumService.operation` to keep one configured backend for a full cube. Real range creation is process-locally exclusive and conflict rejection occurs before native construction. This is not a cross-process lock and is not physical acceptance.
+
+### Hyperspectral failure matrix completed offline
+
+The focused matrix now exercises point failures, axis drift, partial cancellation, immutable partial results, close ownership and primary preservation. Existing HORIBA lifecycle tests provide startup/disconnect cleanup evidence. No physical or Qt acceptance is implied.

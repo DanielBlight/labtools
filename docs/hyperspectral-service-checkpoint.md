@@ -27,3 +27,7 @@ Acquisition failures now raise `HyperspectralAcquisitionError` from the original
 ## Operation-scoped HORIBA ownership
 
 `SpectrumService.operation(settings)` now opens one configured range backend and lends a validation-preserving service across the complete cube. The real range adapter owns a process-local exclusive lock for exactly the lifetime of the actual HORIBA instance; a competing operation is rejected before native construction. Standalone SpectrumService calls retain their existing open/acquire/close lifecycle. `open_hyperspectral_service` validates and checks cancellation before resources open, acquires the mirror reservation first, then owns the persistent spectrum backend, and lends both to `HyperspectralService`.
+
+## Failure-matrix acceptance
+
+Focused offline failure injection now covers first-point and mid-scan mirror and spectrum failures, wavelength-axis drift, cancellation after completed data, immutable failed/cancelled partial results, borrowed/owned close counts, owned-close diagnostics, and unwrapped `KeyboardInterrupt`. Existing HORIBA wrapper tests remain authoritative for factory/connect/configure/disconnect cleanup and lock release. These tests are offline evidence only.
