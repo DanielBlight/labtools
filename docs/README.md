@@ -56,3 +56,6 @@ Avoid duplicating the same procedure in multiple places.
 - [UC480 lifecycle checkpoint](uc480-lifecycle-checkpoint.md): partial-start rollback, cleanup evidence and installer.
 
 - [SC10 lifecycle checkpoint](sc10-lifecycle-checkpoint.md): serial ownership, transcript tests and installer.
+
+- [Scriptable measurements](scripted-measurements.md): target public automation API and usage.
+- [Kinesis lifecycle checkpoint](kinesis-lifecycle-checkpoint.md): validation and close ownership.
