@@ -58,3 +58,7 @@ See `examples/measurements/simulate_spectrum.py`. Detector minima remain enforce
 ## Dark capture and reuse
 
 The spectrum facade now exports `capture_dark`, `capture_dark_async`, `save_dark`, `load_dark`, and `request_with_dark`. Dark records remain the existing immutable `DarkRecord`; persistence delegates to schema-version-1 pickle-free NPZ. Reuse requires exact `SpectrumSettings` equality, including reviewed configuration ID and backend, before acquisition.
+
+## Alignment-frame facade
+
+The public package now exports frozen `AlignmentRequest`/`AlignmentMeasurement` plus synchronous and async `acquire_alignment_frame` entry points. They delegate to the existing `SpectrumWorker.acquire_alignment` and `SpectrumService.acquire_alignment`, preserve configuration/backend provenance, detector minima, raw/corrected immutable arrays, actual centre readback, progress and cooperative cancellation.

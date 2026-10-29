@@ -152,3 +152,7 @@ The Qt-free spectrum facade is implemented; see [checkpoint](measurements-spectr
 ## Scripted dark records
 
 Qt-free dark capture, immutable reuse and NPZ helpers are implemented; see [checkpoint](measurements-dark-checkpoint.md).
+
+## Scripted alignment frames
+
+Qt-free sync/async alignment acquisition is implemented; see [checkpoint](measurements-alignment-checkpoint.md).
