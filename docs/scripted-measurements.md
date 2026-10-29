@@ -11,7 +11,6 @@ Operators should automate repeatable work by importing stable **measurement func
 - `devices/`: transport wrappers, not the operator scripting API.
 - `io/`: explicit save/load/export helpers. Measurement calls return data; they do not silently choose output paths unless the workflow is intrinsically dataset-backed.
 
-Do not create a second implementation called “measurements”. The facade delegates to existing `SpectrumService` and `acquire_intensity_map`; future hyperspectral work should first become a reviewed acquisition service rather than exporting the unsafe legacy runner. GUI controllers must call the same facade or service contract.
 
 ## Proposed usage
 
@@ -47,13 +46,11 @@ with MeasurementRuntime.from_profile() as runtime:
 6. Add versioned JSON recipes and examples per measurement. Scripts may compose measurements in Python, while editable recipes remain data-only.
 7. Publish an API compatibility policy, generated reference, simulation examples and end-to-end tests proving GUI/script parity.
 
-Until these phases land, use the existing `SpectrumService`, `SpectrumSettings`, `acquire_intensity_map`, and the anneal recipe runner directly as documented examples. Do not import GUI modules or use the legacy hyperspectral runner for unattended work.
 
 ## Implemented spectrum facade checkpoint
 
 `labtools.measurements` now exports frozen `SpectrumRequest`, `MeasurementProvenance`, `SpectrumMeasurement`, explicit `SpectrumRuntime`, and sync/async `acquire_spectrum` functions. It delegates to `SpectrumService`/`SpectrumWorker`; it does not duplicate range acquisition. Backend and reviewed configuration ID are preserved in provenance, simulation is explicitly marked synthetic, progress reports started/completed, and cancellation uses existing cooperative service boundaries. Runtime ownership is explicit: omitted runtime is owned and closed by the function; supplied runtime remains caller-owned and reusable.
 
-See `examples/measurements/simulate_spectrum.py`. Detector minima remain enforced by existing settings/backend validation. Map, hyperspectral and anneal facades remain unimplemented.
 
 ## Dark capture and reuse
 
@@ -138,8 +135,13 @@ A reviewed internal Qt-free service now exists, but it is not exported from `lab
 
 The internal hyperspectral service now reserves the shared mirror/LabJack for its mirror context and exposes failed partial results through a dedicated causal exception. It remains intentionally absent from public measurements, recipes, dispatch, CLI and GUI.
 
-The internal hyperspectral runtime now composes one operation-scoped mirror lease with one persistent exact-settings SpectrumService backend. This remains internal and adds no facade, recipe, dispatcher, CLI, GUI, pipeline or anneal support.
 
-Internal hyperspectral failure injection now covers partial-result, cancellation and ownership contracts. Public hyperspectral scripting remains unsupported until a separate facade acceptance checkpoint.
 
-The internal hyperspectral service has final combined-failure evidence but remains unavailable through public measurements, recipes, dispatch, CLI or GUI.
+
+## Public hyperspectral scripted measurement
+
+`labtools.measurements` now exports `HyperspectralRequest`, `HyperspectralRuntime`, `HyperspectralMeasurement`, and synchronous/asynchronous `acquire_hyperspectral_map` functions. Strict schema-version-1 `hyperspectral` recipes run through the existing single-recipe dispatcher and `labtools measure validate|run`. Simulation requires no confirmation; real execution still requires `--confirm-real`, which confirms intent only. There is no GUI integration, resume, pipeline, anneal dispatch, cross-process HORIBA exclusion, or physical acceptance.
+
+### Public hyperspectral contract hardening
+
+The additive public export surface is frozen to the request, runtime, measurement/provenance, and sync/async acquisition functions. Request validation refuses an existing output path before runtime construction. Runtime cleanup attempts all owned resources, preserves `KeyboardInterrupt`/`SystemExit` as primary, and aggregates ordinary cleanup failures. `MeasurementRuntimeStatus` remains unchanged for positional compatibility. `load_hyperspectral_result` remains an internal/facade-module helper rather than a package-level export.

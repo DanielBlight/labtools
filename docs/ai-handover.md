@@ -273,3 +273,9 @@ Hyperspectral composition now uses `SpectrumService.operation` to keep one confi
 The focused matrix now exercises point failures, axis drift, partial cancellation, immutable partial results, close ownership and primary preservation. Existing HORIBA lifecycle tests provide startup/disconnect cleanup evidence. No physical or Qt acceptance is implied.
 
 The final offline hyperspectral matrix adds startup/exit, combined persistence, `SystemExit`, and runtime import-isolation cases. Public hyperspectral APIs remain intentionally absent.
+
+### Public hyperspectral facade checkpoint
+
+Hyperspectral is now additively exposed for scripted measurement, strict version-1 recipes and guarded single-recipe dispatch. GUI integration, resume, pipelines and anneal remain unsupported. Real confirmation is intent-only and does not establish laser, shutter, optical-path, sample or hardware safety.
+
+The public hyperspectral contract is hardened: exact additive exports are tested, existing output paths reject before runtime creation, borrowed ownership is preserved, cleanup handles multiple failures, and cancelled partial results survive operation-context exit.

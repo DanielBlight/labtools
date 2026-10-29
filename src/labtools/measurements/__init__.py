@@ -1,3 +1,11 @@
+from .hyperspectral import (
+    HyperspectralMeasurement,
+    HyperspectralMeasurementProvenance,
+    HyperspectralRequest,
+    HyperspectralRuntime,
+    acquire_hyperspectral_map,
+    acquire_hyperspectral_map_async,
+)
 from .intensity_map import (
     IntensityMapMeasurement,
     IntensityMapProvenance,
@@ -34,6 +42,10 @@ from .spectrum import (
 __all__ = [
     "AlignmentMeasurement",
     "AlignmentRequest",
+    "HyperspectralMeasurement",
+    "HyperspectralMeasurementProvenance",
+    "HyperspectralRequest",
+    "HyperspectralRuntime",
     "IntensityMapMeasurement",
     "IntensityMapProvenance",
     "IntensityMapRequest",
@@ -46,6 +58,8 @@ __all__ = [
     "SpectrumRuntime",
     "acquire_alignment_frame",
     "acquire_alignment_frame_async",
+    "acquire_hyperspectral_map",
+    "acquire_hyperspectral_map_async",
     "acquire_intensity_map",
     "acquire_intensity_map_async",
     "acquire_spectrum",

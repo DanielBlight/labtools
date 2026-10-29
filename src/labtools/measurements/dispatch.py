@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import Any, Literal
 
 from .alignment import acquire_alignment_frame, acquire_alignment_frame_async
+from .hyperspectral import acquire_hyperspectral_map, acquire_hyperspectral_map_async
 from .intensity_map import acquire_intensity_map, acquire_intensity_map_async
 from .recipes import MeasurementRecipe, load_recipe
 from .runtime import MeasurementRuntime
@@ -81,11 +82,15 @@ def _identity(recipe: MeasurementRecipe) -> tuple[str | None, Mapping[str, Any] 
         return None, MappingProxyType(
             dict(recipe.request.config.checkpoint_signature())
         )
+    if recipe.kind == "hyperspectral":
+        return recipe.request.config.configuration_id, None
     return recipe.request.settings.configuration_id, None
 
 
 def _status(recipe: MeasurementRecipe, result: Any) -> ExecutionStatus:
     if recipe.kind == "intensity_map" and not result.result.complete:
+        return "cancelled"
+    if recipe.kind == "hyperspectral" and result.result.status == "cancelled":
         return "cancelled"
     return "success"
 
@@ -169,6 +174,13 @@ def execute_recipe(
                 timeout=timeout,
                 progress=progress,
             )
+        elif recipe.kind == "hyperspectral":
+            result = acquire_hyperspectral_map(
+                recipe.request,
+                runtime=runtime.hyperspectral,
+                progress=progress,
+                cancel_requested=cancel_requested,
+            )
         else:
             result = acquire_intensity_map(
                 recipe.request,
@@ -223,6 +235,13 @@ async def execute_recipe_async(
             result = await acquire_alignment_frame_async(
                 recipe.request,
                 runtime=runtime.spectrum,
+                progress=progress,
+                cancel_requested=cancel_requested,
+            )
+        elif recipe.kind == "hyperspectral":
+            result = await acquire_hyperspectral_map_async(
+                recipe.request,
+                runtime=runtime.hyperspectral,
                 progress=progress,
                 cancel_requested=cancel_requested,
             )

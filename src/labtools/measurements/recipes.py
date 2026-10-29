@@ -8,21 +8,25 @@ from pathlib import Path
 from typing import Any
 
 from labtools.acquisition.alignment_spectrum import AlignmentSettings
+from labtools.config.hyperspectral import HyperspectralConfig
 from labtools.config.intensity_map import IntensityMapConfig
 from labtools.config.spectrum import SpectrumSettings
 
 from .alignment import AlignmentRequest
+from .hyperspectral import HyperspectralRequest
 from .intensity_map import IntensityMapRequest
 from .spectrum import SpectrumRequest, load_dark, request_with_dark
 
 RECIPE_SCHEMA_VERSION = 1
-KINDS = {"spectrum", "dark", "alignment", "intensity_map"}
+KINDS = {"spectrum", "dark", "alignment", "intensity_map", "hyperspectral"}
 
 
 @dataclass(frozen=True)
 class MeasurementRecipe:
     kind: str
-    request: SpectrumRequest | AlignmentRequest | IntensityMapRequest
+    request: (
+        SpectrumRequest | AlignmentRequest | IntensityMapRequest | HyperspectralRequest
+    )
     dark_record_path: Path | None = None
 
     def validate(self) -> None:
@@ -37,8 +41,16 @@ class MeasurementRecipe:
                 raise ValueError(
                     "pre_taken spectrum recipe requires dark_record_path or in-memory dark"
                 )
+        elif (
+            self.kind == "hyperspectral"
+            and self.request.config.dark_mode == "pre_taken"
+        ):
+            if self.dark_record_path is None and self.request.dark is None:
+                raise ValueError(
+                    "pre_taken hyperspectral recipe requires dark_record_path"
+                )
         elif self.dark_record_path is not None:
-            raise ValueError("dark_record_path is only valid for pre_taken spectrum")
+            raise ValueError("dark_record_path is only valid for pre_taken measurement")
 
     @property
     def backend(self) -> str:
@@ -82,6 +94,15 @@ def recipe_to_data(recipe: MeasurementRecipe) -> dict[str, Any]:
             )
     elif recipe.kind == "alignment":
         body = {"settings": _jsonable(asdict(req.settings)), "owner": req.owner}
+    elif recipe.kind == "hyperspectral":
+        body = {
+            "config": _jsonable(asdict(req.config)),
+            "owner": req.owner,
+            "output_path": str(req.output_path) if req.output_path else None,
+            "dark_record_path": str(recipe.dark_record_path)
+            if recipe.dark_record_path
+            else None,
+        }
     else:
         body = {
             "config": _jsonable(asdict(req.config)),
@@ -145,6 +166,26 @@ def load_recipe(path: str | Path) -> MeasurementRecipe:
             AlignmentRequest(
                 _strict(AlignmentSettings, body["settings"]), body["owner"]
             ),
+        )
+    elif kind == "hyperspectral":
+        if set(body) != {"config", "owner", "output_path", "dark_record_path"}:
+            raise ValueError("Recipe fields must match exactly")
+        raw = dict(body["config"])
+        raw["spectrum"] = _strict(SpectrumSettings, raw["spectrum"])
+        config = _strict(HyperspectralConfig, raw)
+        output = (
+            Path(body["output_path"]).expanduser().resolve()
+            if body["output_path"]
+            else None
+        )
+        dark_path = (
+            Path(body["dark_record_path"]).expanduser().resolve()
+            if body["dark_record_path"]
+            else None
+        )
+        dark = load_dark(dark_path) if dark_path else None
+        result = MeasurementRecipe(
+            kind, HyperspectralRequest(config, output, dark, body["owner"]), dark_path
         )
     else:
         if set(body) != {"config", "owner", "resume_directory"}:

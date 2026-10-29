@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .hyperspectral import HyperspectralRuntime
 from .intensity_map import IntensityMapRuntime
 from .spectrum import SpectrumRuntime
 
@@ -25,21 +26,30 @@ class MeasurementRuntime:
         backend: str,
         spectrum_runtime=None,
         map_runtime=None,
+        hyperspectral_runtime=None,
         spectrum_factory=SpectrumRuntime,
         map_factory=IntensityMapRuntime,
+        hyperspectral_factory=HyperspectralRuntime,
     ) -> None:
         if backend not in {"real", "simulation"}:
             raise ValueError("backend must be real or simulation")
-        for name, value in (("spectrum", spectrum_runtime), ("map", map_runtime)):
+        for name, value in (
+            ("spectrum", spectrum_runtime),
+            ("map", map_runtime),
+            ("hyperspectral", hyperspectral_runtime),
+        ):
             if value is not None and value.backend != backend:
                 raise ValueError(f"{name} runtime backend does not match")
         self.backend = backend
         self._spectrum = spectrum_runtime
         self._map = map_runtime
+        self._hyperspectral = hyperspectral_runtime
         self._spectrum_factory = spectrum_factory
         self._map_factory = map_factory
+        self._hyperspectral_factory = hyperspectral_factory
         self._own_spectrum = spectrum_runtime is None
         self._own_map = map_runtime is None
+        self._own_hyperspectral = hyperspectral_runtime is None
         self._closed = False
 
     def _check(self):
@@ -60,6 +70,13 @@ class MeasurementRuntime:
             self._map = self._map_factory(backend=self.backend)
         return self._map
 
+    @property
+    def hyperspectral(self):
+        self._check()
+        if self._hyperspectral is None:
+            self._hyperspectral = self._hyperspectral_factory(backend=self.backend)
+        return self._hyperspectral
+
     def status(self):
         return MeasurementRuntimeStatus(
             self.backend,
@@ -75,6 +92,7 @@ class MeasurementRuntime:
         for runtime, owned in (
             (self._spectrum, self._own_spectrum),
             (self._map, self._own_map),
+            (self._hyperspectral, self._own_hyperspectral),
         ):
             if runtime is not None and owned:
                 try:

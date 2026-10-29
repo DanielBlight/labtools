@@ -396,3 +396,7 @@ The first reviewed Qt-free hyperspectral service boundary is implemented with de
 - The internal hyperspectral failure matrix is now covered offline. Public exposure may be considered next, subject to a separate facade/recipe/CLI checkpoint and explicit retention of physical-policy gates.
 
 - Final combined hyperspectral failure cases are now covered offline; the next eligible checkpoint is the separately reviewed public facade/recipe/dispatch/CLI boundary.
+
+- Hyperspectral scripted facade/recipe/dispatch/CLI exposure is implemented. Follow with a focused public-contract hardening pass before considering GUI integration.
+
+- Public hyperspectral API hardening is complete offline. GUI integration may now be considered as a separate checkpoint against the frozen facade; physical and Qt acceptance remain separate gates.

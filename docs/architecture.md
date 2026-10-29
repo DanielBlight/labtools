@@ -274,3 +274,9 @@ The operation-scoped `HyperspectralMirrorProvider` leases the session `mirror` r
 Ordinary point acquisition failures are exposed as `HyperspectralAcquisitionError` with the immutable partial result and original exception as cause. Cancellation returns an immutable cancelled partial result. `KeyboardInterrupt` and `SystemExit` bypass ordinary failure wrapping. Ownership cleanup diagnostics attach to the primary error rather than replacing it.
 
 Combined hyperspectral acquisition and persistence failures retain the acquisition error as cause and attach persistence diagnostics. Clean persistence failure remains directly visible. Mirror-context exit failure produces a failed immutable diagnostic result, even when all points were acquired, because resource cleanup did not complete successfully.
+
+### Public hyperspectral scripting boundary
+
+The public hyperspectral facade is a thin wrapper over the reviewed internal service. It adds immutable request/measurement provenance, explicit runtime ownership, MeasurementRuntime composition, strict recipe loading, dispatch and guarded CLI routing without duplicating acquisition, reservations, persistence, simulation or dark logic.
+
+The hardened public facade validates overwrite refusal before constructing a runtime and keeps package exports limited to acquisition contracts. Runtime cleanup follows the repository convention: all owned cleanup is attempted, non-ordinary primary exceptions remain primary, and ordinary multiple failures use `ExceptionGroup`.

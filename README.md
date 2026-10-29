@@ -84,3 +84,7 @@ QSettings keys, output formats, checkpoint schema and the synthetic scene model.
 Legacy launch commands and selected moved-module imports remain available;
 see the command guide. The large GUI classes have not been rewritten.
 
+
+### Hyperspectral scripted simulation
+
+From a source checkout, run `uv run --no-sync python -m labtools.cli measure validate .\examples\measurements\recipes\hyperspectral_simulation.json` and then `uv run --no-sync python -m labtools.cli measure run .\examples\measurements\recipes\hyperspectral_simulation.json`. Real execution additionally requires `--confirm-real`; this confirms intent, not physical safety.

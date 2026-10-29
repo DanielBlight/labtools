@@ -150,7 +150,6 @@ class SpectrumService:
                 yield backend
 
             yield SpectrumService(borrowed)
-        self._cancel(cancel_requested)
 
     @staticmethod
     def _cancel(cancel_requested: Callable[[], bool] | None) -> None:
