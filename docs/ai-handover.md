@@ -1,18 +1,19 @@
-# Development handover: deployment guidance and open Qt gate
+# Development handover: device-wrapper audit and open Qt gate
 
 ## Starting identity and evidence
 
-Current input: `labtools_source_20261028_170656.txt`, created
-2026-10-28T17:06:56.8575069Z, branch `feature/shared-instrument-session`, HEAD
-`a439207b4b6d6aec2fbf3575d2fa155893d318a3`, upstream +2/-0.
-Recorded dirty state: untracked `apply_labtools_alignment_lifecycle.py` and
-`apply_labtools_comparative_audit.py`; tracked worktree/index otherwise clean.
-No local Windows test output was attached. A commit containing test source is not
-proof that the QtWidgets acceptance cases ran. Actual live Git status is authoritative.
+Current input: `labtools_source_20261028_215033.txt`, created
+2026-10-28T21:50:33.8045255Z, branch `feature/shared-instrument-session`, HEAD
+`ceaabec9ea4882c1882f71facf604a04099a5992`, upstream +0/-0.
+Tracked worktree/index are recorded clean. Three installers are untracked:
+`apply_labtools_alignment_lifecycle.py`, `apply_labtools_comparative_audit.py`,
+`apply_labtools_deployment_docs.py`. Preserve these and any live unrelated changes.
+No separate local Qt acceptance pass output is embedded. Actual live status is authoritative.
 
-This checkpoint adds deployment documentation only. No production/test Python, lockfile,
-profile, driver, account, ACL, installed lab-PC environment or hardware was changed.
-The collision-safe map allocation task remains blocked by the explicit Qt gate.
+This checkpoint is documentation-only: an independent device-wrapper audit and bounded
+repair plan. No production/test Python, dependency, profile, driver, account, ACL,
+lab-PC environment, Git history/index or hardware was changed. The QtWidgets gate
+remains open, so collision-safe map allocation has not advanced.
 
 Read [architecture](architecture.md), [audit](comparative-audit.md),
 [roadmap](refactor-roadmap.md) and [conventions](development-conventions.md).
@@ -92,19 +93,25 @@ lifecycle; HORIBA preset discovery, shutter/dark correctness, exposure timing an
 loop teardown. Existing SC10/ITC/camera/stage and hazardous anneal/hyperspectral paths
 are not certified by these tests. No physical endpoint was contacted.
 
-## Next bounded task
+## Next bounded task and separate work lanes
 
-First run the supplied QtWidgets acceptance cases on the Windows checkout and fix only
-failures from that gate. If they all execute and pass, the next implementation task is
-collision-safe intensity-map output-directory allocation: two new runs in the same
-second must not fail or overwrite data. Preserve the legacy first directory name,
-metadata, checkpoint/resume schema and deterministic output. Add concurrent-allocation
-and immediate-retry tests. Keep this separate from launcher Phase 7, persistent HORIBA
-connections, IDQ streaming and broad wrapper rewrites.
+Read [wrapper audit](device-wrapper-audit.md), [repair plan](device-wrapper-repair-plan.md)
+and [checkpoint](wrapper-audit-checkpoint.md).
 
-Remaining reviews: shared IDQ explicit counter-provider compatibility and IPv4 policy;
-native disconnect-error visibility; tracked artifacts; physical acceptance. No unrelated
-artifact was deleted. The comparative audit is a historical record, not current counts.
+Acquisition lane: first execute/fix the QtWidgets gate with complete local output.
+Only after it passes, implement collision-safe map output directories as already planned.
+Do not treat committed test source, bytecode or a zero exit code with skips as a pass.
+
+Independent wrapper lane (per the user's added request): next fixture-independent
+implementation is W1 ITC transport startup/teardown only. Preserve public API and all
+output/TEC/current commands; add whole-wrapper fake-PyVISA failure tests. Do not combine
+with finite-limit policy, HORIBA, IDQ streaming, map allocation or launcher changes.
+IDQ histogram eval is a P0 parser finding: prioritize an isolated parser fix when
+representative accepted-response fixtures are available; do not invent firmware grammar.
+
+The audit recommends targeted repairs, not a blanket rewrite. DLT/IDQ internal ownership
+needs staged decomposition behind the existing facade. Existing style passes do not
+establish lifecycle correctness. Keep the physical acceptance and deployment gates.
 
 ## Git workflow
 
@@ -130,3 +137,13 @@ execute and pass, or supplied local output explicitly establishes that result.
 Next task remains: run/fix the QtWidgets gate; then collision-safe map directory
 allocation in one bounded checkpoint. Keep output schemas/resume/determinism and
 0.065/0.1 s detector minima unchanged. No new runtime behaviour is claimed here.
+
+## Current wrapper-audit validation
+
+Qt gate rerun: 15 passed / 4 skipped. Full offline suite: 318 passed / 4 skipped,
+172 inherited warnings. All four QtWidgets modules still skip (libGL.so.1 missing).
+Eight extracted-method fake-handle probes confirm specific ITC/HORIBA/DAC/UC480 defects;
+these are not whole-module or hardware tests. Device Ruff check passes and all 12 device
+Python files are formatted. See the checkpoint for compile/build/import/link evidence.
+No wrapper rewrite or collision fix is implemented by this documentation checkpoint.
+Earlier counts and deployment statements above remain historical evidence where labelled.

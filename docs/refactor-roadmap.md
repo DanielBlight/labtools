@@ -1,6 +1,6 @@
 # Refactor roadmap: audited status
 
-Based on input snapshot HEAD `a439207b4b6d6aec2fbf3575d2fa155893d318a3`.
+Based on input snapshot HEAD `ceaabec9ea4882c1882f71facf604a04099a5992`.
 See [audit](comparative-audit.md) and [handover](ai-handover.md). Offline validation is
 not hardware acceptance. Existing wrapper matrix below remains the review backlog.
 
@@ -44,7 +44,7 @@ is declared complete by these tests. Persistent HORIBA connections remain unimpl
 
 ## Phase 5: wrapper reliability and hazardous-workflow review
 
-Status: PARTIAL (LabJack startup fix only). Prerequisite: each wrapper's consumer
+Status: PARTIAL implementation; wrapper audit and repair plan COMPLETE as documentation, not runtime remediation. LabJack startup and existing camera cleanup work remain; other findings are not fixed. Prerequisite: each wrapper's consumer
 inventory; independent bounded tasks, not a sweep. Model: capable coding model for
 small lifecycle adapters; strong reasoning plus hardware owner for hazardous policy.
 Files: devices/*, acquisition/laser_anneal.py, run_hyperspectral_scan.py, relevant GUIs.
@@ -252,3 +252,17 @@ No new acquisition phase is complete: [Qt gate](qt-gate-status.md) reran with
 15 passed / 4 skipped; full suite 318 passed / 4 skipped. Collision-safe map allocation
 is still PLANNED/BLOCKED pending executed QtWidgets acceptance. Do not infer a pass
 from a committed test file, bytecode file or pytest exit code with skipped modules.
+
+## Device-wrapper audit checkpoint
+
+[Audit](device-wrapper-audit.md) covers every devices/ module and the first-party
+consumer inventory. [Repair plan](device-wrapper-repair-plan.md) supersedes the matrix
+as the detailed failure-path task order, without retiring public APIs or certifying
+hardware. Most wrappers need targeted repairs; IDQ/DLT merits staged internal ownership
+redesign, not a wholesale command rewrite. P0 histogram eval parsing requires fixtures.
+
+The next independent wrapper task is W1 ITC transport lifecycle only. Keep it separate
+from the acquisition lane: the QtWidgets gate remains unmet (15 passed / 4 skipped),
+so collision-safe map allocation remains planned/blocked. Full suite 318 passed /
+4 skipped. No production/test Python changed in this checkpoint. Phase 7 launcher,
+persistent HORIBA connections and streaming migration remain unimplemented.

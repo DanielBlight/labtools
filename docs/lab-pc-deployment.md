@@ -349,3 +349,17 @@ The Windows commands and ACL template are a proposed runbook, not a tested lab-P
 - [ ] Operator instructions, data backup and rollback owner agreed.
 
 **Keep the existing working lab installation until this checklist is satisfied.**
+
+## Subsequent device-wrapper audit: release caveat
+
+This runbook's original source basis and counts above are historical. The subsequent
+input is snapshot `labtools_source_20261028_215033.txt`, HEAD
+`ceaabec9ea4882c1882f71facf604a04099a5992`. The Qt gate remains 15 passed / 4 skipped;
+no local Windows pass log is embedded. No deployment or permissions were changed.
+
+[Wrapper audit](device-wrapper-audit.md) documents ITC partial-startup leaks, HORIBA
+cleanup visibility, IDQ response eval and other failure-path gaps. [Repairs](device-wrapper-repair-plan.md)
+are planned, not implemented. Do not treat the guide, a protected wheel, a lint pass or
+a fake test as hardware acceptance. Keep protected core/profile/launchers separate
+from writable operator recipes/data. Collision-safe map allocation is still unfixed;
+the warning above remains valid. Retain the accepted lab release and rollback path.

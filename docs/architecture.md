@@ -1,7 +1,7 @@
 # Current architecture
 
 This document describes the audited 28 October 2026 source, based on snapshot HEAD
-`a439207b4b6d6aec2fbf3575d2fa155893d318a3`. Actual Git status is authoritative.
+`ceaabec9ea4882c1882f71facf604a04099a5992`. Actual Git status is authoritative.
 See [handover](ai-handover.md), [roadmap](refactor-roadmap.md) and
 [audit](comparative-audit.md) for evidence and limitations.
 
@@ -123,3 +123,18 @@ ProgramData profile. Side-by-side environments and protected launcher selection 
 recommended; no auto-updater, account provisioning or ACL mutation is implemented.
 Filesystem protection of the official installation is not a hardware security boundary
 against arbitrary Python or administrators. No runtime source changed in this checkpoint.
+
+## Device-wrapper audit boundary
+
+The [wrapper audit](device-wrapper-audit.md) documents code-level failure gaps below
+service adapters. In particular, real HORIBA disconnect can suppress a CCD close error
+and skip monochromator close; a fake spectrometer that raises on disconnect does not
+prove the real wrapper exposes that failure. IDQ also suppresses some teardown errors.
+Existing worker/session fault contracts therefore cannot guarantee visibility of every
+native cleanup failure until wrapper repairs land. No such repair is implemented here.
+
+[Planned repairs](device-wrapper-repair-plan.md) preserve public facades and ownership:
+InstrumentSession for registered synchronous services, owning asyncio loop for HORIBA,
+borrowed LabJack for mirror/gate, and explicit DLT process/stream owners. No new general
+resource manager or universal close semantics are introduced. Acquisition gate remains
+open; no map allocation or physical command changes are made by this checkpoint.

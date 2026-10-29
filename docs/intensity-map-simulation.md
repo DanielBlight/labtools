@@ -80,3 +80,11 @@ and a headless synthetic map. Full Qt/Windows/hardware execution was unavailable
 Use the cleanup installer's guarded rollback with the backup path it prints.
 Do not run the historical simulation installer or its rollback against the new
 layout. Keep older migration backups for traceability, not as a current update path.
+
+## Current reliability gate and wrapper audit
+
+No allocation, schema, resume or deterministic-model change is made by the
+[wrapper-audit checkpoint](wrapper-audit-checkpoint.md). The same-second output-folder
+collision remains planned pending executed QtWidgets acceptance. The independent
+[wrapper plan](device-wrapper-repair-plan.md) does not certify real hardware from
+synthetic success and must not change model/seeding/signatures during device repairs.

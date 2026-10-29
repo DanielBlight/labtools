@@ -2,15 +2,16 @@
 
 ## Input and decision
 
-Input: `labtools_source_20261028_170656.txt`, HEAD
-`a439207b4b6d6aec2fbf3575d2fa155893d318a3`, branch
-`feature/shared-instrument-session`, upstream +2/-0. Two previous installers are
-untracked; tracked worktree/index are recorded clean. No local Windows pass log was
-attached. Test source, a commit message and bytecode do not establish executed passes.
+Input: `labtools_source_20261028_215033.txt`, HEAD
+`ceaabec9ea4882c1882f71facf604a04099a5992`, branch
+`feature/shared-instrument-session`, upstream +0/-0. Three previous installers are
+untracked; tracked worktree/index are recorded clean. No separate local Windows pass
+log is embedded. Test source, a commit message and bytecode do not establish passes.
 
-The requested prerequisite is NOT met. No collision-allocation code or test changes
-were made. This checkpoint adds [deployment guidance](lab-pc-deployment.md) and updates
-current documentation. It is not a production deployment or an auto-updater.
+The prerequisite is NOT met. Gate rerun remains 15 passed / 4 skipped; no acquisition
+changes were made. The additional [wrapper audit](device-wrapper-audit.md) is an
+independent static/fake-method review, with [repair plan](device-wrapper-repair-plan.md).
+It does not waive the Qt gate. This checkpoint updates docs only.
 
 ## Executed checks
 
@@ -59,7 +60,7 @@ resume signatures, deterministic simulation and explicit backend selection. Use 
 mkdir, retry only actual collisions, and add frozen-clock/concurrent/error tests.
 Do not combine with launcher work, persistent HORIBA connections or io extraction.
 
-## Documentation installer and commit
+## Historical deployment-documentation installer and commit
 
 The supplied `apply_labtools_deployment_docs.py` updates docs only. It does not install
 labtools on the lab PC or change accounts/ACLs. Run from the feature-branch repo root:
@@ -94,3 +95,11 @@ git commit `
   -m 'Add reviewed-wheel installation, standard operator access, separate recipes/data, offline updates and rollback guidance.' `
   -m 'Refresh current snapshot identity and validation evidence; keep collision-safe map allocation blocked pending executed QtWidgets acceptance.'
 ```
+
+## Current wrapper-audit checkpoint
+
+Use [current instructions](wrapper-audit-checkpoint.md), not the historical deployment
+installer commands above, for this snapshot. The new installer changes docs only and
+preserves all three untracked earlier installers. Run the local gate command above,
+attach the complete output separately with the next snapshot, and inspect skip reasons.
+No wrapper runtime repair or collision-allocation change is claimed here.

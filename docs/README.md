@@ -37,3 +37,10 @@ Avoid duplicating the same procedure in multiple places.
   offline release bundles, updates and rollback (proposed maintainer runbook).
 - [Current Qt gate status](qt-gate-status.md): executed checks, skips and why map
   directory collision changes have not advanced.
+
+- [Device-wrapper audit](device-wrapper-audit.md): per-module evidence, consumer inventory,
+  rewrite decisions and code-level risks (no runtime repair).
+- [Wrapper repair plan](device-wrapper-repair-plan.md): bounded tasks, compatibility and
+  fake/physical acceptance requirements.
+- [Current wrapper-audit checkpoint](wrapper-audit-checkpoint.md): gate results,
+  installation/rollback/commit commands and continuation.

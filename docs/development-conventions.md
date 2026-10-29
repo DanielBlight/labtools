@@ -170,3 +170,14 @@ replace an owned SpectrumJob on restart. Disabled widgets are not sufficient API
 guards. Tests must release both gates in teardown and join private workers. Window
 close and injected-worker shutdown are distinct. QtWidgets skips are not acceptance;
 record platform/library blockers and execute the supplied cases on Windows.
+
+## Device-wrapper repair discipline
+
+Use the [audit](device-wrapper-audit.md) and [repair plan](device-wrapper-repair-plan.md).
+Freeze successful command transcripts/API/units before failure-path changes. Whole-wrapper
+fake-transport tests must supplement extracted-method/adapter tests. Preserve primary
+errors and cancellation, attempt independent cleanup and explicitly define failed-close
+ownership. Do not silently retry toggles, reconnect faulted devices or add output-off/
+home commands to transport close. A lint pass is not lifecycle acceptance. One wrapper
+boundary per checkpoint; no blanket rewrite or universal device base class. Treat eval
+of instrument responses as a separate urgent parser task with bounded accepted fixtures.

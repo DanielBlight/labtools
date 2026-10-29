@@ -398,3 +398,12 @@ Before use:
 
 Configuration-setting utilities intentionally retain the final verified hardware state.
 
+## Wrapper-audit limitations (current source review)
+
+The [device audit](../device-wrapper-audit.md) confirms that HORIBA disconnect may skip
+monochromator close after a CCD close error and suppress that error. ITC partial startup
+may leak transport handles. IDQ histogram acquisition currently evaluates response text;
+use only trusted/approved paths and prioritize fixture-backed parser hardening. These
+findings are not fixed by this documentation checkpoint. Adapter fakes do not certify
+real-wrapper cleanup, shutter state, calibration or native SDK teardown. See the
+[repair plan](../device-wrapper-repair-plan.md); no optical/firmware commands changed.

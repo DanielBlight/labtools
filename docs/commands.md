@@ -97,3 +97,10 @@ Development uv commands are not operator startup/update commands. Use the accept
 release's full interpreter path and a non-editable installed wheel. No automatic
 updater or new shared-launcher command is introduced. The [Qt gate](qt-gate-status.md)
 remains open; do not deploy this branch as accepted production based on skipped tests.
+
+## Current audit checkpoint and gate evidence
+
+See [wrapper audit checkpoint](wrapper-audit-checkpoint.md) for the current docs-only
+installer and exact commands. Capture full local Qt output plus JUnit XML; a pass count
+copied from documentation is not evidence that QtWidgets ran. Do not run hardware tests
+or diagnostic scripts as an installation check. The collision fix remains gated.

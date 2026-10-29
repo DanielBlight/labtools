@@ -79,3 +79,11 @@ locked runtime bundle, protected accounts/paths and side-by-side update procedur
 Keep development sync/editable installs separate from production operator use.
 The [current Qt gate](qt-gate-status.md) is not accepted: four QtWidgets modules skip.
 No collision-allocation code or automated deployment system is added by this checkpoint.
+
+## Wrapper-audit continuation
+
+[Device audit](device-wrapper-audit.md) and [repair plan](device-wrapper-repair-plan.md)
+separate style, extracted-method probes, whole-wrapper fake tests and physical acceptance.
+Current gate is still 15 passed / 4 skipped; full suite 318 passed / 4 skipped. Next
+independent wrapper task is ITC transport lifecycle, not a repository-wide rewrite.
+The [checkpoint guide](wrapper-audit-checkpoint.md) records exact evidence and commands.

@@ -158,3 +158,11 @@ all QtWidgets modules remain blocked by missing libGL.so.1. Full suite remains
 318 passed / 4 skipped. See [gate status](qt-gate-status.md). The map directory
 collision fix has not advanced. Deployment guidance is now in the
 [lab-PC runbook](lab-pc-deployment.md); it is proposed, not an executed installation.
+
+## Wrapper-audit follow-up (21:50 snapshot)
+
+The current input is HEAD `ceaabec9ea4882c1882f71facf604a04099a5992`.
+Gate rerun: 15 passed / 4 skipped, still missing libGL.so.1 for QtWidgets. No separate
+local pass log was supplied. [Wrapper audit](device-wrapper-audit.md) found real-wrapper
+cleanup gaps not established by adapter fakes; these are planned, not fixed. No collision
+allocation or lifecycle runtime changes were made in this documentation checkpoint.
