@@ -489,7 +489,7 @@ installer/rollback/commit commands and remaining Windows/physical acceptance.
 ## W2 HORIBA lifecycle checkpoint (current)
 
 Input snapshot: `labtools_source_20261029_084624.txt`, created
-2026-10-29T08:46:24.4544246Z, HEAD `8293c1677d43e94fc9b50ede778cc5853dca5db7`,
+2026-10-29T08:46:24.4544246Z, HEAD `d2e29eb929567cdcc10bdf3fff907044c6815369`,
 branch `feature/shared-instrument-session`, upstream +2/-0. Tracked index/worktree
 recorded clean; five earlier installers are untracked and preserved. Live Git is authoritative.
 
@@ -518,3 +518,11 @@ had no PyQt6, so QtCore plus four QtWidgets modules skipped; acquisition remains
 Changed-file Ruff, compileall, CLI/native-free smoke, TOML and wheel build passed.
 See [W2 checkpoint](horiba-lifecycle-checkpoint.md) for exact inventory, limitations,
 installer/rollback/commit commands and physical acceptance.
+## W5 scanning-mirror preflight status
+
+W5 is implemented/offline-tested at input HEAD `d2e29eb929567cdcc10bdf3fff907044c6815369`.
+Both finite requests and representable calibrated codes are checked before either write;
+A/B protocol and calibration maths remain unchanged. Channel-B ordinary failure now
+reports uncertain partial movement with no rollback/home. Validation: 11 dedicated,
+89 focused, full 404 passed / 5 skipped. PyQt6 is absent, so Qt remains gated. See
+[W5 checkpoint](scanning-mirror-preflight-checkpoint.md). IDQ P0 remains open.

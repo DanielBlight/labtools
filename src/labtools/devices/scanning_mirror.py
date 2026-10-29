@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import math
 import struct
 
 from labtools.devices.labjack_u6 import LabJackU6
+
+
+class MirrorPartialMovementError(RuntimeError):
+    """DAC A was written but DAC B failed, so mirror position is uncertain."""
 
 
 class _LJTickDAC:
@@ -40,21 +45,43 @@ class _LJTickDAC:
         self.slope_b = self._to_double(response[16:24])
         self.offset_b = self._to_double(response[24:32])
 
+    @staticmethod
+    def _dac_code(voltage: float, slope: float, offset: float, channel: str) -> int:
+        voltage = float(voltage)
+        if not math.isfinite(voltage):
+            raise ValueError(f"DAC {channel} voltage must be finite")
+        calibrated = voltage * slope + offset
+        if not math.isfinite(calibrated):
+            raise ValueError(f"DAC {channel} calibrated code must be finite")
+        code = int(calibrated)  # Preserve the existing truncation conversion.
+        if not 0 <= code <= 0xFFFF:
+            raise ValueError(
+                f"DAC {channel} calibrated code {code} is outside 0..65535"
+            )
+        return code
+
     def set_voltages(self, voltage_a: float, voltage_b: float) -> None:
-        binary_a = int(voltage_a * self.slope_a + self.offset_a)
+        # Preflight both channels before the first physical write. The writes
+        # remain non-atomic; a channel-B transport failure leaves A applied.
+        binary_a = self._dac_code(voltage_a, self.slope_a, self.offset_a, "A")
+        binary_b = self._dac_code(voltage_b, self.slope_b, self.offset_b, "B")
         self.device.i2c(
             self.DAC_ADDRESS,
             [48, binary_a // 256, binary_a % 256],
             SDAPinNum=self.sda_pin,
             SCLPinNum=self.scl_pin,
         )
-        binary_b = int(voltage_b * self.slope_b + self.offset_b)
-        self.device.i2c(
-            self.DAC_ADDRESS,
-            [49, binary_b // 256, binary_b % 256],
-            SDAPinNum=self.sda_pin,
-            SCLPinNum=self.scl_pin,
-        )
+        try:
+            self.device.i2c(
+                self.DAC_ADDRESS,
+                [49, binary_b // 256, binary_b % 256],
+                SDAPinNum=self.sda_pin,
+                SCLPinNum=self.scl_pin,
+            )
+        except Exception as exc:
+            raise MirrorPartialMovementError(
+                "DAC A was written but DAC B failed; mirror position is uncertain"
+            ) from exc
 
 
 class ScanningMirror:

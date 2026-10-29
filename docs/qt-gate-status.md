@@ -118,3 +118,7 @@ W2 changes wrapper/backend cleanup only. Full suite 393 passed / 5 skipped in an
 environment without PyQt6; QtCore and four QtWidgets modules skipped. This is not Qt
 acceptance. No map allocation or launcher work was done. See
 [W2 checkpoint](horiba-lifecycle-checkpoint.md). Earlier counts above are historical.
+
+## W5 independent wrapper lane
+
+Full suite 404 passed / 5 skipped where PyQt6 was unavailable. W5 does not satisfy the Qt gate and no map allocation/launcher change was made. See [W5 checkpoint](scanning-mirror-preflight-checkpoint.md).

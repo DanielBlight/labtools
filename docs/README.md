@@ -50,3 +50,5 @@ Avoid duplicating the same procedure in multiple places.
 
 - [HORIBA lifecycle W2 checkpoint](horiba-lifecycle-checkpoint.md): implementation,
   fake-SDK/backend/worker evidence, exact inventory, installer and next task.
+
+- [Scanning-mirror W5 checkpoint](scanning-mirror-preflight-checkpoint.md): DAC preflight, partial-movement reporting, tests and installer.
