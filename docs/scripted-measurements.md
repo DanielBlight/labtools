@@ -48,3 +48,9 @@ with MeasurementRuntime.from_profile() as runtime:
 7. Publish an API compatibility policy, generated reference, simulation examples and end-to-end tests proving GUI/script parity.
 
 Until these phases land, use the existing `SpectrumService`, `SpectrumSettings`, `acquire_intensity_map`, and the anneal recipe runner directly as documented examples. Do not import GUI modules or use the legacy hyperspectral runner for unattended work.
+
+## Implemented spectrum facade checkpoint
+
+`labtools.measurements` now exports frozen `SpectrumRequest`, `MeasurementProvenance`, `SpectrumMeasurement`, explicit `SpectrumRuntime`, and sync/async `acquire_spectrum` functions. It delegates to `SpectrumService`/`SpectrumWorker`; it does not duplicate range acquisition. Backend and reviewed configuration ID are preserved in provenance, simulation is explicitly marked synthetic, progress reports started/completed, and cancellation uses existing cooperative service boundaries. Runtime ownership is explicit: omitted runtime is owned and closed by the function; supplied runtime remains caller-owned and reusable.
+
+See `examples/measurements/simulate_spectrum.py`. Detector minima remain enforced by existing settings/backend validation. Map, hyperspectral and anneal facades remain unimplemented.

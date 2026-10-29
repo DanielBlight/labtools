@@ -59,3 +59,7 @@ Avoid duplicating the same procedure in multiple places.
 
 - [Scriptable measurements](scripted-measurements.md): target public automation API and usage.
 - [Kinesis lifecycle checkpoint](kinesis-lifecycle-checkpoint.md): validation and close ownership.
+
+## Scripted spectrum facade
+
+The Qt-free spectrum facade is implemented; see [checkpoint](measurements-spectrum-checkpoint.md) and [usage](scripted-measurements.md). Map, hyperspectral and anneal facades remain planned.
