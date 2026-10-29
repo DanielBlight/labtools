@@ -54,3 +54,7 @@ Until these phases land, use the existing `SpectrumService`, `SpectrumSettings`,
 `labtools.measurements` now exports frozen `SpectrumRequest`, `MeasurementProvenance`, `SpectrumMeasurement`, explicit `SpectrumRuntime`, and sync/async `acquire_spectrum` functions. It delegates to `SpectrumService`/`SpectrumWorker`; it does not duplicate range acquisition. Backend and reviewed configuration ID are preserved in provenance, simulation is explicitly marked synthetic, progress reports started/completed, and cancellation uses existing cooperative service boundaries. Runtime ownership is explicit: omitted runtime is owned and closed by the function; supplied runtime remains caller-owned and reusable.
 
 See `examples/measurements/simulate_spectrum.py`. Detector minima remain enforced by existing settings/backend validation. Map, hyperspectral and anneal facades remain unimplemented.
+
+## Dark capture and reuse
+
+The spectrum facade now exports `capture_dark`, `capture_dark_async`, `save_dark`, `load_dark`, and `request_with_dark`. Dark records remain the existing immutable `DarkRecord`; persistence delegates to schema-version-1 pickle-free NPZ. Reuse requires exact `SpectrumSettings` equality, including reviewed configuration ID and backend, before acquisition.

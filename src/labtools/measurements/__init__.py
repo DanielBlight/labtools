@@ -7,6 +7,11 @@ from .spectrum import (
     SpectrumRuntime,
     acquire_spectrum,
     acquire_spectrum_async,
+    capture_dark,
+    capture_dark_async,
+    load_dark,
+    request_with_dark,
+    save_dark,
 )
 
 __all__ = [
@@ -16,4 +21,9 @@ __all__ = [
     "SpectrumRuntime",
     "acquire_spectrum",
     "acquire_spectrum_async",
+    "capture_dark",
+    "capture_dark_async",
+    "load_dark",
+    "request_with_dark",
+    "save_dark",
 ]

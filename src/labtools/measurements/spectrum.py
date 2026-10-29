@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from labtools.acquisition.spectrum_service import (
     DarkRecord,
@@ -12,6 +13,7 @@ from labtools.acquisition.spectrum_service import (
     SpectrumService,
 )
 from labtools.config.spectrum import SpectrumSettings
+from labtools.io.spectrum_records import load_dark_record, save_dark_record
 from labtools.runtime.spectrum_backend import create_spectrum_service
 from labtools.runtime.spectrum_worker import SpectrumJob, SpectrumWorker
 
@@ -156,3 +158,75 @@ async def acquire_spectrum_async(
     finally:
         if owned:
             await asyncio.to_thread(runtime.close)
+
+
+def capture_dark(
+    request: SpectrumRequest,
+    *,
+    runtime: SpectrumRuntime | None = None,
+    timeout: float | None = None,
+    progress: Progress | None = None,
+) -> DarkRecord:
+    request.validate()
+    if request.dark_mode != "none" or request.dark is not None:
+        raise ValueError("Dark capture request must not include subtraction")
+    owned = runtime is None
+    runtime = runtime or SpectrumRuntime(backend=request.settings.backend)
+    runtime._check(request.settings)
+    try:
+        if progress:
+            progress("started")
+        dark = (
+            runtime.worker()
+            .capture_dark(request.settings, owner=request.owner)
+            .result(timeout)
+        )
+        if progress:
+            progress("completed")
+        return dark
+    finally:
+        if owned:
+            runtime.close()
+
+
+async def capture_dark_async(
+    request: SpectrumRequest,
+    *,
+    runtime: SpectrumRuntime | None = None,
+    cancel_requested: Callable[[], bool] | None = None,
+    progress: Progress | None = None,
+) -> DarkRecord:
+    request.validate()
+    owned = runtime is None
+    runtime = runtime or SpectrumRuntime(backend=request.settings.backend)
+    runtime._check(request.settings)
+    try:
+        if progress:
+            progress("started")
+        dark = await runtime.service.capture_dark(
+            request.settings, cancel_requested=cancel_requested or (lambda: False)
+        )
+        if progress:
+            progress("completed")
+        return dark
+    finally:
+        if owned:
+            await asyncio.to_thread(runtime.close)
+
+
+def save_dark(path: str | Path, dark: DarkRecord) -> None:
+    save_dark_record(path, dark)
+
+
+def load_dark(path: str | Path) -> DarkRecord:
+    return load_dark_record(path)
+
+
+def request_with_dark(
+    settings: SpectrumSettings, dark: DarkRecord, *, owner: str = "scripted-spectrum"
+) -> SpectrumRequest:
+    if dark.settings != settings:
+        raise ValueError("DarkRecord settings do not match requested spectrum settings")
+    return SpectrumRequest(
+        settings=settings, dark_mode="pre_taken", dark=dark, owner=owner
+    )

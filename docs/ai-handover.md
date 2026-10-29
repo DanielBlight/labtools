@@ -231,3 +231,7 @@ Kinesis finite native-unit validation and close ownership are implemented at HEA
 ## Scripted spectrum facade
 
 The Qt-free spectrum facade is implemented; see [checkpoint](measurements-spectrum-checkpoint.md) and [usage](scripted-measurements.md). Map, hyperspectral and anneal facades remain planned.
+
+## Scripted dark records
+
+Qt-free dark capture, immutable reuse and NPZ helpers are implemented; see [checkpoint](measurements-dark-checkpoint.md).
