@@ -80,3 +80,54 @@ Examples are under `examples/measurements/recipes/`. Use `load_recipe(path)` and
 ## Recipe dispatch
 
 `execute_recipe` dispatches one strict recipe to the existing spectrum, dark, alignment or intensity-map facade. Simulation executes without confirmation. A real recipe requires a caller-supplied confirmation callback returning exactly `True` before a runtime or backend is created. The dispatcher borrows a supplied `MeasurementRuntime` or owns/closes a temporary one, forwards progress/cancellation, and returns the existing immutable result type. It does not sequence multiple recipes or execute recipe-provided code.
+
+## Production-ready single-recipe execution
+
+`execute_recipe` and `execute_recipe_async` support exactly one schema-version-1
+`spectrum`, `dark`, `alignment`, or `intensity_map` recipe. Both return an
+immutable `RecipeExecutionReport` with UTC timestamps, backend, configuration ID
+or map checkpoint signature, status, and the immutable facade result when one
+exists. Failures record only exception type and message strings; exception
+objects are never placed in the report.
+
+The operator CLI validates without opening hardware:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+uv run --no-sync python -m labtools.cli measure validate .\examples\measurements\recipes\spectrum_simulation.json
+uv run --no-sync python -m labtools.cli measure run .\examples\measurements\recipes\spectrum_simulation.json
+```
+
+A real recipe is never executed unless `--confirm-real` is present on that exact
+`measure run` invocation. There is no prompt, environment-variable override, or
+recipe field that bypasses the flag. The flag confirms intent to execute only;
+it is not evidence that the optical path, sample, detector, stages, shutter, or
+other physical conditions are safe.
+
+Recipe paths are expanded and resolved from the current PowerShell working
+directory. Paths stored inside a recipe retain the strict schema behavior already
+documented. Use absolute paths in operator-managed recipes when the working
+directory is not controlled.
+
+For shared-runtime simulation of dark capture and spectrum reuse, alignment, and
+a deliberately stopped then resumed intensity map, run:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+uv run --no-sync python .\examples\measurements\simulation_workflows.py
+```
+
+Cancellation is cooperative. Spectrum, dark, and alignment cancellation is
+reported as `cancelled`; an intensity map returns its immutable stopped result so
+the checkpoint output directory can be used for resume. Always close a borrowed
+`MeasurementRuntime` with a `with` block. An internally owned runtime is closed
+by dispatch even after cancellation or failure.
+
+Reports preserve execution provenance; they do not serialize exception objects
+or large result arrays for the CLI. Dataset and dark-record persistence continue
+to use their existing explicit save/load APIs.
+
+This interface deliberately does not support multi-recipe pipelines,
+hyperspectral acquisition, or laser annealing. Hyperspectral requires a reviewed
+service/refactor first. Annealing remains a hazardous workflow with separate
+physical confirmation and acceptance requirements.

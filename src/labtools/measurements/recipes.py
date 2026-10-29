@@ -33,8 +33,10 @@ class MeasurementRecipe:
         if backend not in {"real", "simulation"}:
             raise ValueError("Recipe backend must be explicit")
         if self.kind == "spectrum" and self.request.dark_mode == "pre_taken":
-            if self.dark_record_path is None:
-                raise ValueError("pre_taken spectrum recipe requires dark_record_path")
+            if self.dark_record_path is None and self.request.dark is None:
+                raise ValueError(
+                    "pre_taken spectrum recipe requires dark_record_path or in-memory dark"
+                )
         elif self.dark_record_path is not None:
             raise ValueError("dark_record_path is only valid for pre_taken spectrum")
 

@@ -72,6 +72,18 @@ __all__ += [
     "recipe_to_data",
     "save_recipe",
 ]
-from .dispatch import RealConfirmation, execute_recipe
+from .dispatch import (
+    ExecutionStatus,
+    RealConfirmation,
+    RecipeExecutionReport,
+    execute_recipe,
+    execute_recipe_async,
+)
 
-__all__ += ["RealConfirmation", "execute_recipe"]
+__all__ += [
+    "ExecutionStatus",
+    "RealConfirmation",
+    "RecipeExecutionReport",
+    "execute_recipe",
+    "execute_recipe_async",
+]

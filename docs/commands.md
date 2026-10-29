@@ -172,3 +172,16 @@ Strict schema-version-1 JSON recipes now cover the implemented spectrum, dark, a
 ## Measurement recipe dispatch
 
 A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 recipe kinds and requires explicit confirmation before real execution; see [checkpoint](measurements-dispatch-checkpoint.md).
+
+## Scripted measurement recipes
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+uv run --no-sync python -m labtools.cli measure validate .\examples\measurements\recipes\alignment_simulation.json
+uv run --no-sync python -m labtools.cli measure run .\examples\measurements\recipes\alignment_simulation.json
+# Real execution only, after the independent physical checks required for that setup:
+uv run --no-sync python -m labtools.cli measure run C:\Labtools\recipes\reviewed-real-spectrum.json --confirm-real
+```
+
+`measure` accepts one strict recipe only. It does not run pipelines,
+hyperspectral maps, or anneal recipes.

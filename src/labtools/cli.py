@@ -11,10 +11,10 @@ from pathlib import Path
 from labtools.config.anneal_workspace import (
     initialise_workspace,
     load_profile,
-    load_recipe,
     profile_path,
     validate_recipe,
 )
+from labtools.config.anneal_workspace import load_recipe as load_anneal_recipe
 from labtools.launchers import GUI_MODULES, launch_gui
 
 
@@ -31,6 +31,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="Check configuration only; no device access")
     gui = sub.add_parser("gui", help="Launch a standalone tool window")
     gui.add_argument("tool", choices=tuple(GUI_MODULES))
+    measure = sub.add_parser(
+        "measure", help="Validate or run one strict measurement recipe"
+    )
+    measure_actions = measure.add_subparsers(dest="measure_action", required=True)
+    for action in ("validate", "run"):
+        command = measure_actions.add_parser(action)
+        command.add_argument("recipe", type=Path)
+        if action == "run":
+            command.add_argument(
+                "--confirm-real",
+                action="store_true",
+                help="Required for real execution; never inferred or prompted",
+            )
     simulation = sub.add_parser("simulate", help="Run explicitly synthetic data tools")
     tools = simulation.add_subparsers(dest="simulation_tool", required=True)
     tools.add_parser("intensity-map", add_help=False)
@@ -50,6 +63,41 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "gui":
         launch_gui(args.tool)
         return
+    if args.command == "measure":
+        from labtools.measurements import execute_recipe, load_recipe, recipe_to_data
+
+        path = args.recipe.expanduser().resolve()
+        try:
+            recipe = load_recipe(path)
+            if args.measure_action == "validate":
+                print(json.dumps(recipe_to_data(recipe), indent=2))
+                print(f"Recipe valid: {path}. No hardware was opened.")
+                return
+            if recipe.backend == "real" and not args.confirm_real:
+                parser.error("Real measurement execution requires --confirm-real")
+            report = execute_recipe(
+                recipe,
+                confirm_real=(lambda _recipe: True) if args.confirm_real else None,
+            )
+            summary = {
+                "recipe_kind": report.recipe_kind,
+                "backend": report.backend,
+                "configuration_id": report.configuration_id,
+                "map_signature": dict(report.map_signature)
+                if report.map_signature is not None
+                else None,
+                "started_at": report.started_at.isoformat(),
+                "ended_at": report.ended_at.isoformat(),
+                "status": report.status,
+                "error_type": report.error_type,
+                "error_message": report.error_message,
+            }
+            print(json.dumps(summary, indent=2))
+            if report.status == "failure":
+                parser.exit(1)
+            return
+        except (ValueError, OSError, TypeError) as exc:
+            parser.exit(2, f"Error: {exc}\n")
     try:
         if args.command == "init":
             print(initialise_workspace(args.directory))
@@ -59,7 +107,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             print(f"Profile: {profile_path()} ({profile.profile_id})")
             print("Configuration valid. No hardware was opened or tested.")
             return
-        recipe = load_recipe(args.recipe)
+        recipe = load_anneal_recipe(args.recipe)
         validate_recipe(recipe, profile)
         if args.command == "validate":
             print(json.dumps(asdict(recipe), indent=2))
