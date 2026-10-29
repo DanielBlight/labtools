@@ -272,3 +272,5 @@ The operation-scoped `HyperspectralMirrorProvider` leases the session `mirror` r
 ### Hyperspectral failure contract
 
 Ordinary point acquisition failures are exposed as `HyperspectralAcquisitionError` with the immutable partial result and original exception as cause. Cancellation returns an immutable cancelled partial result. `KeyboardInterrupt` and `SystemExit` bypass ordinary failure wrapping. Ownership cleanup diagnostics attach to the primary error rather than replacing it.
+
+Combined hyperspectral acquisition and persistence failures retain the acquisition error as cause and attach persistence diagnostics. Clean persistence failure remains directly visible. Mirror-context exit failure produces a failed immutable diagnostic result, even when all points were acquired, because resource cleanup did not complete successfully.

@@ -154,3 +154,88 @@ def test_keyboard_interrupt_is_not_wrapped(config):
 
     with pytest.raises(KeyboardInterrupt):
         run(HyperspectralService(Interrupt(), mirrors()).acquire(config))
+
+
+def test_mirror_context_startup_failure_is_causal(config):
+    @asynccontextmanager
+    async def failed_startup():
+        raise ConnectionError("mirror-startup")
+        yield
+
+    with pytest.raises(HyperspectralAcquisitionError) as caught:
+        run(HyperspectralService(Spectra(), failed_startup).acquire(config))
+    assert isinstance(caught.value.__cause__, ConnectionError)
+    assert caught.value.partial_result.completed_points == 0
+
+
+def test_mirror_context_exit_failure_retains_complete_cube(config):
+    with pytest.raises(HyperspectralAcquisitionError) as caught:
+        run(
+            HyperspectralService(Spectra(), mirrors(exit_error="mirror-exit")).acquire(
+                config
+            )
+        )
+    assert isinstance(caught.value.__cause__, RuntimeError)
+    assert caught.value.partial_result.completed_points == 4
+    assert caught.value.partial_result.status == "failed"
+
+
+def test_acquisition_and_persistence_failures_preserve_primary(
+    config, tmp_path, monkeypatch
+):
+    import labtools.acquisition.hyperspectral as module
+
+    def failed_save(*args, **kwargs):
+        raise OSError("persistence-failed")
+
+    monkeypatch.setattr(module, "save_hyperspectral_result", failed_save)
+    with pytest.raises(HyperspectralAcquisitionError) as caught:
+        run(
+            HyperspectralService(Spectra(fail_at=2), mirrors()).acquire(
+                config, output_path=tmp_path / "partial.npz"
+            )
+        )
+    assert isinstance(caught.value.__cause__, OSError)
+    assert str(caught.value.__cause__) == "spectrum-2"
+    assert any("persistence failed" in note for note in caught.value.__notes__)
+    assert caught.value.partial_result.completed_points == 1
+
+
+def test_clean_persistence_failure_is_visible(config, tmp_path, monkeypatch):
+    import labtools.acquisition.hyperspectral as module
+
+    def failed_save(*args, **kwargs):
+        raise OSError("persistence-failed")
+
+    monkeypatch.setattr(module, "save_hyperspectral_result", failed_save)
+    with pytest.raises(OSError, match="persistence-failed"):
+        run(
+            HyperspectralService(Spectra(), mirrors()).acquire(
+                config, output_path=tmp_path / "complete.npz"
+            )
+        )
+
+
+def test_system_exit_is_not_wrapped(config):
+    class ExitSpectra(Spectra):
+        async def acquire(self, settings, **kwargs):
+            raise SystemExit(7)
+
+    with pytest.raises(SystemExit) as caught:
+        run(HyperspectralService(ExitSpectra(), mirrors()).acquire(config))
+    assert caught.value.code == 7
+
+
+def test_runtime_module_import_isolation_in_fresh_process():
+    import subprocess
+    import sys
+
+    code = """
+import sys
+import labtools.runtime.hyperspectral
+blocked = [name for name in sys.modules if name.startswith(
+    ('PyQt', 'labtools.devices', 'horiba_sdk', 'u6', 'pylablib')
+)]
+assert not blocked, blocked
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)

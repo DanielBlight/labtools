@@ -394,3 +394,5 @@ The first reviewed Qt-free hyperspectral service boundary is implemented with de
 - Hyperspectral now has truthful in-process operation-wide ownership of both the session mirror/LabJack and the actual persistent HORIBA range backend. Cross-process exclusion and physical acceptance remain future gates.
 
 - The internal hyperspectral failure matrix is now covered offline. Public exposure may be considered next, subject to a separate facade/recipe/CLI checkpoint and explicit retention of physical-policy gates.
+
+- Final combined hyperspectral failure cases are now covered offline; the next eligible checkpoint is the separately reviewed public facade/recipe/dispatch/CLI boundary.

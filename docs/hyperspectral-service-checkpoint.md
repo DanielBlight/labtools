@@ -31,3 +31,7 @@ Acquisition failures now raise `HyperspectralAcquisitionError` from the original
 ## Failure-matrix acceptance
 
 Focused offline failure injection now covers first-point and mid-scan mirror and spectrum failures, wavelength-axis drift, cancellation after completed data, immutable failed/cancelled partial results, borrowed/owned close counts, owned-close diagnostics, and unwrapped `KeyboardInterrupt`. Existing HORIBA wrapper tests remain authoritative for factory/connect/configure/disconnect cleanup and lock release. These tests are offline evidence only.
+
+### Final combined-failure evidence
+
+The focused matrix now also covers mirror-context startup and exit failures, clean persistence failure, acquisition plus persistence failure with primary preservation, `SystemExit` passthrough, complete data retained diagnostically after context-exit failure, and fresh-process runtime-module import isolation. Existing HORIBA lifecycle and session-cleanup suites remain authoritative for native startup/disconnect and independent cleanup aggregation.

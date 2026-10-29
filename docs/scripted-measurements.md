@@ -141,3 +141,5 @@ The internal hyperspectral service now reserves the shared mirror/LabJack for it
 The internal hyperspectral runtime now composes one operation-scoped mirror lease with one persistent exact-settings SpectrumService backend. This remains internal and adds no facade, recipe, dispatcher, CLI, GUI, pipeline or anneal support.
 
 Internal hyperspectral failure injection now covers partial-result, cancellation and ownership contracts. Public hyperspectral scripting remains unsupported until a separate facade acceptance checkpoint.
+
+The internal hyperspectral service has final combined-failure evidence but remains unavailable through public measurements, recipes, dispatch, CLI or GUI.
