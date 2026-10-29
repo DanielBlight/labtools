@@ -83,3 +83,7 @@ A Qt-free `MeasurementRuntime` now composes the existing spectrum and map runtim
 ## Versioned measurement recipes
 
 Strict schema-version-1 JSON recipes now cover the implemented spectrum, dark, alignment and intensity-map facades; see [checkpoint](measurements-recipes-checkpoint.md) and [usage](scripted-measurements.md).
+
+## Measurement recipe dispatch
+
+A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 recipe kinds and requires explicit confirmation before real execution; see [checkpoint](measurements-dispatch-checkpoint.md).

@@ -76,3 +76,7 @@ The public package now exports frozen `AlignmentRequest`/`AlignmentMeasurement` 
 Schema-version-1 JSON recipes are now available for the implemented `spectrum`, `dark`, `alignment`, and `intensity_map` facades. Loading is strict and data-only: the root and kind-specific fields must match exactly; unknown fields and schema/kind changes are rejected. Recipes preserve explicit backend, reviewed spectrum/alignment configuration IDs, unit-bearing field names, map schema-compatible configuration, optional map resume directory, and an optional pre-taken dark NPZ path. A pre-taken dark is loaded through the existing pickle-free NPZ reader and must exactly match the spectrum settings before the recipe is returned.
 
 Examples are under `examples/measurements/recipes/`. Use `load_recipe(path)` and dispatch only on the returned `kind`; recipe loading never executes Python or imports Qt/native SDK modules.
+
+## Recipe dispatch
+
+`execute_recipe` dispatches one strict recipe to the existing spectrum, dark, alignment or intensity-map facade. Simulation executes without confirmation. A real recipe requires a caller-supplied confirmation callback returning exactly `True` before a runtime or backend is created. The dispatcher borrows a supplied `MeasurementRuntime` or owns/closes a temporary one, forwards progress/cancellation, and returns the existing immutable result type. It does not sequence multiple recipes or execute recipe-provided code.
