@@ -7,6 +7,7 @@ from .intensity_map import (
     acquire_intensity_map_async,
     request_from_resume,
 )
+from .runtime import MeasurementRuntime, MeasurementRuntimeStatus
 
 """Qt-free stable measurement facades."""
 
@@ -38,6 +39,8 @@ __all__ = [
     "IntensityMapRequest",
     "IntensityMapRuntime",
     "MeasurementProvenance",
+    "MeasurementRuntime",
+    "MeasurementRuntimeStatus",
     "SpectrumMeasurement",
     "SpectrumRequest",
     "SpectrumRuntime",

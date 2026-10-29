@@ -66,3 +66,7 @@ The public package now exports frozen `AlignmentRequest`/`AlignmentMeasurement` 
 ## Intensity-map facade
 
 `labtools.measurements` now exports frozen `IntensityMapRequest`, `IntensityMapProvenance`, `IntensityMapMeasurement`, explicit `IntensityMapRuntime`, sync/async acquisition and `request_from_resume`. The facade delegates unchanged to `acquisition.acquire_intensity_map`; schema 1, checkpoint signatures, output directory, progress snapshots, cancellation checkpoints and deterministic `gaussian-scene-v1` simulation remain authoritative there.
+
+## Unified measurement runtime
+
+`MeasurementRuntime` now lazily composes the existing `SpectrumRuntime` and `IntensityMapRuntime` for sequential scripted workflows. It does not merge their ownership models: spectrum continues to own its service/worker, while map composition continues to use its provider/application and `InstrumentSession` reservations. Injected runtimes are borrowed and never closed; lazily created runtimes are owned and independently closed. Backend identity is shared and explicit. Native imports remain deferred until the child runtime or real backend is used.

@@ -75,3 +75,7 @@ Qt-free sync/async alignment acquisition is implemented; see [checkpoint](measur
 ## Scripted intensity maps
 
 The Qt-free resumable intensity-map facade is implemented; see [checkpoint](measurements-intensity-map-checkpoint.md). Map algorithms, schema and persistence are unchanged.
+
+## Unified measurement runtime
+
+A Qt-free `MeasurementRuntime` now composes the existing spectrum and map runtimes without changing their ownership models; see [checkpoint](measurements-runtime-checkpoint.md).
