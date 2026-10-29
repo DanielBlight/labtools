@@ -256,3 +256,7 @@ Strict schema-version-1 JSON recipes now cover the implemented spectrum, dark, a
 ## Measurement recipe dispatch
 
 A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 recipe kinds and requires explicit confirmation before real execution; see [checkpoint](measurements-dispatch-checkpoint.md).
+
+## Hyperspectral acquisition service boundary
+
+`labtools.acquisition.hyperspectral` is an internal, Qt-free service boundary. It composes the existing `SpectrumService` with a whole-operation mirror context, preserves row-major legacy scan order, reports typed scientific-boundary progress, and writes atomic schema-version-1 NPZ datasets with explicit completion masks and synthetic provenance. It deliberately does not alter the public measurements package, recipe dispatcher, CLI, or GUI.

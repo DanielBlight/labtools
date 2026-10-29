@@ -1,0 +1,19 @@
+# Qt-free hyperspectral service checkpoint
+
+The legacy `run_hyperspectral_scan.py` remains available for compatibility but is not the reviewed service. The new internal boundary comprises `HyperspectralConfig`, `HyperspectralService`, typed progress/result/provenance records, deterministic simulation, and pickle-free schema-version-1 NPZ persistence.
+
+The service preserves legacy y-major/x-minor scan order and delegates every spectrum to `SpectrumService`; it does not duplicate range stitching, detector validation, or dark compatibility. The mirror context owns whole-operation reservations and cleanup. A borrowed spectrum service is never closed; an explicitly owned one is closed on service exit. Mirror factories must retain their `InstrumentSession` reservation until their context exits.
+
+Cancellation is cooperative at point boundaries. Completed points remain marked in `completed_mask`; uncompleted cube elements are NaN. Archives refuse overwrite and are replaced atomically. Resume is not supported in version 1 because the intensity-map checkpoint signature cannot safely represent wavelength-axis and spectral-cube state.
+
+Simulation uses the deterministic `gaussian-spatial-modulation-v1` scene applied to the existing synthetic `SpectrumService`. Provenance explicitly marks synthetic results and is not evidence of hardware, calibration, Qt, timing, or physical-policy acceptance.
+
+This service is **not yet** a public `labtools.measurements` facade, recipe kind, dispatcher branch, `labtools measure` command, or GUI path. Multi-recipe pipelines and anneal dispatch remain unsupported.
+
+## Source-checkout validation on Windows PowerShell
+
+```powershell
+uv run --no-sync python -m pytest -q tests/test_hyperspectral_service.py
+uv run --no-sync python -m pytest -q
+uv run --no-sync python -m ruff check src/labtools/config/hyperspectral.py src/labtools/acquisition/hyperspectral.py src/labtools/simulation/hyperspectral.py tests/test_hyperspectral_service.py
+```

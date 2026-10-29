@@ -384,3 +384,7 @@ Strict schema-version-1 JSON recipes now cover the implemented spectrum, dark, a
 ## Measurement recipe dispatch
 
 A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 recipe kinds and requires explicit confirmation before real execution; see [checkpoint](measurements-dispatch-checkpoint.md).
+
+### Hyperspectral service checkpoint
+
+The first reviewed Qt-free hyperspectral service boundary is implemented with deterministic offline simulation and versioned partial-output persistence. Public facade/recipe/dispatcher/CLI exposure remains a separate gated checkpoint after real-backend reservation and cleanup acceptance.
