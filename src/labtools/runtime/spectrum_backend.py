@@ -2,12 +2,15 @@
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from threading import Lock
 from typing import Any
 
 import numpy as np
 
 from labtools.acquisition.spectrum_service import RangeBackend, SpectrumService
 from labtools.config.spectrum import SpectrumSettings
+
+_REAL_RANGE_OWNERSHIP = Lock()
 
 
 def _retain_disconnect_failure(primary: BaseException, cleanup: BaseException) -> None:
@@ -36,9 +39,12 @@ async def open_real_range(
         get_range_spectrum,
     )
 
-    spec = spectrometer_factory(preset=settings.preset)
+    if not _REAL_RANGE_OWNERSHIP.acquire(blocking=False):
+        raise RuntimeError("HORIBA range backend is already owned by another operation")
+    spec = None
     primary = None
     try:
+        spec = spectrometer_factory(preset=settings.preset)
         await spec.connect()
         await spec.configure(
             gain=settings.gain,
@@ -77,11 +83,14 @@ async def open_real_range(
         raise
     finally:
         try:
-            await spec.disconnect()
+            if spec is not None:
+                await spec.disconnect()
         except BaseException as cleanup:
             if primary is None:
                 raise
             _retain_disconnect_failure(primary, cleanup)
+        finally:
+            _REAL_RANGE_OWNERSHIP.release()
 
 
 def create_spectrum_service(*, backend: str) -> SpectrumService:

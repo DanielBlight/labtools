@@ -264,3 +264,7 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 ### Hyperspectral real-resource composition
 
 The operation-scoped `HyperspectralMirrorProvider` leases the session `mirror` resource, including its LabJack, before any device opens and releases it only after context cleanup. HORIBA ownership remains within `SpectrumService`; the current session cannot truthfully reserve that separately. Failures surface as `HyperspectralAcquisitionError` with an immutable partial result and the original exception as cause.
+
+### Persistent hyperspectral spectrum ownership
+
+`SpectrumService.operation` is the narrow multi-acquisition contract: one exact `SpectrumSettings` value, one live range backend, normal SpectrumService validation/dark/result semantics, and outer-context teardown. `open_real_range` ties a process-local exclusive ownership lock to the actual HORIBA object's lifetime. `open_hyperspectral_service` acquires mirror ownership before spectrum ownership and lends both dependencies without transferring closure responsibility.

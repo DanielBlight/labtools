@@ -263,3 +263,7 @@ A Qt-free internal hyperspectral configuration/service/result boundary now compo
 ### Hyperspectral hardening follow-up
 
 The service now has an operation-scoped session mirror provider and a dedicated acquisition error carrying immutable partial data. Offline tests prove conflict-before-open and reservation lifetime. A unified enforceable HORIBA reservation is still absent and physical acceptance remains outstanding.
+
+### HORIBA operation ownership resolved in-process
+
+Hyperspectral composition now uses `SpectrumService.operation` to keep one configured backend for a full cube. Real range creation is process-locally exclusive and conflict rejection occurs before native construction. This is not a cross-process lock and is not physical acceptance.

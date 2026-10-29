@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -126,6 +126,31 @@ class SpectrumService:
     ) -> None:
         self._backend_factory = backend_factory
         self._alignment_backend_factory = alignment_backend_factory
+
+    @asynccontextmanager
+    async def operation(
+        self,
+        settings: SpectrumSettings,
+        *,
+        cancel_requested: Callable[[], bool] | None = None,
+    ):
+        """Borrow one configured range backend for a multi-acquisition operation.
+
+        The returned service preserves normal validation, dark handling and
+        result construction while the outer context owns backend teardown.
+        """
+        settings.validate()
+        self._cancel(cancel_requested)
+        async with self._backend_factory(settings) as backend:
+
+            @asynccontextmanager
+            async def borrowed(request: SpectrumSettings):
+                if request != settings:
+                    raise ValueError("Operation spectrum settings must match exactly")
+                yield backend
+
+            yield SpectrumService(borrowed)
+        self._cancel(cancel_requested)
 
     @staticmethod
     def _cancel(cancel_requested: Callable[[], bool] | None) -> None:

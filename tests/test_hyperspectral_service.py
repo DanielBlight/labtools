@@ -260,3 +260,107 @@ def test_session_provider_reserves_before_open_and_releases_after_operation():
     run(use())
     session.close()
     assert opened == [(0.1, 0.2), "home", "close"]
+
+
+def test_operation_spectrum_backend_opens_once_for_cube(config):
+    from contextlib import asynccontextmanager
+
+    from labtools.acquisition.spectrum_service import SpectrumService
+    from labtools.runtime.hyperspectral import open_hyperspectral_service
+
+    opens = closes = 0
+    base = create_spectrum_service(backend="simulation")
+
+    @asynccontextmanager
+    async def counted(settings):
+        nonlocal opens, closes
+        opens += 1
+        async with base._backend_factory(settings) as backend:
+            try:
+                yield backend
+            finally:
+                closes += 1
+
+    async def exercise():
+        async with open_hyperspectral_service(
+            config,
+            spectrum_service=SpectrumService(counted),
+            mirror_factory=open_simulated_hyperspectral_mirror,
+        ) as operation:
+            return await operation.acquire(config)
+
+    assert run(exercise()).status == "complete"
+    assert (opens, closes) == (1, 1)
+
+
+def test_operation_rejects_settings_change(config):
+    from dataclasses import replace
+
+    service = create_spectrum_service(backend="simulation")
+
+    async def exercise():
+        async with service.operation(config.spectrum) as operation:
+            await operation.acquire(replace(config.spectrum, exposure_s=0.2))
+
+    with pytest.raises(ValueError, match="match exactly"):
+        run(exercise())
+
+
+def test_runtime_cancellation_before_resources_open(config):
+    from contextlib import asynccontextmanager
+
+    from labtools.runtime.hyperspectral import open_hyperspectral_service
+
+    opened = False
+
+    @asynccontextmanager
+    async def forbidden_mirror():
+        nonlocal opened
+        opened = True
+        yield
+
+    async def exercise():
+        async with open_hyperspectral_service(
+            config,
+            spectrum_service=create_spectrum_service(backend="simulation"),
+            mirror_factory=forbidden_mirror,
+            cancel_requested=lambda: True,
+        ):
+            pass
+
+    with pytest.raises(RuntimeError, match="cancelled before startup"):
+        run(exercise())
+    assert opened is False
+
+
+def test_real_range_ownership_conflict_prevents_second_factory():
+    from labtools.runtime.spectrum_backend import open_real_range
+
+    settings = SpectrumSettings(
+        "ownership-test", "syncerity", 0.1, 2, 0, 0.5, 500, 600, backend="real"
+    )
+    created = 0
+
+    class Spec:
+        async def connect(self):
+            pass
+
+        async def configure(self, **kwargs):
+            pass
+
+        async def disconnect(self):
+            pass
+
+    def factory(**kwargs):
+        nonlocal created
+        created += 1
+        return Spec()
+
+    async def exercise():
+        async with open_real_range(settings, spectrometer_factory=factory):
+            with pytest.raises(RuntimeError, match="already owned"):
+                async with open_real_range(settings, spectrometer_factory=factory):
+                    pass
+
+    run(exercise())
+    assert created == 1
