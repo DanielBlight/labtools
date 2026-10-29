@@ -103,3 +103,11 @@ installer commands above, for this snapshot. The new installer changes docs only
 preserves all three untracked earlier installers. Run the local gate command above,
 attach the complete output separately with the next snapshot, and inspect skip reasons.
 No wrapper runtime repair or collision-allocation change is claimed here.
+
+## ITC W1 independent repair lane
+
+Current input HEAD `ad2a95b9813bc8407d54120a3997571c24d52450` implements only ITC
+transport lifecycle. Full suite now 362 passed / 4 skipped; the same four QtWidgets
+modules cannot load libGL.so.1. No supplied local pass log was embedded. The acquisition
+gate remains unmet. See [W1 checkpoint](itc4000-lifecycle-checkpoint.md); no map collision
+fix or launcher change was made. Earlier gate counts above are historical.

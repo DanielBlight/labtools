@@ -2,7 +2,7 @@
 
 ## Decision and boundaries
 
-This is a proposed implementation plan, not a completed wrapper rewrite. Read the
+This is the staged repair plan. W1 transport lifecycle is now implemented and offline-tested; remaining tasks are proposed, not completed rewrites. Read the
 [evidence audit](device-wrapper-audit.md) first. The current input is snapshot HEAD
 `ceaabec9ea4882c1882f71facf604a04099a5992`. The QtWidgets acquisition gate remains
 unmet; do not implement map-directory allocation or launcher changes on the strength
@@ -22,7 +22,7 @@ reservation authority; wrappers do not create global caches.
    documentation. Do not contact an instrument to gather it during this task. If fixtures
    are unavailable, record the blocker and restrict untrusted histogram use; do not
    invent accepted syntax. This is urgent and separate from transport/stream work.
-2. **Next fixture-independent implementation: ITC transport lifecycle only.** Repair
+2. **W1 ITC transport lifecycle: implemented/offline-tested; physical acceptance open.** Repair
    partial construction and teardown/error preservation. No new output commands.
 3. HORIBA partial startup and independent cleanup on the owning loop; no optical changes.
 4. DAC two-axis preflight and explicit partial-write diagnostics, preserving encoding.
@@ -77,7 +77,7 @@ map schemas/resume signatures and deterministic simulation unchanged.
 - Do not claim bounded shutdown for a vendor call that can block. Deadline policies
   require device-owner review; no force-kill threads or speculative retry of toggles.
 
-## W1: ITC transport lifecycle (next bounded implementation)
+## W1: ITC transport lifecycle (implemented; physical acceptance open)
 
 ### Files and consumers
 
@@ -217,3 +217,39 @@ Do not merge solely because the current 318-test headless suite is green. QtWidg
 acceptance is still open and several wrapper failure paths lack whole-module tests.
 The deployment guide remains a proposed manual runbook, not an executed installer or
 security boundary. Code permissions do not replace optical/electrical interlocks.
+
+## W1 ITC4000 lifecycle checkpoint (current)
+
+Input snapshot: `labtools_source_20261029_075745.txt`, HEAD
+`ad2a95b9813bc8407d54120a3997571c24d52450`, branch
+`feature/shared-instrument-session`, upstream +1/-0. Recorded tracked worktree/index
+clean; four earlier installers are untracked and preserved. Live Git remains authoritative.
+
+W1 is IMPLEMENTED and OFFLINE-VALIDATED, not physically accepted. Startup cleanup now
+covers manager creation, resource open, termination setup and *CLS. Both close stages
+are attempted independently. Ordinary close failures raise ExceptionGroup retaining
+all errors. KeyboardInterrupt/CancelledError remain primary, with other failures
+attached structurally in _itc4000_cleanup_failures and human-readable notes. Startup
+and context-body exceptions remain primary if cleanup also fails.
+
+Once teardown starts, all command/query paths refuse use. Successful handles are
+cleared; failed handles remain uncertain and _closed stays false. Only an explicit
+close retries failed stages; successful stages are not repeated. Manager close may
+invalidate an instrument whose close failed: retained handles do not imply a usable
+session or guaranteed recovery. A failed constructor returns no wrapper; its original
+exception/traceback and cleanup details remain the evidence for maintainer teardown.
+No reconnect, command retry, destructor, laser-off, TEC-off or current-reset was added.
+
+Constructor/public imports, defaults, units, SCPI strings/order, *OPC?/error/readback,
+TEC policy and timeouts are preserved. Existing command/setter method ASTs are unchanged.
+Finite-input policy (including the audited NaN constructor gap) remains W1b, not fixed.
+IDQ get_histogram eval(raw) remains P0 and unfixed; fixture-backed parser hardening is
+separate. No other wrapper, map allocation, schema/resume/model, profile or launcher
+changed. Syncerity 0.065 s and Symphony 0.1 s remain unchanged.
+
+Validation: 44 whole-module fake-PyVISA cases pass; focused ITC/service/import selection
+179 passed; full offline suite 362 passed / 4 skipped, 172 inherited warnings. Baseline
+rerun 318 passed / 4 skipped. QtWidgets still cannot load libGL.so.1. Changed-file Ruff
+format/check, compileall, CLI/native-free smoke, TOML and wheel build passed. See
+[itc lifecycle checkpoint](itc4000-lifecycle-checkpoint.md) for exact evidence, inventory,
+installer/rollback/commit commands and remaining Windows/physical acceptance.

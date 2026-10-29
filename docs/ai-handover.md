@@ -1,19 +1,17 @@
-# Development handover: device-wrapper audit and open Qt gate
+# Development handover: ITC transport lifecycle W1 and open Qt gate
 
 ## Starting identity and evidence
 
-Current input: `labtools_source_20261028_215033.txt`, created
-2026-10-28T21:50:33.8045255Z, branch `feature/shared-instrument-session`, HEAD
-`ceaabec9ea4882c1882f71facf604a04099a5992`, upstream +0/-0.
-Tracked worktree/index are recorded clean. Three installers are untracked:
-`apply_labtools_alignment_lifecycle.py`, `apply_labtools_comparative_audit.py`,
-`apply_labtools_deployment_docs.py`. Preserve these and any live unrelated changes.
-No separate local Qt acceptance pass output is embedded. Actual live status is authoritative.
+Current input: `labtools_source_20261029_075745.txt`, created
+2026-10-29T07:57:45.1279373Z, HEAD `ad2a95b9813bc8407d54120a3997571c24d52450`,
+branch `feature/shared-instrument-session`, upstream +1/-0. Tracked worktree/index
+recorded clean. Four untracked earlier installers are preserved: alignment-lifecycle,
+comparative-audit, deployment-docs and wrapper-audit. No local Qt pass log is embedded.
+Actual live Git status is authoritative; no Git mutation was performed.
 
-This checkpoint is documentation-only: an independent device-wrapper audit and bounded
-repair plan. No production/test Python, dependency, profile, driver, account, ACL,
-lab-PC environment, Git history/index or hardware was changed. The QtWidgets gate
-remains open, so collision-safe map allocation has not advanced.
+Current checkpoint implements ITC W1 only, with a new whole-module fake-PyVISA test
+module and relevant docs. No other wrapper/acquisition code, dependency, profile,
+account/ACL, deployment or hardware changed. Acquisition gate remains open.
 
 Read [architecture](architecture.md), [audit](comparative-audit.md),
 [roadmap](refactor-roadmap.md) and [conventions](development-conventions.md).
@@ -95,23 +93,16 @@ are not certified by these tests. No physical endpoint was contacted.
 
 ## Next bounded task and separate work lanes
 
-Read [wrapper audit](device-wrapper-audit.md), [repair plan](device-wrapper-repair-plan.md)
-and [checkpoint](wrapper-audit-checkpoint.md).
+W1 ITC transport lifecycle is implemented/offline-tested; see
+[itc checkpoint](itc4000-lifecycle-checkpoint.md). Next fixture-independent wrapper task
+is W2 HORIBA partial startup and independent async cleanup only, preserving optical
+commands/delays and exposure minima. Do not combine with timeouts, exposure setter
+policy, persistent connections or another wrapper. If representative IDQ histogram
+fixtures become available, prioritize the isolated P0 parser task instead.
 
-Acquisition lane: first execute/fix the QtWidgets gate with complete local output.
-Only after it passes, implement collision-safe map output directories as already planned.
-Do not treat committed test source, bytecode or a zero exit code with skips as a pass.
-
-Independent wrapper lane (per the user's added request): next fixture-independent
-implementation is W1 ITC transport startup/teardown only. Preserve public API and all
-output/TEC/current commands; add whole-wrapper fake-PyVISA failure tests. Do not combine
-with finite-limit policy, HORIBA, IDQ streaming, map allocation or launcher changes.
-IDQ histogram eval is a P0 parser finding: prioritize an isolated parser fix when
-representative accepted-response fixtures are available; do not invent firmware grammar.
-
-The audit recommends targeted repairs, not a blanket rewrite. DLT/IDQ internal ownership
-needs staged decomposition behind the existing facade. Existing style passes do not
-establish lifecycle correctness. Keep the physical acceptance and deployment gates.
+Acquisition lane remains separate: execute/fix QtWidgets gate first, then collision-safe
+map allocation. Current suite 362 passed / 4 skipped does not establish QtWidgets or
+physical acceptance. ITC finite-input W1b remains planned; no limit policy changed.
 
 ## Git workflow
 
@@ -120,7 +111,7 @@ state only if its affected bytes match. It does not stage/commit/merge/push/rese
 Review changed files and preserve unrelated changes. Keep backups outside the repo.
 Do not merge until local Ruff/Qt acceptance and required physical review are recorded.
 
-## Deployment-documentation checkpoint and gate rerun
+## Historical deployment-documentation checkpoint and gate rerun
 
 See [lab-PC deployment](lab-pc-deployment.md) and [gate status](qt-gate-status.md).
 The guide proposes non-editable wheel releases, protected code/profile/launchers,
@@ -138,7 +129,7 @@ Next task remains: run/fix the QtWidgets gate; then collision-safe map directory
 allocation in one bounded checkpoint. Keep output schemas/resume/determinism and
 0.065/0.1 s detector minima unchanged. No new runtime behaviour is claimed here.
 
-## Current wrapper-audit validation
+## Historical wrapper-audit validation (pre-W1)
 
 Qt gate rerun: 15 passed / 4 skipped. Full offline suite: 318 passed / 4 skipped,
 172 inherited warnings. All four QtWidgets modules still skip (libGL.so.1 missing).
@@ -147,3 +138,39 @@ these are not whole-module or hardware tests. Device Ruff check passes and all 1
 Python files are formatted. See the checkpoint for compile/build/import/link evidence.
 No wrapper rewrite or collision fix is implemented by this documentation checkpoint.
 Earlier counts and deployment statements above remain historical evidence where labelled.
+
+## W1 ITC4000 lifecycle checkpoint (current)
+
+Input snapshot: `labtools_source_20261029_075745.txt`, HEAD
+`ad2a95b9813bc8407d54120a3997571c24d52450`, branch
+`feature/shared-instrument-session`, upstream +1/-0. Recorded tracked worktree/index
+clean; four earlier installers are untracked and preserved. Live Git remains authoritative.
+
+W1 is IMPLEMENTED and OFFLINE-VALIDATED, not physically accepted. Startup cleanup now
+covers manager creation, resource open, termination setup and *CLS. Both close stages
+are attempted independently. Ordinary close failures raise ExceptionGroup retaining
+all errors. KeyboardInterrupt/CancelledError remain primary, with other failures
+attached structurally in _itc4000_cleanup_failures and human-readable notes. Startup
+and context-body exceptions remain primary if cleanup also fails.
+
+Once teardown starts, all command/query paths refuse use. Successful handles are
+cleared; failed handles remain uncertain and _closed stays false. Only an explicit
+close retries failed stages; successful stages are not repeated. Manager close may
+invalidate an instrument whose close failed: retained handles do not imply a usable
+session or guaranteed recovery. A failed constructor returns no wrapper; its original
+exception/traceback and cleanup details remain the evidence for maintainer teardown.
+No reconnect, command retry, destructor, laser-off, TEC-off or current-reset was added.
+
+Constructor/public imports, defaults, units, SCPI strings/order, *OPC?/error/readback,
+TEC policy and timeouts are preserved. Existing command/setter method ASTs are unchanged.
+Finite-input policy (including the audited NaN constructor gap) remains W1b, not fixed.
+IDQ get_histogram eval(raw) remains P0 and unfixed; fixture-backed parser hardening is
+separate. No other wrapper, map allocation, schema/resume/model, profile or launcher
+changed. Syncerity 0.065 s and Symphony 0.1 s remain unchanged.
+
+Validation: 44 whole-module fake-PyVISA cases pass; focused ITC/service/import selection
+179 passed; full offline suite 362 passed / 4 skipped, 172 inherited warnings. Baseline
+rerun 318 passed / 4 skipped. QtWidgets still cannot load libGL.so.1. Changed-file Ruff
+format/check, compileall, CLI/native-free smoke, TOML and wheel build passed. See
+[itc lifecycle checkpoint](itc4000-lifecycle-checkpoint.md) for exact evidence, inventory,
+installer/rollback/commit commands and remaining Windows/physical acceptance.

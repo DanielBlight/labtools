@@ -51,6 +51,9 @@ class ITC4000:
         self.threshold_current = float(threshold_current)
         self.max_current = float(max_current)
         self._closed = False
+        self._close_started = False
+        self._rm = None
+        self._itc: MessageBasedResource | None = None
 
         if self.threshold_current < 0:
             raise ValueError("threshold_current cannot be negative.")
@@ -61,18 +64,26 @@ class ITC4000:
         if self.threshold_current > self.max_current:
             raise ValueError("threshold_current cannot exceed max_current.")
 
-        self._rm = pyvisa.ResourceManager()
+        try:
+            self._rm = pyvisa.ResourceManager()
+            self._itc = self._rm.open_resource(self.address, timeout=timeout_ms)
+            self._itc.write_termination = "\n"
+            self._itc.read_termination = "\n"
+            # Preserve the established successful startup transcript.
+            self._itc.write("*CLS")
+        except BaseException as primary:
+            try:
+                self.close()
+            except BaseException as cleanup:  # noqa: BLE001 - preserve startup interruption
+                self._retain_cleanup(primary, cleanup)
+            raise
 
-        self._itc: MessageBasedResource = self._rm.open_resource(
-            self.address,
-            timeout=timeout_ms,
-        )
-
-        self._itc.write_termination = "\n"
-        self._itc.read_termination = "\n"
-
-        # Clear stale status and error information from earlier sessions.
-        self._itc.write("*CLS")
+    @staticmethod
+    def _retain_cleanup(primary: BaseException, cleanup: BaseException) -> None:
+        """Retain cleanup structurally without replacing a startup/body failure."""
+        previous = getattr(primary, "_itc4000_cleanup_failures", ())
+        primary._itc4000_cleanup_failures = (*previous, cleanup)
+        primary.add_note(f"ITC4000 transport cleanup also failed: {cleanup!r}")
 
     # ------------------------------------------------------------------
     # Low-level checked communication
@@ -81,6 +92,10 @@ class ITC4000:
         """Raise a clear error if code uses a closed VISA session."""
         if self._closed:
             raise RuntimeError("The ITC4000 VISA session is closed.")
+        if self._close_started:
+            raise RuntimeError(
+                "ITC4000 transport teardown started; commands are refused."
+            )
 
     def _query(self, command: str) -> str:
         """Send a SCPI query and return the stripped response."""
@@ -374,20 +389,48 @@ class ITC4000:
     # Lifecycle
     # ------------------------------------------------------------------
     def close(self) -> None:
-        """Close the instrument and resource-manager sessions."""
+        """Release transports, retaining failed handles for explicit close retry.
+
+        No physical output command is sent. Once teardown starts, commands remain
+        prohibited. Successful stages are not repeated; failed stages may be retried
+        only by another explicit close call. A manager close may invalidate an
+        instrument whose close failed, so retained handles indicate uncertainty,
+        not a usable connection or a guarantee that retry can recover it.
+        """
         if self._closed:
             return
-
-        try:
-            self._itc.close()
-        finally:
-            self._rm.close()
-            self._closed = True
+        self._close_started = True
+        failures = []
+        for attribute in ("_itc", "_rm"):
+            handle = getattr(self, attribute)
+            if handle is None:
+                continue
+            try:
+                handle.close()
+            except BaseException as exc:  # noqa: BLE001 - attempt independent closes, then re-raise
+                failures.append(exc)
+            else:
+                setattr(self, attribute, None)
+        self._closed = self._itc is None and self._rm is None
+        if failures:
+            # A cancellation/interrupt remains primary, not an ordinary group member.
+            primary = next((e for e in failures if not isinstance(e, Exception)), None)
+            if primary is not None:
+                for failure in failures:
+                    if failure is not primary:
+                        self._retain_cleanup(primary, failure)
+                raise primary
+            raise ExceptionGroup("ITC4000 transport cleanup failed", failures)
 
     def __enter__(self) -> Self:
         """Return the connected controller for a context manager."""
         return self
 
-    def __exit__(self, *_: object) -> None:
-        """Close VISA sessions when leaving a context manager."""
-        self.close()
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Release transports while preserving an exception from the body."""
+        try:
+            self.close()
+        except BaseException as cleanup:
+            if exc_value is None:
+                raise
+            self._retain_cleanup(exc_value, cleanup)

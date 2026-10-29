@@ -1,7 +1,7 @@
 # Current architecture
 
 This document describes the audited 28 October 2026 source, based on snapshot HEAD
-`ceaabec9ea4882c1882f71facf604a04099a5992`. Actual Git status is authoritative.
+`ad2a95b9813bc8407d54120a3997571c24d52450`. Actual Git status is authoritative.
 See [handover](ai-handover.md), [roadmap](refactor-roadmap.md) and
 [audit](comparative-audit.md) for evidence and limitations.
 
@@ -138,3 +138,39 @@ InstrumentSession for registered synchronous services, owning asyncio loop for H
 borrowed LabJack for mirror/gate, and explicit DLT process/stream owners. No new general
 resource manager or universal close semantics are introduced. Acquisition gate remains
 open; no map allocation or physical command changes are made by this checkpoint.
+
+## W1 ITC4000 lifecycle checkpoint (current)
+
+Input snapshot: `labtools_source_20261029_075745.txt`, HEAD
+`ad2a95b9813bc8407d54120a3997571c24d52450`, branch
+`feature/shared-instrument-session`, upstream +1/-0. Recorded tracked worktree/index
+clean; four earlier installers are untracked and preserved. Live Git remains authoritative.
+
+W1 is IMPLEMENTED and OFFLINE-VALIDATED, not physically accepted. Startup cleanup now
+covers manager creation, resource open, termination setup and *CLS. Both close stages
+are attempted independently. Ordinary close failures raise ExceptionGroup retaining
+all errors. KeyboardInterrupt/CancelledError remain primary, with other failures
+attached structurally in _itc4000_cleanup_failures and human-readable notes. Startup
+and context-body exceptions remain primary if cleanup also fails.
+
+Once teardown starts, all command/query paths refuse use. Successful handles are
+cleared; failed handles remain uncertain and _closed stays false. Only an explicit
+close retries failed stages; successful stages are not repeated. Manager close may
+invalidate an instrument whose close failed: retained handles do not imply a usable
+session or guaranteed recovery. A failed constructor returns no wrapper; its original
+exception/traceback and cleanup details remain the evidence for maintainer teardown.
+No reconnect, command retry, destructor, laser-off, TEC-off or current-reset was added.
+
+Constructor/public imports, defaults, units, SCPI strings/order, *OPC?/error/readback,
+TEC policy and timeouts are preserved. Existing command/setter method ASTs are unchanged.
+Finite-input policy (including the audited NaN constructor gap) remains W1b, not fixed.
+IDQ get_histogram eval(raw) remains P0 and unfixed; fixture-backed parser hardening is
+separate. No other wrapper, map allocation, schema/resume/model, profile or launcher
+changed. Syncerity 0.065 s and Symphony 0.1 s remain unchanged.
+
+Validation: 44 whole-module fake-PyVISA cases pass; focused ITC/service/import selection
+179 passed; full offline suite 362 passed / 4 skipped, 172 inherited warnings. Baseline
+rerun 318 passed / 4 skipped. QtWidgets still cannot load libGL.so.1. Changed-file Ruff
+format/check, compileall, CLI/native-free smoke, TOML and wheel build passed. See
+[itc lifecycle checkpoint](itc4000-lifecycle-checkpoint.md) for exact evidence, inventory,
+installer/rollback/commit commands and remaining Windows/physical acceptance.

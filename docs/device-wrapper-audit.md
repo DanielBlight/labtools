@@ -1,5 +1,9 @@
 # Device-wrapper audit: evidence and rewrite decisions
 
+> Historical audit below describes the pre-W1 snapshot. ITC transport startup/close
+> defects are now repaired and fake-tested; finite-input W1b and all other wrapper
+> findings remain open. See [W1 checkpoint](itc4000-lifecycle-checkpoint.md).
+
 ## Scope, starting state and decision
 
 Input: `labtools_source_20261028_215033.txt`, created 2026-10-28T21:50:33.8045255Z,
@@ -441,3 +445,39 @@ Line numbers below refer to this input snapshot.
 - UC480CameraError: (no declared methods)
 - UC480CameraInfo: (no declared methods)
 - ThorlabsUC480Camera: __init__:31, _module:45, list_cameras:55, is_connected:70, connect:73, close:84, _connected_camera:109, set_exposure:114, get_exposure:122, get_device_info:125, get_gains:128, get_max_gains:133, set_master_gain:138, start_live:145, stop_live:156, read_latest:162, snap:173, _prepare_frame:178, __enter__:187, __exit__:191
+
+## W1 ITC4000 lifecycle checkpoint (current)
+
+Input snapshot: `labtools_source_20261029_075745.txt`, HEAD
+`ad2a95b9813bc8407d54120a3997571c24d52450`, branch
+`feature/shared-instrument-session`, upstream +1/-0. Recorded tracked worktree/index
+clean; four earlier installers are untracked and preserved. Live Git remains authoritative.
+
+W1 is IMPLEMENTED and OFFLINE-VALIDATED, not physically accepted. Startup cleanup now
+covers manager creation, resource open, termination setup and *CLS. Both close stages
+are attempted independently. Ordinary close failures raise ExceptionGroup retaining
+all errors. KeyboardInterrupt/CancelledError remain primary, with other failures
+attached structurally in _itc4000_cleanup_failures and human-readable notes. Startup
+and context-body exceptions remain primary if cleanup also fails.
+
+Once teardown starts, all command/query paths refuse use. Successful handles are
+cleared; failed handles remain uncertain and _closed stays false. Only an explicit
+close retries failed stages; successful stages are not repeated. Manager close may
+invalidate an instrument whose close failed: retained handles do not imply a usable
+session or guaranteed recovery. A failed constructor returns no wrapper; its original
+exception/traceback and cleanup details remain the evidence for maintainer teardown.
+No reconnect, command retry, destructor, laser-off, TEC-off or current-reset was added.
+
+Constructor/public imports, defaults, units, SCPI strings/order, *OPC?/error/readback,
+TEC policy and timeouts are preserved. Existing command/setter method ASTs are unchanged.
+Finite-input policy (including the audited NaN constructor gap) remains W1b, not fixed.
+IDQ get_histogram eval(raw) remains P0 and unfixed; fixture-backed parser hardening is
+separate. No other wrapper, map allocation, schema/resume/model, profile or launcher
+changed. Syncerity 0.065 s and Symphony 0.1 s remain unchanged.
+
+Validation: 44 whole-module fake-PyVISA cases pass; focused ITC/service/import selection
+179 passed; full offline suite 362 passed / 4 skipped, 172 inherited warnings. Baseline
+rerun 318 passed / 4 skipped. QtWidgets still cannot load libGL.so.1. Changed-file Ruff
+format/check, compileall, CLI/native-free smoke, TOML and wheel build passed. See
+[itc lifecycle checkpoint](itc4000-lifecycle-checkpoint.md) for exact evidence, inventory,
+installer/rollback/commit commands and remaining Windows/physical acceptance.

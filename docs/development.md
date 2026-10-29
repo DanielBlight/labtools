@@ -87,3 +87,13 @@ separate style, extracted-method probes, whole-wrapper fake tests and physical a
 Current gate is still 15 passed / 4 skipped; full suite 318 passed / 4 skipped. Next
 independent wrapper task is ITC transport lifecycle, not a repository-wide rewrite.
 The [checkpoint guide](wrapper-audit-checkpoint.md) records exact evidence and commands.
+
+## ITC W1 lifecycle contract
+
+See [current checkpoint](itc4000-lifecycle-checkpoint.md). Ordinary transport cleanup
+failures now raise ExceptionGroup; callers catching Exception still receive them.
+Interrupt/cancellation remains primary. Startup/body errors retain cleanup notes and
+structured _itc4000_cleanup_failures. Teardown blocks commands permanently; explicit
+close retries only failed handles, with no guarantee a manager-invalidated handle can
+recover. No physical output commands are added. Do not auto-reconnect or silently retry
+commands. Whole-module fake-PyVISA tests supplement historical AST/adapter probes.

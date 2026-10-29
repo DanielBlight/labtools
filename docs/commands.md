@@ -104,3 +104,13 @@ See [wrapper audit checkpoint](wrapper-audit-checkpoint.md) for the current docs
 installer and exact commands. Capture full local Qt output plus JUnit XML; a pass count
 copied from documentation is not evidence that QtWidgets ran. Do not run hardware tests
 or diagnostic scripts as an installation check. The collision fix remains gated.
+
+## ITC W1 lifecycle contract
+
+See [current checkpoint](itc4000-lifecycle-checkpoint.md). Ordinary transport cleanup
+failures now raise ExceptionGroup; callers catching Exception still receive them.
+Interrupt/cancellation remains primary. Startup/body errors retain cleanup notes and
+structured _itc4000_cleanup_failures. Teardown blocks commands permanently; explicit
+close retries only failed handles, with no guarantee a manager-invalidated handle can
+recover. No physical output commands are added. Do not auto-reconnect or silently retry
+commands. Whole-module fake-PyVISA tests supplement historical AST/adapter probes.

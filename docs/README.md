@@ -44,3 +44,6 @@ Avoid duplicating the same procedure in multiple places.
   fake/physical acceptance requirements.
 - [Current wrapper-audit checkpoint](wrapper-audit-checkpoint.md): gate results,
   installation/rollback/commit commands and continuation.
+
+- [ITC4000 lifecycle W1 checkpoint](itc4000-lifecycle-checkpoint.md): implementation,
+  fake-transport evidence, exact inventory, install/rollback/commit and next task.

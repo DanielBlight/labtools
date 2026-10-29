@@ -1,4 +1,8 @@
-# Wrapper-audit checkpoint: installation, validation and continuation
+# Historical wrapper-audit checkpoint: installation, validation and continuation
+
+> This is the preceding docs-only checkpoint. Use the current
+> [ITC W1 checkpoint](itc4000-lifecycle-checkpoint.md) for the new runtime repair,
+> installer and counts. Earlier audit evidence remains historical.
 
 ## Result and scope
 

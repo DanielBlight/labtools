@@ -407,3 +407,14 @@ use only trusted/approved paths and prioritize fixture-backed parser hardening. 
 findings are not fixed by this documentation checkpoint. Adapter fakes do not certify
 real-wrapper cleanup, shutter state, calibration or native SDK teardown. See the
 [repair plan](../device-wrapper-repair-plan.md); no optical/firmware commands changed.
+
+## ITC W1 release caveat
+
+[ITC transport lifecycle W1](../itc4000-lifecycle-checkpoint.md) is implemented with fake-PyVISA tests only.
+Transport close still sends no laser-off, TEC-off or current-reset command. Failed
+handles remain uncertain; commands are blocked after teardown begins. ExceptionGroup
+reports ordinary cleanup failures; startup/body exceptions retain cleanup details.
+This does not certify output state, drivers, SDK teardown or physical safety. Preserve
+protected core/profile/launchers and writable operator recipes/data. Do not deploy as
+physically accepted based on offline tests. The IDQ eval parser and other wrapper
+findings remain open; acquisition Qt gate is still unmet. No lab-PC deployment occurred.

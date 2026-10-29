@@ -181,3 +181,13 @@ ownership. Do not silently retry toggles, reconnect faulted devices or add outpu
 home commands to transport close. A lint pass is not lifecycle acceptance. One wrapper
 boundary per checkpoint; no blanket rewrite or universal device base class. Treat eval
 of instrument responses as a separate urgent parser task with bounded accepted fixtures.
+
+## ITC W1 lifecycle contract
+
+See [current checkpoint](itc4000-lifecycle-checkpoint.md). Ordinary transport cleanup
+failures now raise ExceptionGroup; callers catching Exception still receive them.
+Interrupt/cancellation remains primary. Startup/body errors retain cleanup notes and
+structured _itc4000_cleanup_failures. Teardown blocks commands permanently; explicit
+close retries only failed handles, with no guarantee a manager-invalidated handle can
+recover. No physical output commands are added. Do not auto-reconnect or silently retry
+commands. Whole-module fake-PyVISA tests supplement historical AST/adapter probes.
