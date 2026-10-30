@@ -283,3 +283,5 @@ The public hyperspectral contract is hardened: exact additive exports are tested
 ### Simulation-first hyperspectral GUI
 
 A minimal Qt window/controller now consumes the frozen public facade, exposes unit-bearing simulation inputs, progress, cancellation and synthetic result summaries. It has no real-mode control, resume, laser/shutter policy or physical acceptance.
+
+The hyperspectral GUI hardening adds selected-pixel spectra, completed-mask validation, pre-taken dark loading, formal operator states, cleanup-wait close handling, and a lazy source-checkout launcher. It remains simulation-only.

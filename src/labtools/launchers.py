@@ -11,6 +11,7 @@ GUI_MODULES = MappingProxyType(
         "mirror": "labtools.gui.mirror_voltage_gui",
         "intensity-map": "labtools.gui.intensity_map_gui",
         "anneal": "labtools.gui.laser_anneal_gui",
+        "hyperspectral": "labtools.gui.hyperspectral_gui",
     }
 )
 
@@ -34,6 +35,10 @@ def mirror_gui() -> None:
 
 def intensity_gui() -> None:
     launch_gui("intensity-map")
+
+
+def hyperspectral_gui() -> None:
+    launch_gui("hyperspectral")
 
 
 def anneal_gui() -> None:

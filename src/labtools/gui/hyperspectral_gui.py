@@ -25,9 +25,10 @@ from PyQt6.QtWidgets import (
 
 from labtools.config.hyperspectral import HyperspectralConfig
 from labtools.config.spectrum import SpectrumSettings
-from labtools.measurements import HyperspectralRequest
+from labtools.measurements import HyperspectralRequest, load_dark
 
 from .hyperspectral_controller import HyperspectralController
+from .hyperspectral_view import build_view
 
 
 class HyperspectralWindow(QMainWindow):
@@ -36,6 +37,9 @@ class HyperspectralWindow(QMainWindow):
         self.setWindowTitle("Hyperspectral acquisition (simulation)")
         self.controller = controller or HyperspectralController(self)
         self.last_measurement = None
+        self._close_after_cleanup = False
+        self._state = "idle"
+        self.dark_record = None
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -58,7 +62,13 @@ class HyperspectralWindow(QMainWindow):
         self.y_points = self._integer(2)
         self.settle_time_s = self._double(0.0, 0.0, 60.0)
         self.dark_mode = QComboBox()
-        self.dark_mode.addItems(["none", "per_center", "per_frame"])
+        self.dark_mode.addItems(["none", "per_center", "per_frame", "pre_taken"])
+        self.dark_path = QLineEdit()
+        dark_browse = QPushButton("Load dark...")
+        dark_browse.clicked.connect(self._browse_dark)
+        dark_row = QHBoxLayout()
+        dark_row.addWidget(self.dark_path)
+        dark_row.addWidget(dark_browse)
         self.output_path = QLineEdit()
         browse = QPushButton("Browse...")
         browse.clicked.connect(self._browse)
@@ -83,6 +93,7 @@ class HyperspectralWindow(QMainWindow):
             ("Dark mode", self.dark_mode),
         ]:
             form.addRow(label, widget)
+        form.addRow("Pre-taken dark NPZ", dark_row)
         form.addRow("Output NPZ (optional)", output_row)
         buttons = QHBoxLayout()
         self.start_button = QPushButton("Start simulation")
@@ -94,6 +105,17 @@ class HyperspectralWindow(QMainWindow):
         self.status = QLabel("Idle")
         self.progress = QLabel("0 / 0 points")
         self.summary = QLabel("No dataset")
+        self.pixel_y = self._integer(1)
+        self.pixel_x = self._integer(1)
+        self.select_button = QPushButton("Show selected spectrum")
+        self.select_button.clicked.connect(self._select_pixel)
+        pixel_row = QHBoxLayout()
+        pixel_row.addWidget(QLabel("Y index"))
+        pixel_row.addWidget(self.pixel_y)
+        pixel_row.addWidget(QLabel("X index"))
+        pixel_row.addWidget(self.pixel_x)
+        pixel_row.addWidget(self.select_button)
+        layout.addLayout(pixel_row)
         layout.addWidget(self.status)
         layout.addWidget(self.progress)
         layout.addWidget(self.summary)
@@ -161,7 +183,7 @@ class HyperspectralWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001 - operator-visible GUI boundary
             QMessageBox.warning(self, "Invalid hyperspectral request", str(exc))
             return
-        self.status.setText("Starting simulation")
+        self._set_state("starting")
         self.start_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
 
@@ -196,6 +218,55 @@ class HyperspectralWindow(QMainWindow):
     def _idle(self):
         self.start_button.setEnabled(True)
         self.cancel_button.setEnabled(False)
+
+    def _set_state(self, state):
+        self._state = state
+        self.status.setText(state.replace("-", " ").title())
+        busy = state in {"starting", "running", "cancelling", "cleanup-wait"}
+        self.start_button.setEnabled(not busy)
+        self.cancel_button.setEnabled(state in {"starting", "running"})
+
+    def _select_pixel(self):
+        if self.last_measurement is None:
+            self.summary.setText("No dataset available")
+            return
+
+        try:
+            view = build_view(
+                self.last_measurement.result,
+                self.pixel_y.value() - 1,
+                self.pixel_x.value() - 1,
+            )
+        except (IndexError, ValueError) as exc:
+            self.summary.setText(str(exc))
+            return
+
+        self.summary.setText(
+            "Selected spectrum: "
+            f"{view.spectrum.size} points; "
+            f"wavelength (nm) {view.wavelength_nm[0]:.3f} "
+            f"to {view.wavelength_nm[-1]:.3f}; "
+            f"mirror pixel ({view.y_index}, {view.x_index})"
+        )
+
+    def _browse_dark(self):
+        value, _ = QFileDialog.getOpenFileName(
+            self,
+            "Pre-taken dark NPZ",
+            filter="NumPy archive (*.npz)",
+        )
+        if not value:
+            return
+
+        try:
+            self.dark_record = load_dark(Path(value))
+        except Exception as exc:  # noqa: BLE001 - operator-visible GUI boundary
+            QMessageBox.warning(self, "Invalid dark record", str(exc))
+            return
+
+        self.dark_path.setText(value)
+        self.dark_mode.setCurrentText("pre_taken")
+        self.summary.setText(f"Dark record loaded: {self.dark_record.record_id}")
 
     def _browse(self):
         value, _ = QFileDialog.getSaveFileName(

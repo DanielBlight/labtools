@@ -147,3 +147,5 @@ The internal hyperspectral service now reserves the shared mirror/LabJack for it
 The additive public export surface is frozen to the request, runtime, measurement/provenance, and sync/async acquisition functions. Request validation refuses an existing output path before runtime construction. Runtime cleanup attempts all owned resources, preserves `KeyboardInterrupt`/`SystemExit` as primary, and aggregates ordinary cleanup failures. `MeasurementRuntimeStatus` remains unchanged for positional compatibility. `load_hyperspectral_result` remains an internal/facade-module helper rather than a package-level export.
 
 A simulation-first GUI now consumes the public hyperspectral facade without changing scripted APIs. It does not provide real execution, resume, pipelines, anneal dispatch or physical confirmation.
+
+The simulation GUI now supports pre-taken dark selection and selected completed-pixel spectrum summaries while continuing to delegate acquisition to the public facade.

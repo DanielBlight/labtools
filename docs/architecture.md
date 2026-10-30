@@ -284,3 +284,7 @@ The hardened public facade validates overwrite refusal before constructing a run
 ## Simulation-first hyperspectral GUI
 
 `HyperspectralController` runs only the public `acquire_hyperspectral_map_async` facade on a QThread and forwards typed progress, completion and failure signals. `HyperspectralWindow` builds validated public requests, exposes simulation only, supports cooperative cancellation, and never imports or calls acquisition services, sessions or device wrappers directly.
+
+### Hyperspectral GUI operator hardening
+
+A Qt-free presentation helper computes integrated maps and validates selected completed pixels without mutating cube data. The simulation-only window now has central states, cleanup-wait close behaviour, pre-taken DarkRecord loading, selected-pixel spectrum summaries, and lazy launcher registration.
