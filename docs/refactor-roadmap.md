@@ -404,3 +404,8 @@ The first reviewed Qt-free hyperspectral service boundary is implemented with de
 - A simulation-first hyperspectral Qt boundary now exercises the public facade. Follow with GUI hardening/operator acceptance before any controlled real-hardware preparation.
 
 - Simulation GUI operator hardening is complete offline. Prepare controlled real-hardware acceptance separately; no real GUI route exists yet.
+
+
+## Hyperspectral simulation GUI plotting checkpoint
+
+The public scripted hyperspectral measurement remains frozen and Qt-free. The operator GUI remains simulation-only and presents a synthetic NaN-safe raw spectral sum, completion mask, click-selected completed pixel, and an immutable selected spectrum in wavelength nanometres against mirror voltages. Typed progress intentionally contains no partial arrays, so live spectral/map plotting is not implemented. GUI resume, multi-recipe pipelines, anneal dispatch, and real-hardware execution remain unsupported. The legacy runner is not the GUI backend. `--confirm-real` applies only to guarded scripted execution and is not a GUI safety control. HORIBA exclusion remains process-local. Offline Qt tests and synthetic plots are not physical, calibration, timing, optical, Windows-native SDK, or Qt-production acceptance.

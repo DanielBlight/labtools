@@ -285,3 +285,8 @@ The public hyperspectral contract is hardened: exact additive exports are tested
 A minimal Qt window/controller now consumes the frozen public facade, exposes unit-bearing simulation inputs, progress, cancellation and synthetic result summaries. It has no real-mode control, resume, laser/shutter policy or physical acceptance.
 
 The hyperspectral GUI hardening adds selected-pixel spectra, completed-mask validation, pre-taken dark loading, formal operator states, cleanup-wait close handling, and a lazy source-checkout launcher. It remains simulation-only.
+
+
+## Hyperspectral simulation GUI plotting checkpoint
+
+The public scripted hyperspectral measurement remains frozen and Qt-free. The operator GUI remains simulation-only and presents a synthetic NaN-safe raw spectral sum, completion mask, click-selected completed pixel, and an immutable selected spectrum in wavelength nanometres against mirror voltages. Typed progress intentionally contains no partial arrays, so live spectral/map plotting is not implemented. GUI resume, multi-recipe pipelines, anneal dispatch, and real-hardware execution remain unsupported. The legacy runner is not the GUI backend. `--confirm-real` applies only to guarded scripted execution and is not a GUI safety control. HORIBA exclusion remains process-local. Offline Qt tests and synthetic plots are not physical, calibration, timing, optical, Windows-native SDK, or Qt-production acceptance.

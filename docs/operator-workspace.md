@@ -72,3 +72,8 @@ operator workspaces, standard accounts, protected profiles/code and side-by-side
 updates/rollback. Do not run uv sync against the production environment or install
 editable source for operators. The guide is proposed and requires local IT/Windows
 acceptance; it does not change permissions or deploy software by itself.
+
+
+## Hyperspectral simulation GUI plotting checkpoint
+
+The public scripted hyperspectral measurement remains frozen and Qt-free. The operator GUI remains simulation-only and presents a synthetic NaN-safe raw spectral sum, completion mask, click-selected completed pixel, and an immutable selected spectrum in wavelength nanometres against mirror voltages. Typed progress intentionally contains no partial arrays, so live spectral/map plotting is not implemented. GUI resume, multi-recipe pipelines, anneal dispatch, and real-hardware execution remain unsupported. The legacy runner is not the GUI backend. `--confirm-real` applies only to guarded scripted execution and is not a GUI safety control. HORIBA exclusion remains process-local. Offline Qt tests and synthetic plots are not physical, calibration, timing, optical, Windows-native SDK, or Qt-production acceptance.

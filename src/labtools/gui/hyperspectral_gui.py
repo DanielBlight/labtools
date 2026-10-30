@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -28,18 +30,22 @@ from labtools.config.spectrum import SpectrumSettings
 from labtools.measurements import HyperspectralRequest, load_dark
 
 from .hyperspectral_controller import HyperspectralController
-from .hyperspectral_view import build_view
+from .hyperspectral_view import build_view, nearest_axis_index
 
 
 class HyperspectralWindow(QMainWindow):
     def __init__(self, parent=None, *, controller=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Hyperspectral acquisition (simulation)")
+        self.resize(1200, 900)
+        self.setMinimumSize(900, 700)
         self.controller = controller or HyperspectralController(self)
         self.last_measurement = None
         self._close_after_cleanup = False
         self._state = "idle"
         self.dark_record = None
+        self._selected_pixel = None
+        self._cancel_requested = False
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -66,9 +72,12 @@ class HyperspectralWindow(QMainWindow):
         self.dark_path = QLineEdit()
         dark_browse = QPushButton("Load dark...")
         dark_browse.clicked.connect(self._browse_dark)
+        dark_clear = QPushButton("Clear dark")
+        dark_clear.clicked.connect(self.clear_dark)
         dark_row = QHBoxLayout()
         dark_row.addWidget(self.dark_path)
         dark_row.addWidget(dark_browse)
+        dark_row.addWidget(dark_clear)
         self.output_path = QLineEdit()
         browse = QPushButton("Browse...")
         browse.clicked.connect(self._browse)
@@ -119,6 +128,13 @@ class HyperspectralWindow(QMainWindow):
         layout.addWidget(self.status)
         layout.addWidget(self.progress)
         layout.addWidget(self.summary)
+        self.figure = Figure(figsize=(8, 5))
+        self.map_axes, self.spectrum_axes = self.figure.subplots(1, 2)
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        self._map_click_connection = self.canvas.mpl_connect(
+            "button_press_event", self._map_clicked
+        )
+        layout.addWidget(self.canvas)
         self.start_button.clicked.connect(self.start)
         self.cancel_button.clicked.connect(self.cancel)
         self.controller.progress.connect(self._progress)
@@ -172,7 +188,7 @@ class HyperspectralWindow(QMainWindow):
             if self.output_path.text().strip()
             else None
         )
-        request = HyperspectralRequest(config, path)
+        request = HyperspectralRequest(config, path, self.dark_record)
         request.validate()
         return request
 
@@ -188,8 +204,10 @@ class HyperspectralWindow(QMainWindow):
         self.cancel_button.setEnabled(True)
 
     def cancel(self):
-        self.status.setText("Cancelling")
-        self.cancel_button.setEnabled(False)
+        if self._cancel_requested:
+            return
+        self._cancel_requested = True
+        self._set_state("cancelling")
         self.controller.cancel()
 
     def _progress(self, event):
@@ -198,33 +216,93 @@ class HyperspectralWindow(QMainWindow):
 
     def _finished(self, measurement):
         self.last_measurement = measurement
+        self._cancel_requested = False
         result = measurement.result
         integrated = (
             np.nansum(result.intensity, axis=2)
             if result.intensity.ndim == 3
             else np.empty((0, 0))
         )
-        self.status.setText(
-            "Complete" if result.status == "complete" else "Cancelled with partial data"
-        )
+        self._set_state("complete" if result.status == "complete" else "cancelled-partial")
         self.summary.setText(
             f"Synthetic={measurement.provenance.synthetic}; cube={result.intensity.shape}; integrated map={integrated.shape}; output={result.output_path or 'not saved'}"
         )
+        self._render_result()
 
     def _failed(self, message, traceback_text):
-        self.status.setText("Failed")
+        self._cancel_requested = False
+        self._set_state("failed")
         self.summary.setText(message)
 
     def _idle(self):
-        self.start_button.setEnabled(True)
-        self.cancel_button.setEnabled(False)
+        if self._close_after_cleanup:
+            self._close_after_cleanup = False
+            self.close()
+            return
+        if self._state in {"starting", "running", "cancelling", "cleanup-wait"}:
+            self._set_state("idle")
 
     def _set_state(self, state):
         self._state = state
         self.status.setText(state.replace("-", " ").title())
-        busy = state in {"starting", "running", "cancelling", "cleanup-wait"}
+        busy = state in {"validating", "starting", "running", "cancelling", "cleanup-wait"}
         self.start_button.setEnabled(not busy)
         self.cancel_button.setEnabled(state in {"starting", "running"})
+
+
+    def _render_result(self):
+        self.map_axes.clear()
+        self.spectrum_axes.clear()
+        if self.last_measurement is None:
+            self.canvas.draw_idle()
+            return
+        result = self.last_measurement.result
+        try:
+            view = build_view(result, *(self._selected_pixel or (None, None)))
+        except (ValueError, IndexError, TypeError) as exc:
+            self.summary.setText(f"Presentation error: {exc}")
+            self.canvas.draw_idle()
+            return
+        image = np.ma.masked_invalid(view.integrated_intensity)
+        extent = [float(result.x_v[0]), float(result.x_v[-1]),
+                  float(result.y_v[0]), float(result.y_v[-1])]
+        self.map_axes.imshow(image, origin="lower", aspect="auto", extent=extent)
+        self.map_axes.set(xlabel="X mirror voltage (V)", ylabel="Y mirror voltage (V)",
+                          title="Synthetic integrated intensity (NaN-safe raw sum)")
+        if view.spectrum is not None:
+            self.map_axes.plot(view.x_voltage, view.y_voltage, "rx", markersize=10)
+            self.spectrum_axes.plot(view.wavelength_nm, view.spectrum)
+            self.spectrum_axes.set_title(
+                f"Synthetic pixel Y={view.y_index + 1}, X={view.x_index + 1} "
+                f"({view.y_voltage:.6g} V, {view.x_voltage:.6g} V)"
+            )
+        else:
+            self.spectrum_axes.set_title("Select a completed pixel")
+        self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity (raw units)")
+        self.canvas.draw_idle()
+
+    def _map_clicked(self, event):
+        if event.inaxes is not self.map_axes or self.last_measurement is None:
+            return
+        try:
+            result = self.last_measurement.result
+            x_index = nearest_axis_index(result.x_v, event.xdata)
+            y_index = nearest_axis_index(result.y_v, event.ydata)
+            build_view(result, y_index, x_index)
+        except (ValueError, IndexError, TypeError) as exc:
+            self.summary.setText(str(exc))
+            return
+        self._selected_pixel = (y_index, x_index)
+        self.pixel_y.setValue(y_index + 1)
+        self.pixel_x.setValue(x_index + 1)
+        self._render_result()
+
+    def clear_dark(self):
+        self.dark_record = None
+        self.dark_path.clear()
+        if self.dark_mode.currentText() == "pre_taken":
+            self.dark_mode.setCurrentText("none")
+        self.summary.setText("Pre-taken dark cleared")
 
     def _select_pixel(self):
         if self.last_measurement is None:
@@ -241,6 +319,8 @@ class HyperspectralWindow(QMainWindow):
             self.summary.setText(str(exc))
             return
 
+        self._selected_pixel = (view.y_index, view.x_index)
+        self._render_result()
         self.summary.setText(
             "Selected spectrum: "
             f"{view.spectrum.size} points; "
@@ -277,9 +357,14 @@ class HyperspectralWindow(QMainWindow):
 
     def closeEvent(self, event):
         if self.controller.busy:
-            self.cancel()
+            self._close_after_cleanup = True
+            if not self._cancel_requested:
+                self.cancel()
+            self._set_state("cleanup-wait")
             event.ignore()
             return
+        if hasattr(self, "canvas"):
+            self.canvas.mpl_disconnect(self._map_click_connection)
         event.accept()
 
 
