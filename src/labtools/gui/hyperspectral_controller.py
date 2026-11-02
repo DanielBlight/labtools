@@ -35,8 +35,9 @@ class HyperspectralWorker(QObject):
 
         try:
             result = asyncio.run(acquire())
-        except Exception as exc:  # noqa: BLE001 - Qt error boundary
-            self.failed.emit(str(exc), traceback.format_exc())
+        except BaseException as exc:  # noqa: BLE001 - terminal Qt worker boundary
+            # Cancellation and process-control exceptions must not strand QThread.
+            self.failed.emit(str(exc) or type(exc).__name__, traceback.format_exc())
         else:
             self.finished.emit(result)
 

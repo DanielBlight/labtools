@@ -171,9 +171,11 @@ async def acquire_hyperspectral_map_async(
 ) -> HyperspectralMeasurement:
     request.validate()
     owned = runtime is None
-    runtime = runtime or HyperspectralRuntime(backend=request.config.backend)
-    runtime.check(request.config)
+    if runtime is None:
+        runtime = HyperspectralRuntime(backend=request.config.backend)
+    primary = None
     try:
+        runtime.check(request.config)
         async with open_hyperspectral_service(
             request.config,
             spectrum_service=runtime.spectrum_service,
@@ -188,9 +190,17 @@ async def acquire_hyperspectral_map_async(
                 cancel_requested=cancel_requested,
             )
         return _wrap(result)
+    except BaseException as exc:
+        primary = exc
+        raise
     finally:
         if owned:
-            runtime.close()
+            try:
+                runtime.close()
+            except BaseException as cleanup:
+                if primary is None:
+                    raise
+                primary.add_note(f"Hyperspectral runtime cleanup failed: {cleanup!r}")
 
 
 def acquire_hyperspectral_map(

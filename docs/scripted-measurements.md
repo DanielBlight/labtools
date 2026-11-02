@@ -1,5 +1,26 @@
 # Scriptable measurements target architecture
 
+## Source-audit recovery checkpoint (2026-11-02)
+
+Baseline: `labtools_source_20261102_114759.txt`, HEAD
+`cefe007f309bd5389ca7782bce9b9e813c66257e`, branch
+`feature/shared-instrument-session`. This checkpoint is a bounded current-source
+review, not a verified comparison with the earlier snapshot or earlier installer.
+See [source-comparison-audit.md](source-comparison-audit.md) for findings, evidence,
+validation limits and remaining work. Earlier checkpoint descriptions below are
+historical and do not establish current validation status.
+
+Owned hyperspectral runtime validation is now inside cleanup protection; cleanup
+failure is attached to an active primary exception instead of replacing it.
+Borrowed runtimes remain caller-owned. The Qt worker reports cancellation and
+process-control exceptions through its terminal failure signal. Cached GUI dark
+records are passed only in `pre_taken` mode. Existing plotting, nearest-pixel
+selection, raw-sum semantics, schemas and physical settings are unchanged.
+
+Validation: 53 targeted tests passed, one Qt module skipped, four subprocess-import
+tests deselected after baseline timeouts. Full-suite completion, Qt acceptance,
+Ruff and hardware acceptance remain unverified in this environment.
+
 Operators should automate repeatable work by importing stable **measurement functions**, not device wrappers or GUI classes. The target public namespace is `labtools.measurements`, with one function per scientific workflow: `acquire_spectrum`, `capture_dark`, `acquire_alignment_frame`, `acquire_intensity_map`, `acquire_hyperspectral_map`, and `run_anneal_recipe`. Each accepts an immutable validated request and an explicit runtime/session, returns an immutable result or dataset reference, and uses the same acquisition/service implementation as the GUI.
 
 ## Required layering

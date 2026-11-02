@@ -188,7 +188,8 @@ class HyperspectralWindow(QMainWindow):
             if self.output_path.text().strip()
             else None
         )
-        request = HyperspectralRequest(config, path, self.dark_record)
+        dark = self.dark_record if config.dark_mode == "pre_taken" else None
+        request = HyperspectralRequest(config, path, dark)
         request.validate()
         return request
 
