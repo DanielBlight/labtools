@@ -1,5 +1,25 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Current validation checkpoint v3 (2026-11-02)
+
+Authoritative input: `labtools_source_20261102_121604.txt`, HEAD
+`b23c6fd95e0c0027c924f2d1e1f37e76fc5f4cf5`, branch
+`feature/shared-instrument-session`, upstream +1/-0; no tracked changes recorded.
+Eight v2 recovery files match exactly; two have comment-only, AST-equivalent
+changes. Preserve this baseline rather than reverting those edits.
+
+Sandbox core gate: **68 passed, no skips or deselections**, including all four
+unchanged import-isolation tests and seven QtCore lifecycle cases. No application
+source changes are made by v3. Widget acceptance remains blocked by missing
+`libGL.so.1`; the full offline attempt timed out without completion. No lab-PC
+acceptance log was supplied. Hardware and the original older-snapshot audit remain
+unverified. The earlier recovery sections below are historical evidence.
+
+See [source-audit-validation.md](source-audit-validation.md) for the exact scope,
+commands, evidence and remaining gates. Run
+`uv run --no-sync python scripts/validate_source_audit.py --gate all` locally and
+retain its logs/XML/results.json. Core-only success is not full acceptance.
+
 ## Source-audit recovery checkpoint (2026-11-02)
 
 Baseline: `labtools_source_20261102_114759.txt`, HEAD
