@@ -1,5 +1,60 @@
 # ITC4000 W1: transport lifecycle checkpoint
 
+## Current setter-readback implementation (2026-11-05)
+
+**Implemented, fake-transport validated; local lint/Windows acceptance not established.**
+In set_current, immediately after get_current returns and before tolerance arithmetic,
+nonfinite readback now raises RuntimeError with requested amperes and observed value.
+The write has already occurred: this is verification failure, not pre-write rejection,
+rollback, an interlock or proof of safe output. No new query/retry/close/output-off.
+
+Authority: labtools_source_20261105_134133.txt, created UTC
+2026-11-05T13:41:33.5423638Z, HEAD f3f230654859f54496da4178dc45c1611458f986,
+branch feature/shared-instrument-session, upstream +7/-0, clean tracked worktree/index.
+The readback-contract test differs from its old backup only by one removed blank line;
+its AST is identical. Preserve that correction. Windows lint/test logs/XML are listed
+but not exported; no pass or failure is inferred from commit, manifest or tool versions.
+
+Fresh sandbox baseline: 178 passed. Final targeted run: 195 passed, comprising
+55 readback cases, 96 finite-input cases and all 44 unchanged lifecycle cases;
+zero failures/errors/skips, 39.69 seconds. Both affected test modules revise their
+NaN/infinity expectations; 17 readback cases were added for exact diagnostics and
+cleanup interruption. Existing finite tolerance, direct getter, conversion/query
+exception identity and cleanup coverage are retained. Ruff attempt exited 1:
+No module named ruff. Local lint is required; syntax/pytest are not lint acceptance.
+
+Production change is only the setter readback guard; AST comparison after removing
+that guard matches the entire baseline source. W1b input checks, finite tolerance
+formula/strict comparison/mismatch text, command order and W1 cleanup are unchanged.
+get_current and GUI second queries remain unchanged. No enable preflight, TEC delay,
+timeout, mutation, temperature limit, fault state or automatic output-off policy.
+ID900 remains deferred with its return instructions intact. No native VISA, hardware,
+actual sleep, physical outputs, full-suite or Qt execution. No Git mutation.
+
+### Next checkpoint: release scope and blocker consolidation
+
+Stop automatically selecting another wrapper micro-task. The maintainer asks for
+faster progress and a credible definition of ready. Next, inspect current source and
+roadmap once, propose a named first-release workflow scope, and consolidate a finite
+release-blocker/evidence matrix. Distinguish demonstrated defects, unresolved design
+questions, missing evidence and optional roadmap work. Do not treat all planned
+phases as mandatory for a narrower release, or waive required physical acceptance.
+Do not count historical Qt sandbox failures as current failures after recorded
+Windows passes; preserve current evidence gaps separately.
+
+Prefer one checkpoint per coherent blocker batch with implementation/tests/docs
+and one local validation handoff, not automatic contract/implementation pairs for
+already-decided changes. Batch only independent compatible changes with explicit
+acceptance; preserve separate safety decisions and user approval for hardware.
+A proposed three-stage path (scope/blockers, bounded blocker batch if needed,
+release acceptance/deployment) is a planning structure, NOT an estimate that three
+iterations will suffice. No defensible project-wide count or date is established.
+No new architecture, launcher, wrapper, GUI or release-policy change is authorized
+by this scheduling note. ID900 is not automatically reopened.
+
+Historical sections below retain earlier evidence; this section supersedes their
+readback-unimplemented statements and next-microtask pointers only.
+
 ## Current-setpoint readback contract review (2026-11-05)
 
 **Decision recorded, NOT implemented:** after get_current returns in set_current,

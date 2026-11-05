@@ -275,6 +275,11 @@ class ITC4000:
         )
 
         readback = self.get_current()
+        if not math.isfinite(readback):
+            raise RuntimeError(
+                f"Current readback is nonfinite: requested {current:.9g} A, "
+                f"controller reports {readback!r} A."
+            )
         tolerance = max(
             1e-6,
             abs(current) * 1e-4,

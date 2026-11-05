@@ -1,4 +1,4 @@
-"""Characterize current readbacks without changing production behavior."""
+"""Setter finite-readback verification and preserved getter/transport contracts."""
 
 import asyncio
 import math
@@ -17,27 +17,32 @@ CURRENT_TRANSCRIPT = [
 
 
 @pytest.mark.parametrize("reply", ["NaN", "-nan", "  nan  "])
-def test_nan_reply_is_currently_accepted_without_extra_commands(wrapper, reply):
+def test_nan_reply_is_rejected_without_extra_commands(wrapper, reply):
     cls, fake = wrapper
     with cls() as device:
         fake.responses["SOUR:CURR?"] = reply
         fake.events.clear()
-        assert device.set_current(0.05) is None
+        with pytest.raises(RuntimeError) as caught:
+            device.set_current(0.05)
+        assert str(caught.value) == (
+            "Current readback is nonfinite: requested 0.05 A, controller reports nan A."
+        )
         assert fake.events == CURRENT_TRANSCRIPT
         assert device.threshold_current == 0.049
         assert device.max_current == 0.1
 
 
 @pytest.mark.parametrize("reply", ["-inf", "+Infinity", "-Infinity", "1e309", "-1e309"])
-def test_other_infinite_forms_raise_existing_mismatch(wrapper, reply):
+def test_other_infinite_forms_raise_nonfinite_verification_error(wrapper, reply):
     cls, fake = wrapper
     with cls() as device:
         fake.responses["SOUR:CURR?"] = reply
         fake.events.clear()
-        with pytest.raises(RuntimeError, match="Current readback mismatch") as caught:
+        with pytest.raises(RuntimeError) as caught:
             device.set_current(0.05)
-        assert "requested 0.05 A" in str(caught.value)
-        assert "inf A" in str(caught.value)
+        assert str(caught.value) == (
+            f"Current readback is nonfinite: requested 0.05 A, controller reports {float(reply)!r} A."
+        )
         assert fake.events == CURRENT_TRANSCRIPT
 
 
@@ -146,7 +151,7 @@ def test_query_exception_identity_and_context_cleanup(wrapper, kind):
     assert not hasattr(error, "_itc4000_cleanup_failures")
 
 
-@pytest.mark.parametrize("reply", ["-inf", "0.09", "invalid"])
+@pytest.mark.parametrize("reply", ["nan", "inf", "-inf", "0.09", "invalid"])
 def test_readback_failure_remains_primary_when_both_closes_fail(wrapper, reply):
     cls, fake = wrapper
     device = cls()
@@ -171,6 +176,57 @@ def test_readback_failure_remains_primary_when_both_closes_fail(wrapper, reply):
         cleanup = cleanup_failures[0]
         assert isinstance(cleanup, ExceptionGroup)
         assert cleanup.exceptions == (instrument_error, manager_error)
+        assert primary.__notes__
+        assert fake.events == [*CURRENT_TRANSCRIPT, ("instrument-close",), ("manager-close",)]
+        assert device._close_started and not device._closed
+    finally:
+        fake.failures.clear()
+        device.close()
+    assert device._closed
+
+
+@pytest.mark.parametrize("requested", [0.0, 0.049, 0.1])
+@pytest.mark.parametrize("reply", ["nan", "inf", "-inf"])
+def test_nonfinite_diagnostic_formats_requested_value_without_extra_io(wrapper, requested, reply):
+    cls, fake = wrapper
+    with cls() as device:
+        fake.responses["SOUR:CURR?"] = reply
+        fake.events.clear()
+        with pytest.raises(RuntimeError) as caught:
+            device.set_current(requested)
+        assert str(caught.value) == (
+            f"Current readback is nonfinite: requested {requested:.9g} A, "
+            f"controller reports {float(reply)!r} A."
+        )
+        assert fake.events == [
+            ("write", f"SOUR:CURR {requested:.9g}"),
+            ("query", "*OPC?"), ("query", "SYST:ERR?"),
+            ("query", "SOUR:CURR?"),
+        ]
+        assert not device._closed
+        assert not device._close_started
+
+
+@pytest.mark.parametrize("reply", ["nan", "inf", "-inf"])
+@pytest.mark.parametrize("kind", [KeyboardInterrupt, asyncio.CancelledError])
+def test_nonfinite_verification_remains_primary_when_cleanup_interrupted(wrapper, reply, kind):
+    cls, fake = wrapper
+    device = cls()
+    fake.responses["SOUR:CURR?"] = reply
+    cleanup = kind("close interruption")
+    fake.failures["instrument-close"] = cleanup
+    fake.events.clear()
+    primary = None
+    try:
+        with pytest.raises(RuntimeError) as caught, device:
+            try:
+                device.set_current(0.05)
+            except RuntimeError as error:
+                primary = error
+                raise
+        assert caught.value is primary
+        assert "readback is nonfinite" in str(primary)
+        assert primary._itc4000_cleanup_failures == (cleanup,)
         assert primary.__notes__
         assert fake.events == [*CURRENT_TRANSCRIPT, ("instrument-close",), ("manager-close",)]
         assert device._close_started and not device._closed

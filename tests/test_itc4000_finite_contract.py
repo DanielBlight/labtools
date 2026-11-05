@@ -95,11 +95,15 @@ def test_readback_comparison_current_behavior(wrapper, readback):
     cls, fake = wrapper
     with cls() as device:
         fake.responses["SOUR:CURR?"] = readback
-        if readback == "nan":
+        fake.events.clear()
+        message = "readback is nonfinite" if readback in {"nan", "inf"} else "readback mismatch"
+        with pytest.raises(RuntimeError, match=message):
             device.set_current(0.05)
-        else:
-            with pytest.raises(RuntimeError, match="readback mismatch"):
-                device.set_current(0.05)
+        assert fake.events == [
+            ("write", "SOUR:CURR 0.05"),
+            ("query", "*OPC?"), ("query", "SYST:ERR?"),
+            ("query", "SOUR:CURR?"),
+        ]
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "20.5", -1000, True])
