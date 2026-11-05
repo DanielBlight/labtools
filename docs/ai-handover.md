@@ -1,5 +1,65 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Current closure checkpoint v4: recorded Windows acceptance (2026-11-05)
+
+**The remaining widget and full-offline gates passed in the supplied Windows run.**
+This supersedes the open-gate status in the historical v3/recovery sections below;
+it does not convert those earlier sandbox failures into passes.
+
+Authoritative snapshot: `labtools_source_20261105_074708.txt`, created UTC
+2026-11-05T07:47:08.2392102Z. HEAD
+`0ce76d7ce8c81ab01ab9d61daddc39a606c77185`, branch
+`feature/shared-instrument-session`, upstream +2/-0. No tracked/staged changes are
+recorded. Preserve the untracked v2/v3 backups, v3 installer, validation directory
+and measurement-data.
+
+Evidence: `.labtools-validation/source-audit-20261105T074324574893Z/results.json`.
+The runner requested `all`; lint and both prerequisites passed; core **68 passed**,
+widgets **12 passed**, full offline **608 passed**. Each test gate records zero
+failures/errors/skips; every process returned 0 with `timed_out: false`.
+`all_gates_passed` and `requested_gates_passed` are true. Counts overlap and must
+not be summed. The full gate used `-m "not hardware"`; deselection totals are not
+recorded in the JSON and are not inferred to be zero.
+
+All seven recorded source SHA-256 values match the exported current files exactly
+as UTF-8/LF bytes, including the runner. All nine v3 delivered files match the
+embedded v3 backup's installed text. This establishes evidence-to-source linkage,
+not a new test execution in this assistant environment.
+
+The raw logs/XML are listed with hashes/sizes but their contents are NOT included
+as snapshot file sections. Their counts are available through the runner's JSON;
+independent raw-log/XML review was not performed here. The standalone v4 installer
+provides a read-only `evidence` command to verify those exact artifacts locally,
+compare XML counts and confirm the seven source hashes. Do not invent absent log
+contents or treat a missing artifact as success.
+
+This checkpoint changes documentation only. Production code, tests, validation
+runner, plotting/click selection, raw-sum/mask semantics, immutable results,
+archive/schema versions, limits, dependencies and hardware commands are unchanged.
+No additional application correction was justified. The widget gate exercised
+cached-dark transitions and delayed-cleanup close/restart refusal; the core gate
+includes repeated terminal failures, immediate cancellation, borrowed ownership
+and the four unchanged import-isolation tests.
+
+The bounded offline recovery acceptance is closed for this recorded Windows run.
+Hardware/native-SDK physical acceptance, visible operator acceptance beyond these
+automated tests, request.owner/provider-label review and the original pre-audit
+comparison remain outside this closure. The original earlier comparison inputs
+were not supplied; no missing requirements are invented. Do not begin a new
+feature/architecture phase as part of this checkpoint.
+
+### Next bounded continuation
+
+Verify the original ten evidence artifacts locally with the v4 `evidence` command,
+retain the results/logs/XML and commit only the six documentation paths after
+review. If artifact hashes/XML disagree, reopen evidence reconciliation only.
+Do not rerun old v2/v3 rollback against this later documentation state. The v4
+backup is separate and exact-byte rollback refuses later edits.
+
+---
+
+## Historical checkpoint record (not current gate status)
+
 ## Current validation checkpoint v3 (2026-11-02)
 
 Authoritative input: `labtools_source_20261102_121604.txt`, HEAD
