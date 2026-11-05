@@ -129,6 +129,7 @@ def test_window_lifecycle(mode, tmp_path):
     )
     result = subprocess.run(
         [sys.executable, "-c", SCRIPT, mode, str(tmp_path)],
+        check=False,
         env=env,
         capture_output=True,
         text=True,

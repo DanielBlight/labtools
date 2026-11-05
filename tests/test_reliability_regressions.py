@@ -38,7 +38,7 @@ def load_method(relative, class_name, method_name, **extra):
     )
     namespace = {"np": np, "re": re, "__name__": __name__}
     namespace.update(extra)
-    exec(compile(module, relative, "exec"), namespace)
+    exec(compile(module, relative, "exec"), namespace)  # noqa: S102 - trusted repository AST extraction; avoid native imports
     return namespace[method_name]
 
 
@@ -123,7 +123,7 @@ def test_hardware_opt_in(enabled):
     )
     namespace = {"pytest": pytest}
     module = ast.fix_missing_locations(ast.Module(body=[hook], type_ignores=[]))
-    exec(compile(module, "conftest", "exec"), namespace)
+    exec(compile(module, "conftest", "exec"), namespace)  # noqa: S102 - trusted repository AST extraction; avoid native imports
     markers = []
     item = SimpleNamespace(path=Path("test_timestamp_stream.py"), fixturenames=[])
     item.add_marker = markers.append

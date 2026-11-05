@@ -170,9 +170,11 @@ def test_invalid_seed(config, seed):
 
 
 def test_no_fallback_on_real_failure(config):
-    with pytest.raises(AssertionError, match="Hardware import forbidden"):
-        with open_map_devices(replace(config, backend="real")):
-            pytest.fail("Real backend unexpectedly connected")
+    with (
+        pytest.raises(AssertionError, match='Hardware import forbidden'),
+        open_map_devices(replace(config, backend='real')),
+    ):
+        pytest.fail("Real backend unexpectedly connected")
 
 
 def test_single_channel(config):
@@ -215,6 +217,7 @@ assert acquire_intensity_map(c).complete
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
     completed = subprocess.run(
         [sys.executable, "-c", code, str(tmp_path)],
+        check=False,
         env=env,
         capture_output=True,
         text=True,
@@ -243,7 +246,7 @@ def gui_method(name):
         module="__future__", names=[ast.alias(name="annotations")], level=0
     )
     ns = {"Path": Path}
-    exec(
+    exec(  # noqa: S102 - trusted repository AST extraction; avoid native imports
         compile(
             ast.fix_missing_locations(
                 ast.Module(body=[future, method], type_ignores=[])

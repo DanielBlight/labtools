@@ -96,6 +96,7 @@ main(['--help'])
     env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))
     result = subprocess.run(
         [sys.executable, "-c", code],
+        check=False,
         env=env,
         capture_output=True,
         text=True,
@@ -163,9 +164,11 @@ def test_real_factory_cleanup_with_fake_devices(monkeypatch, fail_controller):
         spad_gate_pin=0,
     )
     if fail_controller:
-        with pytest.raises(RuntimeError, match="injected"):
-            with open_map_devices(config):
-                pytest.fail("must not yield")
+        with (
+            pytest.raises(RuntimeError, match='injected'),
+            open_map_devices(config),
+        ):
+            pytest.fail("must not yield")
         assert events == ["enter:labjack", "enter:controller", "exit:labjack"]
     else:
         with open_map_devices(config) as devices:
@@ -186,7 +189,7 @@ def test_hardware_modules_excluded_before_import():
         if isinstance(n, ast.FunctionDef) and n.name == "pytest_ignore_collect"
     )
     namespace = {}
-    exec(
+    exec(  # noqa: S102 - trusted repository AST extraction; avoid native imports
         compile(
             ast.fix_missing_locations(ast.Module(body=[hook], type_ignores=[])),
             "hook",
@@ -195,7 +198,7 @@ def test_hardware_modules_excluded_before_import():
         namespace,
     )
     for enabled in (False, True):
-        config = SimpleNamespace(getoption=lambda name: enabled)
+        config = SimpleNamespace(getoption=lambda name, enabled=enabled: enabled)
         result = namespace["pytest_ignore_collect"](Path("test_sc10_modes.py"), config)
         assert result is (None if enabled else True)
 

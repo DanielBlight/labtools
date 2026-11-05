@@ -55,19 +55,23 @@ def test_lazy_connection_and_reuse():
 def test_alias_conflict_even_with_same_owner(alias):
     s, calls = setup_session()
     with s:
-        with s.reserve("same-label", ["mirror"]):
-            with pytest.raises(ResourceBusyError):
-                s.reserve("same-label", [alias])
+        with (
+            s.reserve('same-label', ['mirror']),
+            pytest.raises(ResourceBusyError),
+        ):
+            s.reserve("same-label", [alias])
         assert calls == []
 
 
 def test_atomic_multi_resource_reservation():
-    with InstrumentSession({"a": object, "b": object}) as s:
-        with s.reserve("one", ["b"]):
-            with pytest.raises(ResourceBusyError):
-                s.reserve("two", ["a", "b"])
-            with s.reserve("three", ["a"]):
-                assert s.reservations() == {"a": "three", "b": "one"}
+    with (
+        InstrumentSession({'a': object, 'b': object}) as s,
+        s.reserve('one', ['b']),
+    ):
+        with pytest.raises(ResourceBusyError):
+            s.reserve("two", ["a", "b"])
+        with s.reserve("three", ["a"]):
+            assert s.reservations() == {"a": "three", "b": "one"}
 
 
 def test_release_on_measurement_failure():
@@ -90,10 +94,12 @@ def test_stale_lease_and_idempotent_release():
 
 
 def test_unreserved_resource_rejected():
-    with InstrumentSession({"a": object, "b": object}) as s:
-        with s.reserve("one", ["a"]) as lease:
-            with pytest.raises(PermissionError):
-                lease.call("b", "move")
+    with (
+        InstrumentSession({'a': object, 'b': object}) as s,
+        s.reserve('one', ['a']) as lease,
+        pytest.raises(PermissionError),
+    ):
+        lease.call("b", "move")
 
 
 @pytest.mark.parametrize("method", ["close", "connect", "disconnect", "_private"])
@@ -139,10 +145,13 @@ def test_independent_shutdown_and_primary_preserved():
             raise OSError("close failed")
 
     s = InstrumentSession({"a": Device, "b": Device})
-    with pytest.raises(ExceptionGroup) as caught, s:
-        with s.reserve("map", ["a", "b"]) as lease:
-            lease.call("a", "ping")
-            lease.call("b", "ping")
+    with (
+        pytest.raises(ExceptionGroup) as caught,
+        s,
+        s.reserve('map', ['a', 'b']) as lease,
+    ):
+        lease.call("a", "ping")
+        lease.call("b", "ping")
     assert len(caught.value.exceptions) == 2
     assert calls == ["close", "close"]
     s, _ = setup_session(close_fail=True)
@@ -224,9 +233,12 @@ def test_recursive_worker_call_rejected_without_deadlock():
         def close(self):
             pass
 
-    with InstrumentSession({"a": Device}) as s, s.reserve("map", ["a"]) as lease:
-        with pytest.raises(RuntimeError, match="Recursive"):
-            lease.call("a", "recurse")
+    with (
+        InstrumentSession({'a': Device}) as s,
+        s.reserve('map', ['a']) as lease,
+        pytest.raises(RuntimeError, match='Recursive'),
+    ):
+        lease.call("a", "recurse")
 
 
 def test_queued_command_does_not_run_after_prior_failure():
@@ -290,6 +302,7 @@ with InstrumentSession({'a': object}):
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"))
     result = subprocess.run(
         [sys.executable, "-c", code],
+        check=False,
         cwd=tmp_path,
         env=env,
         capture_output=True,

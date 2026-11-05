@@ -22,13 +22,13 @@ def scan_resources(timeout_ms: int = 2000) -> int:
             instrument.timeout = timeout_ms
             idn = instrument.query("*IDN?").strip()
             print(f"{address}: {idn}")
-        except Exception as exc:  # pragma: no cover - hardware/environment dependent
+        except Exception as exc:  # pragma: no cover - hardware/environment dependent  # noqa: BLE001 - preserve per-resource best-effort diagnostic/cleanup behavior
             print(f"{address}: ERROR: {exc}")
         finally:
             if instrument is not None:
                 try:
                     instrument.close()
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - preserve per-resource best-effort diagnostic/cleanup behavior
                     pass
 
     resource_manager.close()

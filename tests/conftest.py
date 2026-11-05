@@ -54,9 +54,11 @@ def pytest_collection_modifyitems(config, items):
         "test_timestamp_stream.py",
     }
     for item in items:
-        if item.path.name in known or "time_controller_address" in item.fixturenames:
-            if item.get_closest_marker("hardware") is None:
-                item.add_marker(pytest.mark.hardware)
+        if (
+            (item.path.name in known or 'time_controller_address' in item.fixturenames)
+            and item.get_closest_marker('hardware') is None
+        ):
+            item.add_marker(pytest.mark.hardware)
         if item.get_closest_marker("hardware") and not config.getoption(
             "--run-hardware"
         ):

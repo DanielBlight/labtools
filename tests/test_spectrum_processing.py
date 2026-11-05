@@ -38,7 +38,7 @@ def method(name):
         module="__future__", names=[ast.alias(name="annotations")], level=0
     )
     ns = {"np": np, "combine_frames": combine_frames}
-    exec(
+    exec(  # noqa: S102 - trusted repository AST extraction; avoid native imports
         compile(
             ast.fix_missing_locations(ast.Module(body=[future, node], type_ignores=[])),
             str(path),
@@ -195,7 +195,7 @@ def test_range_routes_dark_mode_and_preserves_centre_order(
     assert [c[0] for c in calls] == ["move", "capture", "move", "capture"]
     assert [c[1] for c in calls if c[0] == "move"] == [501.0, 502.0]
     for _, kw in calls[1::2]:
-        assert kw == dict(n_frames=3, mode="mean", dark_frame_mode=frame_mode)
+        assert kw == {"n_frames": 3, "mode": "mean", "dark_frame_mode": frame_mode}
     np.testing.assert_array_equal(
         y, [9.0, 19.0, 29.0] if dark is not None else [10.0, 20.0, 30.0]
     )
@@ -297,6 +297,7 @@ assert os.listdir('.') == []
     env = dict(os.environ, PYTHONPATH=str(ROOT / "src"))
     result = subprocess.run(
         [sys.executable, "-c", code],
+        check=False,
         cwd=tmp_path,
         env=env,
         capture_output=True,

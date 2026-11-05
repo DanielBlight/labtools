@@ -1,5 +1,21 @@
 # Refactor roadmap: audited status
 
+## Expanded R1 requirements and supplied local evidence (2026-11-05)
+
+The maintainer requires laser control, IDQ, mapping and annealing; the HORIBA-only
+proposal and its 3-5 estimate are superseded. See the authoritative current section
+of [release readiness](release-readiness.md). Feature requirements are not approval
+of operating limits, optical path, concurrency or physical execution.
+
+Actual supplied ITC logs/XML now establish 195 local targeted passes, zero failures/
+errors/skips and a lint-pass artifact; all three hashes match the snapshot manifest.
+Do not repeat unchanged ITC tests. Expanded offline/Qt/lint/build/staging evidence,
+exact configuration/IDQ modes and physical/operator/deployment gates remain open.
+Next is one guarded expanded offline evidence handoff, not another wrapper micro-fix.
+ID900 histogram work stays deferred/P0 open; required IDQ counters are not silently
+excluded or assumed to consume histogram data. Return instructions remain unchanged.
+Historical narrower scope/estimates below are superseded, not approved.
+
 ## Current release planning authority (2026-11-05)
 
 Use [R1 release readiness](release-readiness.md) as the single current scope/blocker
@@ -738,3 +754,59 @@ The first reviewed Qt-free hyperspectral service boundary is implemented with de
 ## Hyperspectral simulation GUI plotting checkpoint
 
 The public scripted hyperspectral measurement remains frozen and Qt-free. The operator GUI remains simulation-only and presents a synthetic NaN-safe raw spectral sum, completion mask, click-selected completed pixel, and an immutable selected spectrum in wavelength nanometres against mirror voltages. Typed progress intentionally contains no partial arrays, so live spectral/map plotting is not implemented. GUI resume, multi-recipe pipelines, anneal dispatch, and real-hardware execution remain unsupported. The legacy runner is not the GUI backend. `--confirm-real` applies only to guarded scripted execution and is not a GUI safety control. HORIBA exclusion remains process-local. Offline Qt tests and synthetic plots are not physical, calibration, timing, optical, Windows-native SDK, or Qt-production acceptance.
+
+
+## Expanded R1 tooling follow-up, 5 November 2026
+
+The complete expanded-R1 lint inventory contains 44 findings in ten test/support
+files. The bounded follow-up changes only those files and this documentation.
+No production hardware behavior, acquisition feature, dependency metadata,
+backend selection, IDQ counting scope or ID900 histogram deferral is changed.
+
+Original evidence remains historical: accepted ITC 195 cases and remaining
+offline 590 cases. Do not add affected reruns to these counts. Source linkage
+matched all 143 recorded fingerprints before correction. The original failed
+results must remain immutable.
+
+The conftest change is global collection support, not a local test-only impact.
+Fifty fake-object hook comparisons preserve marker/permission behavior. Full
+590-node and 195-node collection comparison on the original Windows environment
+is still required. If either differs, stop reuse and assess broader regressions.
+The bounded execution scope is eight edited test modules, 175 cases, plus those
+collection checks. Unchanged 415 remaining-offline cases and accepted ITC 195
+may be reused only with valid source and collection linkage.
+
+Development validation: 170 non-Qt affected cases passed; a final 69-case rerun
+covered subsequent context-header simplification. Five GUI subprocess cases,
+full Windows collection and Ruff remain pending. No skipped GUI test is accepted.
+
+Packaging is blocked by unavailable approved build-only backend material.
+pyproject.toml already declares setuptools>=69. Do not add duplicate metadata,
+change backend, install into acquisition .venv, or choose an unreviewed version.
+Supply an approved exact setuptools wheel/version/SHA-256/provenance and all
+required hash-pinned build-only wheels. The follow-up runner creates a separate
+build-only environment and records versions, commands and resulting wheel hash.
+Staging uses a non-editable wheel with explicitly inherited dependency paths;
+this is not clean-room dependency, native-SDK, physical, operator or deployment
+acceptance. No wheel or staging pass is claimed at this checkpoint.
+
+Next coherent task: run the linked tooling/collection gate on the established
+Windows environment, then close only the approved-backend wheel/staging gap.
+Do not start another wrapper or acquisition feature task.
+
+
+### Reconciled tooling delivery v2 (2026-11-05)
+
+The tooling package was rebased onto the current expanded-R1 documentation,
+retaining every existing line and the original ten test/support corrections.
+The original parent results and its artifact hashes remain authoritative and
+immutable. The original 143 source fingerprints are unchanged.
+The follow-up section above records historical delivery evidence, not a new
+Windows or Qt run. Windows collection/lint/175-case verification remains pending.
+The linked runner checks the reconciled documentation as well as source files;
+no source-linkage guard is waived. Run verification before committing.
+Earlier instructions to rerun the original expanded evidence handoff are
+superseded for this checkpoint by the linked tooling follow-up only.
+No production code, dependencies, device behavior or ID900 deferral is changed.
+Cleanup and archived-backup restoration remain separate from this checkpoint.
+Build/staging remains blocked pending reviewed build-only prerequisites.

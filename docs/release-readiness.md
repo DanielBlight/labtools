@@ -1,5 +1,117 @@
 # Release readiness: R1 controlled spectroscopy pilot
 
+## Authoritative scope correction and evidence closure (2026-11-05)
+
+**R1 must include laser control, IDQ, mapping and annealing, in addition to spectroscopy.**
+The maintainer explicitly rejected the HORIBA-only reduction. The older pilot scope,
+exclusion of these required workflows and its 3-5 checkpoint estimate below are
+SUPERSEDED, not approved. Required functionality is now recorded; exact device/preset,
+laser/TEC limits, optical-path arrangements, operator/process policy and physical
+acceptance are not approved by a feature request. No hardware execution is authorized.
+
+Latest supplied source remains labtools_source_20261105_140459.txt, HEAD
+e0ef68bd5ec8c54bf0a075565fe5b0050a2cba25, feature/shared-instrument-session,
+upstream +9/-0, tracked worktree/index clean. No newer source snapshot was attached
+with the logs. All five release-plan payloads match their backup. The ITC source and
+tests match the implemented guard; later roadmap/handover pointers are expected docs
+evolution, not code regression. Preserve all original data, artifacts and backups.
+
+### Supplied local evidence: accept and reuse, do not repeat 195 tests
+
+The actual attached lint.log says All checks passed. targeted.log reports 195 passed,
+16 Pydantic json_encoders deprecation warnings, 16.07 seconds. targeted.xml reports
+195 tests, zero failures/errors/skips, time 16.069 seconds, timestamp
+2026-11-05T13:51:20.143236+00:00. XML testcase inventory is 55 readback, 96 finite-input,
+44 lifecycle. These are actual local artifact outcomes, not a new assistant run.
+No separate terminal process exit codes or exact lint invocation were attached;
+do not invent them or extend a one-line lint pass to the entire repository.
+
+Byte lengths and SHA-256 of all three attachments exactly match the latest snapshot
+manifest entries in
+.labtools-validation/itc4000-readback-implementation-20261105T1351092790054Z/:
+
+| Artifact | Bytes | SHA-256 |
+| --- | --- | --- |
+| lint.log | 42 | af352a86840ad0af3d37ea0d9197f868363a6dac6b1c2ef5d2722f6b41d2d9af |
+| targeted.log | 2276 | 7bd30000af4594f9832226b2d36bf6fd0742fe2246e14d2508263a0f13054b68 |
+| targeted.xml | 28963 | c3443825b4a3867c8dc9c53314e47ba570a9780c84d21f20f02baf40585fa618 |
+
+This links the supplied artifacts to the snapshot inventory and current matching
+ITC source/test payloads. It is not a cryptographic run-time source attestation or
+proof of a clean full suite. Close the prior 'raw ITC outcomes unavailable' subitem;
+retain missing command/exit provenance separately. No reason to rerun those 195
+unchanged cases merely to reconfirm. Warnings are not failures and are not automatically
+release blockers; classify their impact rather than opportunistically refactoring.
+
+### Revised blocker register (supersedes narrower matrix below)
+
+| ID | Required workflow / evidence | Current status and next criterion |
+| --- | --- | --- |
+| X0 scope | Spectroscopy + laser + IDQ + mapping + annealing required. | Feature scope confirmed by maintainer. Exact operating configurations, approved limits, IDQ modes and mapping type, concurrency/access arrangements and operator policy remain open; no safety/physical approval inferred. |
+| X1 ITC software | Supplied local logs/XML, matching snapshot hashes; W1b and setter readback source/tests unchanged. | 195 local targeted passes accepted; lint artifact pass accepted for its original unspecified invocation. No repeat targeted run. Broader candidate lint/Qt/offline/build still missing. Getter/GUI second-read, enable/delay/timeout questions remain separate review items before laser acceptance, not automatically repaired here. |
+| X2 IDQ | ID900 required. runtime/idq_count_service.py uses simultaneous counts; acquisition/intensity_map.py:524 calls get_simultaneous_counts. Histogram controller.py:412 still eval(raw). | Counters/mapping are not automatically histogram consumers. Record exact required IDQ modes before deciding applicability. Histogram parser work stays explicitly deferred, P0 open; if histograms are required, that unresolved evidence dependency blocks that capability. Do not waive it, fabricate fixtures or reopen collection automatically. DLT/timestamp modes need their own consumer/acceptance review if required. |
+| X3 mapping | Existing intensity-map path and tests; timestamp allocation intensity_map.py:83-84,425-428 can fail on collision. | Mapping now in scope: collision handling is a demonstrated limitation to triage against required repeated-run behavior, not claimed overwrite. Cancellation/resume/output preservation and shared IDQ/LabJack ownership need candidate evidence and supervised acceptance. Real hyperspectral GUI is not silently promised; it remains simulation-only. |
+| X4 annealing | acquisition/laser_anneal.py:140-306; config/anneal_workspace.py validation; tests/test_anneal_workspace.py; CLI optical-path confirmation. | Existing workflow needs offline evidence and reviewed SC10/mirror/LabJack/rotation-stage cleanup/cancellation and optical-path procedure. A CLI confirmation is not an interlock or physical safety certification. No laser output or shutter/motion is executed here. |
+| X5 broad software/build | Existing seven-file source-audit runner cannot alone cover expanded scope; full gate can permit skips. | One remaining-offline run excluding already accepted ITC modules and hardware modules, all source/test lint, selected Qt presence/zero skips, source/lock hashes, wheel and staging smoke. Actual failures are classified by workflow/root cause, not auto-fixed. |
+| X6 native/operator/physical | No new native-driver or physical evidence supplied. | Separate supervised acceptance per required workflow and shared-resource interaction, with approved device/limits/operator procedures. Offline passes do not close this. |
+| X7 deployment | Existing protected-wheel/data separation/rollback proposal. | Candidate build/staging smoke can be prepared now. Active lab-PC install, permissions, driver setup, rollback rehearsal and release decision remain later gates. |
+
+### One bounded Windows handoff, no source repairs
+
+Use the delivered run_labtools_expanded_r1_evidence_v1.py from the repository root
+with the existing .venv and uv --no-sync. It requires this HEAD and exact source/test/
+lock hashes; it allows only the three supplied documentation edits. Run BEFORE
+committing this docs update, then stage/commit docs. It records actual HEAD and raw
+source hashes before/after, commands/exit codes/timeouts, environment, raw logs/XML,
+collection/deselections, excluded hardware paths, reused ITC artifacts and wheel hash
+in a unique .labtools-validation/expanded-r1-* directory. No old evidence is overwritten.
+
+The runner checks/reuses exact original ITC artifacts and excludes their three test
+modules from the remaining offline run. It excludes known hardware modules before
+collection, uses -m 'not hardware', no --run-hardware, and disables external pytest
+plugin autoload. Selected Qt modules must appear; any skips/errors/failures/timeouts
+prevent automatic evidence-complete status. Full skip details remain for review.
+This is offline test selection, not a security sandbox for arbitrary changed code;
+source guards refuse changed Python. No diagnostics/discovery or native hardware test.
+
+Lint covers src and tests to capture the expanded candidate, but any findings must
+be classified; unrelated optional debt is not automatically a release blocker.
+Independent evidence commands continue after nonzero lint/test results to avoid
+serial round trips; results never hide a failed command or label the candidate ready.
+Build uses uv --offline, no build isolation and a copied source tree; missing existing
+setuptools/wheel prerequisites are reported, never installed automatically. A new
+staging venv receives only the wheel with --offline --no-deps. After installation,
+existing dependency site paths are exposed through a staging-only .pth file. Smoke
+checks installed module location and lazy console entry points with native/device
+imports and network connection blocked. This is NOT clean-room dependency resolution,
+lock reproducibility, active installation replacement or native/GUI acceptance.
+
+No Windows runner execution is claimed in the assistant environment. Harness/syntax/
+guard checks are delivery validation only. If an environment prerequisite is missing,
+preserve results and classify it; do not upgrade dependencies or change source.
+
+### Decision and remaining-work estimate
+
+**Blocked for expanded R1 release acceptance.** The local ITC targeted evidence gap
+is materially reduced, but expanded software/build and native/operator/physical/
+deployment evidence remain open, along with exact operating configuration and IDQ
+mode requirements. Do not call this sufficient for authorized hardware execution.
+
+The earlier 3-5 estimate applied to a rejected narrower scope and is withdrawn.
+No defensible numeric estimate for the expanded release is established yet. The
+finite next sequence is: this one offline/build handoff -> one consolidated failure/
+configuration triage -> only demonstrated coherent repair batches -> separately
+approved workflow/integration acceptance -> deployment. Estimate batch count after
+the first results; IDQ histogram evidence, if required, can remain an external blocker.
+Do not restart a wrapper-by-wrapper contract/implementation loop or count future
+optional features as mandatory. Preserve historical Windows v4 68/12/608 passes and
+raw-artifact limitations; no original full-audit/native/operator/hardware acceptance.
+
+Exactly one next task: run/review the expanded offline evidence handoff, then produce
+one consolidated blocker batch with actual failure/source references and unresolved
+operating inputs. No production changes in this checkpoint. ID900 return instructions
+remain intact; no parser work or hardware collection is authorized.
+
 ## Decision and current status
 
 **Proposed scope, awaiting maintainer approval. NOT RELEASE-READY.** This is the
@@ -197,3 +309,59 @@ logs/XML and prepare one bounded offline/Qt/build evidence handoff. Do not execu
 hardware, alter source/dependencies or add features during that task. If approval or
 raw evidence is unavailable, record the exact missing input rather than fabricate
 acceptance or another source patch.
+
+
+## Expanded R1 tooling follow-up, 5 November 2026
+
+The complete expanded-R1 lint inventory contains 44 findings in ten test/support
+files. The bounded follow-up changes only those files and this documentation.
+No production hardware behavior, acquisition feature, dependency metadata,
+backend selection, IDQ counting scope or ID900 histogram deferral is changed.
+
+Original evidence remains historical: accepted ITC 195 cases and remaining
+offline 590 cases. Do not add affected reruns to these counts. Source linkage
+matched all 143 recorded fingerprints before correction. The original failed
+results must remain immutable.
+
+The conftest change is global collection support, not a local test-only impact.
+Fifty fake-object hook comparisons preserve marker/permission behavior. Full
+590-node and 195-node collection comparison on the original Windows environment
+is still required. If either differs, stop reuse and assess broader regressions.
+The bounded execution scope is eight edited test modules, 175 cases, plus those
+collection checks. Unchanged 415 remaining-offline cases and accepted ITC 195
+may be reused only with valid source and collection linkage.
+
+Development validation: 170 non-Qt affected cases passed; a final 69-case rerun
+covered subsequent context-header simplification. Five GUI subprocess cases,
+full Windows collection and Ruff remain pending. No skipped GUI test is accepted.
+
+Packaging is blocked by unavailable approved build-only backend material.
+pyproject.toml already declares setuptools>=69. Do not add duplicate metadata,
+change backend, install into acquisition .venv, or choose an unreviewed version.
+Supply an approved exact setuptools wheel/version/SHA-256/provenance and all
+required hash-pinned build-only wheels. The follow-up runner creates a separate
+build-only environment and records versions, commands and resulting wheel hash.
+Staging uses a non-editable wheel with explicitly inherited dependency paths;
+this is not clean-room dependency, native-SDK, physical, operator or deployment
+acceptance. No wheel or staging pass is claimed at this checkpoint.
+
+Next coherent task: run the linked tooling/collection gate on the established
+Windows environment, then close only the approved-backend wheel/staging gap.
+Do not start another wrapper or acquisition feature task.
+
+
+### Reconciled tooling delivery v2 (2026-11-05)
+
+The tooling package was rebased onto the current expanded-R1 documentation,
+retaining every existing line and the original ten test/support corrections.
+The original parent results and its artifact hashes remain authoritative and
+immutable. The original 143 source fingerprints are unchanged.
+The follow-up section above records historical delivery evidence, not a new
+Windows or Qt run. Windows collection/lint/175-case verification remains pending.
+The linked runner checks the reconciled documentation as well as source files;
+no source-linkage guard is waived. Run verification before committing.
+Earlier instructions to rerun the original expanded evidence handoff are
+superseded for this checkpoint by the linked tooling follow-up only.
+No production code, dependencies, device behavior or ID900 deferral is changed.
+Cleanup and archived-backup restoration remain separate from this checkpoint.
+Build/staging remains blocked pending reviewed build-only prerequisites.

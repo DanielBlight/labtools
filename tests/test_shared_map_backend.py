@@ -151,7 +151,7 @@ def test_manual_map_manual_reuses_one_connection(config):
 
 
 def test_reservation_covers_map_and_cleanup(config):
-    session, provider, calls, state = rig()
+    session, provider, calls, _state = rig()
     with session:
 
         def progress(snapshot):
@@ -179,9 +179,9 @@ def test_reservation_covers_map_and_cleanup(config):
     "failure", ["move", "home", "gate open", "gate close", "count", "configure"]
 )
 def test_failure_cleanup_attempts_and_fault_policy(config, failure):
-    session, provider, calls, state = rig(failure=failure)
+    session, provider, calls, _state = rig(failure=failure)
     with session:
-        with pytest.raises(Exception):
+        with pytest.raises((OSError, ExceptionGroup)):
             acquire_intensity_map(config, device_provider=provider)
         order = names(calls)
         assert "counter close" in order
@@ -249,7 +249,7 @@ def test_cancel_and_resume_same_session(config):
     "change", [{"backend": "real"}, {"mirror_dio_pin": 4}, {"spad_gate_pin": 1}]
 )
 def test_backend_wiring_mismatch_before_connection(config, change):
-    session, provider, calls, state = rig()
+    session, provider, calls, _state = rig()
     with session:
         with pytest.raises(ValueError), provider(replace(config, **change)):
             pass
@@ -257,7 +257,7 @@ def test_backend_wiring_mismatch_before_connection(config, change):
 
 
 def test_counter_open_failure_does_not_open_labjack(config):
-    session, provider, calls, state = rig()
+    session, provider, calls, _state = rig()
 
     @contextmanager
     def bad_counter(config):
@@ -273,7 +273,7 @@ def test_counter_open_failure_does_not_open_labjack(config):
 
 def test_inflight_counter_still_reserves_labjack(config):
     entered, unblock = Event(), Event()
-    session, provider, calls, state = rig(entered=entered, unblock=unblock)
+    session, provider, _calls, _state = rig(entered=entered, unblock=unblock)
     with session, ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(
             acquire_intensity_map, config, device_provider=provider
@@ -308,7 +308,7 @@ def test_bad_wiring_before_factory(wiring):
 
 
 def test_service_bounds_and_thread_affinity():
-    session, provider, calls, state = rig()
+    session, _provider, calls, _state = rig()
     with session:
         with session.reserve("manual", ["mirror"]) as lease:
             lease.call("mirror", "move", 1.0, 2.0)
@@ -343,10 +343,13 @@ def test_partial_factory_failure_closes_device_and_preserves_error():
 
 
 def test_service_shutdown_closes_device_even_if_gate_close_fails():
-    session, provider, calls, state = rig(failure="gate close")
-    with pytest.raises(ExceptionGroup), session:
-        with session.reserve("manual", ["mirror"]) as lease:
-            lease.call("mirror", "move", 0.0, 0.0)
+    session, _provider, calls, _state = rig(failure="gate close")
+    with (
+        pytest.raises(ExceptionGroup),
+        session,
+        session.reserve('manual', ['mirror']) as lease,
+    ):
+        lease.call("mirror", "move", 0.0, 0.0)
     assert names(calls)[-2:] == ["gate close", "device close"]
     assert "home" not in names(calls)
 
@@ -366,6 +369,7 @@ with create_labjack_session(): pass
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"))
     result = subprocess.run(
         [sys.executable, "-c", code],
+        check=False,
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -400,7 +404,7 @@ def test_checkpoint_failure_still_cleans_up_under_reservation(config, monkeypatc
 
 def test_gate_cleanup_inflight_keeps_whole_measurement_reserved(config):
     entered, finish = Event(), Event()
-    session, provider, calls, state = rig()
+    session, provider, _calls, _state = rig()
     with session:
         # Open the service before replacing its gate-close for deterministic timing.
         with session.reserve("manual", ["mirror"]) as lease:
@@ -437,7 +441,7 @@ def test_simulation_requires_explicit_counter_provider():
 
 
 def test_counter_close_error_does_not_replace_measurement_error(config):
-    session, provider, calls, state = rig()
+    session, provider, calls, _state = rig()
 
     @contextmanager
     def counter(config):

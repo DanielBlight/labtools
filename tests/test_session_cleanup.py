@@ -10,10 +10,12 @@ from labtools.runtime.session import InstrumentSession, ResourceBusyError
 
 @pytest.mark.parametrize("method", ["move", "open_gate", "close", "connect", "_hidden"])
 def test_cleanup_rejects_non_allowlisted_methods(method):
-    with InstrumentSession({"a": object}, cleanup_methods={"a": ("home",)}) as session:
-        with session.reserve("map", ["a"]) as lease:
-            with pytest.raises((PermissionError, ValueError)):
-                lease.cleanup("a", method)
+    with (
+        InstrumentSession({'a': object}, cleanup_methods={'a': ('home',)}) as session,
+        session.reserve('map', ['a']) as lease,
+        pytest.raises((PermissionError, ValueError)),
+    ):
+        lease.cleanup("a", method)
 
 
 def test_cleanup_never_connects_or_reconnects():
@@ -23,14 +25,16 @@ def test_cleanup_never_connects_or_reconnects():
         calls.append("connect")
         raise OSError("connect failed")
 
-    with InstrumentSession({"a": factory}, cleanup_methods={"a": ("home",)}) as session:
-        with session.reserve("map", ["a"]) as lease:
-            with pytest.raises(RuntimeError, match="already-open"):
-                lease.cleanup("a", "home")
-            assert calls == []
-            # An unopened resource is not faulted by an unavailable cleanup.
-            with pytest.raises(OSError, match="connect failed"):
-                lease.call("a", "move")
+    with (
+        InstrumentSession({'a': factory}, cleanup_methods={'a': ('home',)}) as session,
+        session.reserve('map', ['a']) as lease,
+    ):
+        with pytest.raises(RuntimeError, match="already-open"):
+            lease.cleanup("a", "home")
+        assert calls == []
+        # An unopened resource is not faulted by an unavailable cleanup.
+        with pytest.raises(OSError, match="connect failed"):
+            lease.call("a", "move")
     assert calls == ["connect"]
 
 
@@ -41,12 +45,14 @@ def test_cleanup_after_factory_failure_does_not_retry_factory():
         calls.append("connect")
         raise OSError("connect failed")
 
-    with InstrumentSession({"a": factory}, cleanup_methods={"a": ("home",)}) as session:
-        with session.reserve("map", ["a"]) as lease:
-            with pytest.raises(OSError):
-                lease.call("a", "move")
-            with pytest.raises(RuntimeError, match="already-open"):
-                lease.cleanup("a", "home")
+    with (
+        InstrumentSession({'a': factory}, cleanup_methods={'a': ('home',)}) as session,
+        session.reserve('map', ['a']) as lease,
+    ):
+        with pytest.raises(OSError):
+            lease.call("a", "move")
+        with pytest.raises(RuntimeError, match="already-open"):
+            lease.cleanup("a", "home")
     assert calls == ["connect"]
 
 
@@ -118,25 +124,29 @@ def test_cleanup_inflight_prevents_release():
         def close(self):
             pass
 
-    with InstrumentSession({"a": Device}, cleanup_methods={"a": ("home",)}) as session:
-        with session.reserve("map", ["a"]) as lease:
-            lease.call("a", "ping")
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(lease.cleanup, "a", "home")
-                try:
-                    assert entered.wait(3)
-                    with pytest.raises(ResourceBusyError):
-                        lease.release()
-                finally:
-                    finish.set()
-                future.result(timeout=3)
+    with (
+        InstrumentSession({'a': Device}, cleanup_methods={'a': ('home',)}) as session,
+        session.reserve('map', ['a']) as lease,
+    ):
+        lease.call("a", "ping")
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(lease.cleanup, "a", "home")
+            try:
+                assert entered.wait(3)
+                with pytest.raises(ResourceBusyError):
+                    lease.release()
+            finally:
+                finish.set()
+            future.result(timeout=3)
 
 
 def test_cleanup_accepts_no_user_arguments():
-    with InstrumentSession({"a": object}, cleanup_methods={"a": ("home",)}) as session:
-        with session.reserve("map", ["a"]) as lease:
-            with pytest.raises(TypeError):
-                lease.cleanup("a", "home", 123)
+    with (
+        InstrumentSession({'a': object}, cleanup_methods={'a': ('home',)}) as session,
+        session.reserve('map', ['a']) as lease,
+        pytest.raises(TypeError),
+    ):
+        lease.cleanup("a", "home", 123)
 
 
 def test_queued_cleanup_runs_after_fault_but_queued_normal_command_does_not():
