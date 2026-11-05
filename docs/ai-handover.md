@@ -1,5 +1,18 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Current release planning authority (2026-11-05)
+
+Use [R1 release readiness](release-readiness.md) as the single current scope/blocker
+register. Proposed R1 is a controlled HORIBA-only spectroscopy pilot, awaiting
+maintainer approval; it is not a blanket release of every tool. Current code is not
+certified ready. The plan separates actual defects, missing evidence and optional
+roadmap work. ID900 stays deferred with its return instructions unchanged.
+
+Next task is R1 candidate evidence closure, not another automatic wrapper micro-fix.
+Conditional estimate: 3-5 coherent checkpoints after consolidation, only under the
+explicit assumptions in that register; not a guaranteed iteration count or date.
+Historical gate records below retain their original scope. No production changes.
+
 ## Current setter-readback implementation (2026-11-05)
 
 **Implemented, fake-transport validated; local lint/Windows acceptance not established.**

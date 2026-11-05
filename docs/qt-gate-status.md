@@ -1,5 +1,19 @@
 # Qt acceptance gate: current checkpoint
 
+## Current interpretation: historical Windows pass, candidate evidence separate
+
+The libGL-related 15-pass/4-skip run below is historical, not the current Windows
+gate status. docs/source-audit-validation.md records later supplied Windows v4
+core 68/widgets 12/full offline 608 passes with zero recorded failures/errors/skips/
+timeouts. Those counts overlap. Raw artifacts/independent v4 verification remain
+unreviewed here. Later ITC source changes require one current-candidate regression
+record, not relabeling the historical Windows pass as failed. Visible operator,
+native-driver and physical acceptance remain separate.
+
+See [R1 release readiness](release-readiness.md) for the current blocker register and
+next evidence task. This pointer supersedes the old unmet-Windows-gate statement
+below; it does not claim a new Qt execution or release acceptance.
+
 ## Input and decision
 
 Input: `labtools_source_20261028_215033.txt`, HEAD

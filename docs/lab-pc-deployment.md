@@ -1,4 +1,16 @@
 # Labtools on the lab PC
+
+## Current release boundary (2026-11-05)
+
+See [R1 release readiness](release-readiness.md) before using this proposed runbook.
+R1 scope requires explicit approval and current software/native/operator/physical
+and deployment evidence; no lab-PC installation or permission change is claimed.
+The old libGL sandbox failure below is historical and superseded for automated
+Windows gate status by the recorded v4 pass, not a reason to repeat old gates alone.
+Do not replace a working installation until the selected release gates are closed.
+The proposed protected non-editable install/data separation/rollback model remains
+subject to local IT approval; this document is not institutional policy.
+
 ## Installation, operator access and controlled updates
 
 **Maintainer runbook | Windows | 28 October 2026**
