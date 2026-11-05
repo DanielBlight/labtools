@@ -1,5 +1,26 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Owner-label contract decision checkpoint (2026-11-05)
+
+This later checkpoint characterizes owner labels; it does not reopen or replace
+v4's recorded Windows acceptance. See [owner-label decision](hyperspectral-owner-contract.md).
+Decision: reservation labels remain provider/runtime-owned diagnostics. The
+validated, recipe-serialized request label does not automatically override a
+provider. No owner propagation or production behavior change is implemented.
+
+Authority: `labtools_source_20261105_111524.txt`, HEAD
+`1bdef873daaa94e84e0455eb1e80b73d9a330a77`, branch
+`feature/shared-instrument-session`, clean tracked worktree/index, upstream +1/-0.
+The actual v4 evidence-command output and raw logs/XML remain absent from this
+export; local raw-artifact verification is not claimed.
+
+Validation: 60 targeted offline cases passed (26 new characterization cases),
+zero failures/errors/skips. Ruff could not execute: the sandbox has no `ruff`
+module. Local lint remains required; no dependencies were installed. Production
+source, existing tests, runner, schemas, limits and backend selection are unchanged.
+The v4 sections below are historical closure records, including their old next-step
+instructions; this section supersedes only their deferred owner-label question.
+
 ## Current closure checkpoint v4: recorded Windows acceptance (2026-11-05)
 
 **The remaining widget and full-offline gates passed in the supplied Windows run.**
