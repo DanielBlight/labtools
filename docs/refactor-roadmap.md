@@ -1,5 +1,24 @@
 # Refactor roadmap: audited status
 
+## Scheduling decision: ID900 histogram work deferred (2026-11-05)
+
+The maintainer reports that the device is an **IDQ ID900 Time Controller**, but
+response records and further device details are not currently available. This is
+user-supplied model identity, not verified firmware or response-format evidence.
+Defer the IDQ histogram fixture/parser work until those inputs are available.
+**DEFERRED / BLOCKED ON EVIDENCE; P0 eval(raw) remains open and unfixed.** This is
+not risk acceptance, parser approval, or hardware/native-SDK acceptance.
+
+Do not keep selecting fixture collection as the next engineering checkpoint while
+these inputs are unavailable. See [return instructions](idq-histogram-fixture-readiness.md#return-to-this-work)
+for the evidence checklist and reopening procedure. Older fixture-collection next-task
+pointers below are historical and are superseded by this scheduling decision.
+
+Next independent checkpoint: ITC4000 W1b finite-input contract review only. Inspect
+the current constructor/setter validation and existing tests, document compatibility
+and one bounded design decision, but do not implement policy or access hardware.
+This is separate from IDQ parsing, not a claim that the IDQ issue is resolved.
+
 ## IDQ histogram fixture-readiness checkpoint (2026-11-05)
 
 **BLOCKED on authentic, provenance-recorded response fixtures.** See

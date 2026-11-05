@@ -1,5 +1,103 @@
 # IDQ histogram response-fixture readiness
 
+## Scheduling decision: ID900 histogram work deferred (2026-11-05)
+
+The maintainer reports that the device is an **IDQ ID900 Time Controller**, but
+response records and further device details are not currently available. This is
+user-supplied model identity, not verified firmware or response-format evidence.
+Defer the IDQ histogram fixture/parser work until those inputs are available.
+**DEFERRED / BLOCKED ON EVIDENCE; P0 eval(raw) remains open and unfixed.** This is
+not risk acceptance, parser approval, or hardware/native-SDK acceptance.
+
+Do not keep selecting fixture collection as the next engineering checkpoint while
+these inputs are unavailable. See [return instructions](idq-histogram-fixture-readiness.md#return-to-this-work)
+for the evidence checklist and reopening procedure. Older fixture-collection next-task
+pointers below are historical and are superseded by this scheduling decision.
+
+Next independent checkpoint: ITC4000 W1b finite-input contract review only. Inspect
+the current constructor/setter validation and existing tests, document compatibility
+and one bounded design decision, but do not implement policy or access hardware.
+This is separate from IDQ parsing, not a claim that the IDQ issue is resolved.
+
+## Return to this work
+
+### Known information and preserved blocker
+
+The maintainer supplied model IDQ ID900 on 2026-11-05. Firmware version, actual
+histogram replies and approved response specifications are still unavailable.
+Do not infer ID900 wire grammar, count limits, bin width or firmware behavior from
+model identity, scalar examples, vendor command scripts or another model's examples.
+The existing get_histogram path still uses eval(raw); it is not made safe by this
+documentation. This deferral authorizes no new histogram execution, collection,
+network access, output enabling or parser replacement. Do not feed untrusted response
+text to the current parser. Existing behavior is unchanged, not certified safe.
+
+### Reopening trigger and maintainer procedure
+
+1. Reopen when approved existing response records or an explicit ID900 response
+   specification becomes available, or when the maintainer explicitly prioritizes
+   this issue with the missing evidence. A new source snapshot alone is not a trigger.
+2. Inspect a fresh snapshot and this deferral first. Establish branch, HEAD, dirty
+   state and actual installed code. Preserve measurement data, validation artifacts,
+   every installer backup and unrelated files. Do not run old rollback commands.
+3. Locate existing approved records/specifications before considering acquisition.
+   For each candidate record the original source/path, approval, model ID900,
+   firmware/software version if known, timestamp, exact query, histogram index,
+   configured bin count, queried bin width and acquisition/configuration context.
+   Mark missing metadata unknown, never infer it from example defaults.
+4. Preserve complete raw bytes or a lossless encoding. Record byte length and
+   SHA-256, expected bins and the independent basis for those expectations. Keep
+   originals unchanged and record redactions/transformations separately. A script's
+   hash is not a response hash; synthetic examples must be labeled synthetic.
+5. Review as inert data. Never use eval, exec, the existing get_histogram method,
+   vendor acquisition scripts or native SDKs to inspect records. No automatic
+   device connection or fault induction is part of fixture review.
+6. Cover normal nonempty data, zero-count bins versus empty/no-data, error replies,
+   delimiters/whitespace/numeric forms, shape versus configured bin count, count
+   range/overflow and response-size context. Separate code expectations from
+   demonstrated firmware behavior. Mark unsupported cases unknown.
+7. If no records exist, prepare a separately reviewed, maintainer-authorized capture
+   procedure before any hardware work. Identify device/firmware, benign approved
+   configuration, exact queries, timeout/abort handling and lossless recording.
+   This document is a planning checklist, not an executable acquisition procedure.
+   Do not enable outputs, alter limits, induce errors or guess SCPI commands.
+8. Record one readiness decision. If evidence is insufficient, keep the issue open
+   and specify missing inputs. If sufficient, propose a separately bounded parser
+   design with explicit accepted grammar and rejection policy; do not implement it
+   incidentally during fixture review.
+9. A later implementation must preserve reviewed command order, units, bin-axis
+   construction and public output compatibility. Test offline with approved fixtures
+   and clearly labeled adversarial synthetic cases; reject executable expressions
+   without evaluating them. Resolve empty/error replies, shape, integer conversion,
+   overflow and size policy explicitly. Keep IDQ/DLT ownership/teardown redesign out.
+10. Close only the scope actually evidenced: parser tests are not native-SDK,
+    hardware, operator-visible or original-audit acceptance. Update roadmap/handover
+    with exact results and remaining gates, not a generic complete label.
+
+### Deferred-task handoff prompt
+
+When approved ID900 histogram response records/specifications become available,
+inspect the fresh snapshot and docs/idq-histogram-fixture-readiness.md. Review only
+supplied/approved material as inert data. Build a provenance/coverage matrix with
+raw-byte hashes and expected-bin evidence; distinguish captures, specifications,
+command examples and synthetic tests. Do not collect hardware responses, evaluate
+text or implement a parser. Decide whether a separately bounded parser design is
+ready, or retain the blocker with exact missing inputs. Preserve all compatibility,
+source, schema, limit, dependency and ownership boundaries. If no new evidence is
+available, do not repeat this audit or manufacture a documentation checkpoint.
+
+### Scope and authority for this scheduling update
+
+Based on labtools_source_20261105_120201.txt, HEAD
+d4158406423bc78942225ec759b84dae13f59a24, branch feature/shared-instrument-session,
+tracked worktree/index clean, upstream +3/-0. This documentation-only update records
+the maintainer's explicit deferral and supplied model. No firmware, response fixture,
+local owner acceptance output or v4 raw-artifact verification output was supplied.
+No application tests, hardware, SDKs or parser calls are required for this update.
+Production source, tests, commands, dependencies, schemas, limits, owner labels,
+plotting and real/simulation behavior remain unchanged. Historical Windows acceptance
+is not reopened or broadened. Original comparison and physical/operator gates remain.
+
 ## Decision: BLOCKED on authentic representative response evidence
 
 This documentation-only checkpoint does not replace a parser, change SCPI commands,
