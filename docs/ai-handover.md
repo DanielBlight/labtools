@@ -1,5 +1,38 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Current-setpoint readback contract review (2026-11-05)
+
+**Decision recorded, NOT implemented:** after get_current returns in set_current,
+reject a nonfinite readback with RuntimeError before tolerance arithmetic. Include
+requested amperes and the observed nonfinite value in the diagnostic. Preserve
+finite tolerance, existing mismatch text, query/conversion exceptions and W1 cleanup.
+See [readback contract](itc4000-readback-contract.md) for evidence and compatibility.
+
+Authority: labtools_source_20261105_131803.txt, HEAD
+013afc9fa6d7b6181de571ffe911383071eaf9ec, branch feature/shared-instrument-session,
+upstream +6/-0, clean tracked worktree/index. W1b is committed and all eight W1b
+payloads match the implementation backup. Its Windows lint.log/targeted.log/XML
+are listed but not exported; their outcomes are not inferred from commit or hashes.
+No supplied W1b acceptance failure is demonstrated. New sandbox baseline: 140 passed.
+
+Final targeted characterization: 178 passed (38 new, 96 W1b, 44 lifecycle), zero
+failures/errors/skips, 32.91 seconds. Ruff attempt failed to start: No module named
+ruff. Local lint remains required. No production or existing test changes; no native
+VISA, hardware, actual sleep, physical outputs, full-suite or Qt execution.
+
+Observed current behavior: NaN readback can evade mismatch; positive/negative infinity
+mismatch; malformed text raises ValueError after the current write. The recommended
+check is post-write verification, not a pre-write interlock. get_current remains raw
+float conversion under this decision; direct GUI reads and their second post-set
+query are outside the proposed setter-only change. No retry, output-off, new close,
+transport fault state, tolerance, enable sequencing, delay or timeout policy change.
+
+Next bounded task: implement only the recorded setter readback guard, revising both
+new and existing NaN-readback expectations while retaining finite/tolerance/conversion
+and cleanup coverage. ID900 stays deferred with its return instructions unchanged.
+This section supersedes earlier next-task pointers for readback scheduling only;
+historical W1b and acceptance records below remain scoped to their original evidence.
+
 ## Current W1b implementation checkpoint (2026-11-05)
 
 **Constructor/current/temperature finite checks are implemented and fake-transport
