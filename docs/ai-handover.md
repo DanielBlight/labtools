@@ -1,5 +1,55 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Current W1b implementation checkpoint (2026-11-05)
+
+**Constructor/current/temperature finite checks are implemented and fake-transport
+validated. Local lint and Windows execution remain unverified.** This section
+supersedes historical statements that W1b is only a decision or unimplemented.
+It does not broaden W1b into complete finite-input safety or physical acceptance.
+
+Authority: labtools_source_20261105_125159.txt, created UTC
+2026-11-05T12:51:59.3162870Z, HEAD 3e41ca827913e022a981b9010d34d82c6dec3a55,
+branch feature/shared-instrument-session, upstream +5/-0, tracked worktree/index
+recorded clean. The corrected fixture import and _fake binding are the baseline;
+no corrected local lint/pytest transcript is supplied. Preserve the original
+contract installer backup and separate lint-fix backup; do not restore old payloads.
+
+After both constructor float conversions, math.isfinite checks reject nonfinite
+threshold_current and max_current with field-specific ValueError before VISA opens.
+Current and temperature setters reject nonfinite converted requests before transport.
+Existing bounds, defaults, float coercion/conversion exceptions, units, .9g formatting,
+successful command/query order, readback tolerance and W1 cleanup remain unchanged.
+No new temperature limit, type whitelist, bool/string rejection or output-off policy.
+
+Fresh baseline: 97 targeted cases passed. Final implementation: 140 passed, comprising
+96 finite-contract cases and all 44 unchanged lifecycle cases; zero failures/errors/
+skips. All original 53 finite-contract parameter cases remain covered with affected
+expectations revised; 43 cases were added. Final duration 26.19 seconds. Tests use
+isolated fake PyVISA; sleep/output-enabling paths are stubbed where characterized.
+Ruff attempt exited 1: No module named ruff. Offline tool-cache lookup also found no
+Ruff. No dependencies were installed; local lint is required before commit.
+
+Only the wrapper, its finite-contract test and six documents change. AST checks
+confirm all other production methods are identical; the three changed methods differ
+only by the four finite guards. The import of math is the only other source change.
+Existing lifecycle tests, callers, schemas, dependencies, limits, simulation and
+plotting are unchanged. No full-suite, GUI, native VISA, network or hardware execution.
+
+Enable sequencing/preflight, TEC delay, timeout, nonfinite readback/tolerance and
+public-attribute mutation remain excluded and unfixed. Finite temperature extremes
+remain accepted by policy, not approved for hardware. A finite current request can
+still receive NaN readback without mismatch; enable may still perform TEC work before
+current rejection. Pulse methods and other wrappers are unchanged, not certified.
+ID900 histogram work remains deferred, P0 open, with its return instructions intact.
+No original full-audit, operator-visible, native-SDK or hardware acceptance is claimed.
+
+Next bounded task: review the ITC4000 current-setpoint nonfinite-readback contract
+only, using fake replies; record a decision before implementation. Do not combine
+with enable sequencing, delays, timeout, output-off policy or ID900 work.
+
+See [W1b contract and implementation](itc4000-finite-input-contract.md).
+Historical sections below retain earlier evidence and are not current gate results.
+
 ## ITC4000 W1b contract decision (2026-11-05)
 
 See [finite-input decision](itc4000-finite-input-contract.md). Current behavior is

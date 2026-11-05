@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Self
 
@@ -54,6 +55,12 @@ class ITC4000:
         self._close_started = False
         self._rm = None
         self._itc: MessageBasedResource | None = None
+
+        if not math.isfinite(self.threshold_current):
+            raise ValueError("threshold_current must be finite.")
+
+        if not math.isfinite(self.max_current):
+            raise ValueError("max_current must be finite.")
 
         if self.threshold_current < 0:
             raise ValueError("threshold_current cannot be negative.")
@@ -252,6 +259,9 @@ class ITC4000:
         """Set and verify the laser-current setpoint in amperes."""
         current = float(current)
 
+        if not math.isfinite(current):
+            raise ValueError("current must be finite.")
+
         if not 0 <= current <= self.max_current:
             raise ValueError(
                 f"Current must be between 0 and "
@@ -284,6 +294,9 @@ class ITC4000:
     def set_temperature(self, temperature: float) -> None:
         """Set the TEC temperature setpoint in degrees Celsius."""
         temperature = float(temperature)
+
+        if not math.isfinite(temperature):
+            raise ValueError("temperature must be finite.")
 
         self._write_checked(
             f"SOUR2:TEMP {temperature:.9g}C",

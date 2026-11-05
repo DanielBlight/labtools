@@ -1,4 +1,4 @@
-"""Current behavior only: fake VISA, no new validation policy."""
+"""W1b finite-input checks and preserved exclusions using fake VISA only."""
 
 import math
 
@@ -13,8 +13,8 @@ from test_itc4000_lifecycle import (
     [
         (0, 0.1, True), (0.1, 0.1, True), ("0.049", "0.1", True),
         (-1, 0.1, False), (0, 0, False), (0.2, 0.1, False),
-        (float("nan"), 0.1, True), (0.049, float("nan"), True),
-        (float("inf"), float("inf"), True), (0.049, float("inf"), True),
+        (float("nan"), 0.1, False), (0.049, float("nan"), False),
+        (float("inf"), float("inf"), False), (0.049, float("inf"), False),
         (float("inf"), 0.1, False), (float("-inf"), 0.1, False),
         (0.049, float("-inf"), False), (False, True, True),
     ],
@@ -69,23 +69,25 @@ def test_current_bounds_conversion_transcript_and_no_cache(wrapper, value):
         assert device.max_current == 0.1
 
 
-def test_nan_ceiling_rejects_even_finite_current(wrapper):
+def test_mutated_nan_ceiling_still_rejects_finite_current(wrapper):
     cls, fake = wrapper
-    with cls(max_current=float("nan")) as device:
+    with cls() as device:
+        device.max_current = float("nan")
         fake.events.clear()
         with pytest.raises(ValueError):
             device.set_current(0.05)
         assert fake.events == []
 
 
-def test_infinite_ceiling_permits_infinite_current(wrapper):
+def test_nonfinite_current_rejected_even_with_mutated_infinite_ceiling(wrapper):
     cls, fake = wrapper
-    with cls(max_current=float("inf")) as device:
+    with cls() as device:
+        device.max_current = float("inf")
         fake.responses["SOUR:CURR?"] = "inf"
         fake.events.clear()
-        device.set_current(float("inf"))
-        assert fake.events[0] == ("write", "SOUR:CURR inf")
-        assert fake.events[-1] == ("query", "SOUR:CURR?")
+        with pytest.raises(ValueError, match=r"^current must be finite\.$"):
+            device.set_current(float("inf"))
+        assert fake.events == []
 
 
 @pytest.mark.parametrize("readback", ["nan", "inf", "0.09"])
@@ -101,10 +103,15 @@ def test_readback_comparison_current_behavior(wrapper, readback):
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "20.5", -1000, True])
-def test_temperature_formats_without_finite_or_range_check(wrapper, value):
+def test_temperature_finite_check_preserves_finite_formatting(wrapper, value):
     cls, fake = wrapper
     with cls() as device:
         fake.events.clear()
+        if not math.isfinite(float(value)):
+            with pytest.raises(ValueError, match=r"^temperature must be finite\.$"):
+                device.set_temperature(value)
+            assert fake.events == []
+            return
         device.set_temperature(value)
         assert fake.events == [
             ("write", f"SOUR2:TEMP {float(value):.9g}C"),
@@ -168,3 +175,108 @@ def test_timeout_is_forwarded_not_validated(wrapper, timeout):
     with cls(timeout_ms=timeout):
         assert fake.events[1][0:2] == ("open", cls.DEFAULT_ADDRESS)
         assert fake.events[1][2] is timeout
+
+
+@pytest.mark.parametrize("field", ["threshold_current", "max_current"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf", "-inf"])
+def test_constructor_nonfinite_field_message_and_zero_transport(wrapper, field, value):
+    cls, fake = wrapper
+    with pytest.raises(ValueError, match=rf"^{field} must be finite\.$"):
+        cls(**{field: value})
+    assert fake.events == []
+
+
+@pytest.mark.parametrize(("method", "field"), [("set_current", "current"), ("set_temperature", "temperature")])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf", "-inf"])
+def test_setter_nonfinite_field_message_and_zero_transport(wrapper, method, field, value):
+    cls, fake = wrapper
+    with cls() as device:
+        fake.events.clear()
+        with pytest.raises(ValueError, match=rf"^{field} must be finite\.$"):
+            getattr(device, method)(value)
+        assert fake.events == []
+
+
+@pytest.mark.parametrize("second_error", [ValueError("conversion sentinel"), TypeError("conversion sentinel")])
+def test_both_constructor_conversions_precede_finite_validation(wrapper, second_error):
+    cls, fake = wrapper
+    events = []
+
+    class Threshold:
+        def __float__(self):
+            events.append("threshold")
+            return float("nan")
+
+    class Ceiling:
+        def __float__(self):
+            events.append("maximum")
+            raise second_error
+
+    with pytest.raises(type(second_error)) as caught:
+        cls(threshold_current=Threshold(), max_current=Ceiling())
+    assert caught.value is second_error
+    assert events == ["threshold", "maximum"]
+    assert fake.events == []
+
+
+def test_constructor_nonfinite_validation_precedes_existing_bounds(wrapper):
+    cls, fake = wrapper
+    with pytest.raises(ValueError, match=r"^max_current must be finite\.$"):
+        cls(threshold_current=-1, max_current=float("nan"))
+    assert fake.events == []
+
+
+@pytest.mark.parametrize("value", [-0.0, math.nextafter(0.1, 0.0), 0.049, "0.1", True])
+def test_finite_current_compatibility_and_transcript(wrapper, value):
+    cls, fake = wrapper
+    with cls(max_current=1.0) as device:
+        converted = float(value)
+        fake.responses["SOUR:CURR?"] = str(converted)
+        fake.events.clear()
+        device.set_current(value)
+        assert fake.events == [
+            ("write", f"SOUR:CURR {converted:.9g}"),
+            ("query", "*OPC?"), ("query", "SYST:ERR?"),
+            ("query", "SOUR:CURR?"),
+        ]
+        assert device.threshold_current == 0.049
+        assert device.max_current == 1.0
+
+
+@pytest.mark.parametrize("value", [math.nextafter(0.0, -math.inf), math.nextafter(0.1, math.inf)])
+def test_current_immediately_outside_existing_bounds_still_rejected(wrapper, value):
+    cls, fake = wrapper
+    with cls() as device:
+        fake.events.clear()
+        with pytest.raises(ValueError, match="Current must be between"):
+            device.set_current(value)
+        assert fake.events == []
+
+
+@pytest.mark.parametrize("value", [0.0, -0.0, 1e308, -1e308, False])
+def test_finite_temperature_has_no_new_range_policy(wrapper, value):
+    cls, fake = wrapper
+    with cls() as device:
+        fake.events.clear()
+        device.set_temperature(value)
+        assert fake.events == [
+            ("write", f"SOUR2:TEMP {float(value):.9g}C"),
+            ("query", "*OPC?"), ("query", "SYST:ERR?"),
+        ]
+
+
+@pytest.mark.parametrize("method", ["set_current", "set_temperature"])
+@pytest.mark.parametrize("error", [ValueError("float sentinel"), TypeError("float sentinel")])
+def test_setter_float_exception_identity_is_preserved(wrapper, method, error):
+    cls, fake = wrapper
+
+    class Request:
+        def __float__(self):
+            raise error
+
+    with cls() as device:
+        fake.events.clear()
+        with pytest.raises(type(error)) as caught:
+            getattr(device, method)(Request())
+        assert caught.value is error
+        assert fake.events == []
