@@ -1,5 +1,20 @@
 # Refactor roadmap: audited status
 
+## ITC4000 W1b contract decision (2026-11-05)
+
+See [finite-input decision](itc4000-finite-input-contract.md). Current behavior is
+characterized; production validation is NOT changed. Decision for a separate next
+checkpoint: retain float coercion, reject nonfinite constructor threshold/ceiling
+before opening VISA and nonfinite current/temperature before setter transport;
+preserve existing bounds, defaults, units, command order and W1 cleanup.
+
+97 targeted cases passed (53 new, 44 existing), zero failures/errors/skips.
+Ruff could not execute because the module is absent; local lint remains open.
+Enable sequencing/delay, timeout and nonfinite readback policy remain separate
+unfixed questions. No new safety limits or automatic output-off policy is introduced.
+ID900 histogram work stays deferred with its return instructions preserved.
+This section supersedes earlier next-task pointers for W1b scheduling only.
+
 ## Scheduling decision: ID900 histogram work deferred (2026-11-05)
 
 The maintainer reports that the device is an **IDQ ID900 Time Controller**, but
