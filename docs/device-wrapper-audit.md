@@ -1,5 +1,27 @@
 # Device-wrapper audit: evidence and rewrite decisions
 
+## IDQ histogram fixture-readiness checkpoint (2026-11-05)
+
+**BLOCKED on authentic, provenance-recorded response fixtures.** See
+[fixture-readiness decision](idq-histogram-fixture-readiness.md) for exact code/caller
+references, vendor-example inventory, supported boundaries and unknown grammar.
+The current eval(raw) path remains P0 and unfixed. Vendor examples are not response
+fixtures. No parser replacement, SCPI change, hardware access or application gate
+rerun is part of this documentation-only checkpoint.
+
+Authority: labtools_source_20261105_113246.txt, HEAD
+c52badae636ba8214bfeea7733600ab3cff35181, branch
+feature/shared-instrument-session, clean tracked worktree/index, upstream +2/-0.
+Owner-contract documentation is committed; its test has an AST-equivalent import
+wrap relative to the installed backup. Preserve that edit. No local owner-checkpoint
+verify/Ruff/pytest transcript or v4 raw-artifact verification output is supplied.
+
+Next bounded task: assemble and review a provenance-recorded fixture bundle from
+already approved records/specifications. Do not automatically collect hardware
+responses, execute response text, invent fixtures or implement a parser while blocked.
+This section supersedes older next-task pointers only for fixture readiness; all
+historical acceptance limitations and independent wrapper backlogs remain intact.
+
 > Historical findings below predate W2. HORIBA startup/independent cleanup is now
 > repaired/offline-tested. Timeout/exposure policy and all other open findings remain.
 > See [W2 checkpoint](horiba-lifecycle-checkpoint.md).
