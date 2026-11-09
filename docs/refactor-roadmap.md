@@ -933,3 +933,12 @@ group remains active when LabJack close also fails. Device commands and public A
 unchanged. Native-driver, physical-safety, optical-path and operator acceptance remain
 separate gates.
 
+## Anneal operator error formatting (2026-11-09)
+
+The anneal worker now uses a Qt-free formatter instead of `str(exc)` alone. Operator
+error text includes the primary exception, preserved exception notes, and labelled
+children of nested `ExceptionGroup` values. Dialog flow, signals, threading, hardware
+commands and public measurement APIs are unchanged. Focused Qt-free unit tests cover
+primary cleanup notes and grouped labelled failures. This improves diagnostics only;
+native-device, physical-safety, optical-path and operator acceptance remain separate.
+

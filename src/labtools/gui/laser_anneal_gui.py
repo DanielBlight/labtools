@@ -47,6 +47,7 @@ from labtools.config.anneal_workspace import (
 from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
 from labtools.devices.sc10 import SC10
 from labtools.devices.uc480_camera import ThorlabsUC480Camera
+from labtools.gui.error_formatting import format_operator_exception
 from labtools.gui.recipe_controls import setup_recipe_controls
 
 
@@ -73,7 +74,7 @@ class AnnealWorker(QObject):
                 status_callback=self.status.emit,
             )
         except Exception as exc:  # noqa: BLE001
-            self.failed.emit(str(exc))
+            self.failed.emit(format_operator_exception(exc))
         else:
             self.completed.emit(result)
 
