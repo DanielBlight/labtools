@@ -142,7 +142,7 @@ class FailingReturnRotationStage(FakeRotationStage):
             raise RuntimeError("stage return failed")
 
 
-def test_stage_return_failure_is_raised_with_inner_failure_as_context(
+def test_inner_failure_is_preserved_when_stage_return_also_fails(
     monkeypatch, tmp_path
 ):
     monkeypatch.setattr(
@@ -167,12 +167,47 @@ def test_stage_return_failure_is_raised_with_inner_failure_as_context(
 
     try:
         laser_anneal.run_laser_anneal(config)
-    except RuntimeError as error:
-        assert str(error) == "stage return failed"
-        assert isinstance(error.__context__, ValueError)
-        assert str(error.__context__) == "inner anneal failed"
+    except ValueError as error:
+        assert str(error) == "inner anneal failed"
+        assert error.__notes__ == [
+            "Cleanup failed (return rotation stage): RuntimeError('stage return failed')"
+        ]
     else:
-        raise AssertionError("expected stage return failure")
+        raise AssertionError("expected inner anneal failure")
+
+    assert FailingReturnRotationStage.instance.moves == [35_000.0, 90_000.0]
+
+
+def test_stage_return_only_failure_raises_cleanup_group(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        laser_anneal, "KinesisRotationStage", FailingReturnRotationStage
+    )
+    monkeypatch.setattr(
+        laser_anneal,
+        "_run_laser_anneal_without_rotation_stage",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(laser_anneal, "validate_run_config", lambda _config: None)
+
+    config = laser_anneal.LaserAnnealConfig(
+        anneal_rotation_coordinate=35_000.0,
+        return_rotation_coordinate=90_000.0,
+        return_rotation_stage=True,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+
+    try:
+        laser_anneal.run_laser_anneal(config)
+    except ExceptionGroup as group:
+        assert str(group) == "Acquisition cleanup failed (1 sub-exception)"
+        assert len(group.exceptions) == 1
+        failure = group.exceptions[0]
+        assert isinstance(failure, RuntimeError)
+        assert str(failure) == "stage return failed"
+        assert failure.__notes__ == ["Cleanup action: return rotation stage"]
+    else:
+        raise AssertionError("expected cleanup failure group")
 
     assert FailingReturnRotationStage.instance.moves == [35_000.0, 90_000.0]
 

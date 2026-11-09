@@ -880,3 +880,15 @@ changed. This is characterization, not approval of the exception policy; explici
 primary/cleanup grouping, native drivers, physical safety and operator acceptance
 remain separate decisions.
 
+## Laser-anneal stage-return cleanup contract (2026-11-09)
+
+The outer anneal lifecycle now uses the shared `cleanup_actions` contract for an
+enabled rotation-stage return. A primary inner-anneal failure remains the raised
+exception and receives a labelled note if stage return also fails. A return-only
+failure raises the standard `ExceptionGroup("Acquisition cleanup failed", ...)`.
+Successful return-after-failure behaviour is unchanged. Focused fake-stage tests cover
+successful return after primary failure, return-only failure, and competing failures.
+The GUI still displays `str(exc)` only, so structured notes/groups are not presented
+in full to operators; GUI diagnostics, native drivers, physical safety and operator
+acceptance remain separate gates.
+

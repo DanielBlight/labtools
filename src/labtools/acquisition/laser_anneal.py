@@ -20,6 +20,7 @@ from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
 from labtools.devices.labjack_u6 import LabJackU6
 from labtools.devices.sc10 import SC10, SC10Mode
 from labtools.devices.scanning_mirror import ScanningMirror
+from labtools.runtime.cleanup import cleanup_actions
 
 ProgressCallback = Callable[["AnnealProgress"], None]
 StatusCallback = Callable[[str], None]
@@ -306,17 +307,22 @@ def run_laser_anneal(
             f"{config.anneal_rotation_coordinate:g}"
         )
         rotation_stage.move_to(config.anneal_rotation_coordinate)
-        try:
+        def return_rotation_stage() -> None:
+            status(
+                "Moving rotation stage to return coordinate "
+                f"{config.return_rotation_coordinate:g}"
+            )
+            rotation_stage.move_to(config.return_rotation_coordinate)
+
+        cleanup = (
+            (("return rotation stage", return_rotation_stage),)
+            if config.return_rotation_stage
+            else ()
+        )
+        with cleanup_actions(*cleanup):
             return _run_laser_anneal_without_rotation_stage(
                 config,
                 stop_event=stop_event,
                 progress_callback=progress_callback,
                 status_callback=status_callback,
             )
-        finally:
-            if config.return_rotation_stage:
-                status(
-                    "Moving rotation stage to return coordinate "
-                    f"{config.return_rotation_coordinate:g}"
-                )
-                rotation_stage.move_to(config.return_rotation_coordinate)
