@@ -712,3 +712,13 @@ This closes the immediate wheel-build, staged-install, staged-import and synthet
 smoke-test gap only. It is not clean-room dependency, native-SDK, permissions,
 operator, physical-hardware, rollback, lab-PC deployment or release acceptance.
 
+## Collision-safe intensity-map output allocation (2026-11-09)
+
+New intensity-map runs now allocate their timestamp directory atomically. If a run
+already owns the same second-resolution name, later runs retain the historical base
+name format and use deterministic `-001`, `-002`, and subsequent suffixes instead of
+failing or reusing an existing directory. Resume continues to use its explicitly
+selected directory; file schemas, measurement facades, hardware behaviour and backend
+selection are unchanged. This is an offline filesystem reliability correction, not
+physical, native-driver, operator or deployment acceptance.
+

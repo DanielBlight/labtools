@@ -80,9 +80,19 @@ def _scan_indices(config: IntensityMapConfig):
 
 
 def _new_output_directory(root: Path) -> Path:
-    path = Path(root) / datetime.now(UTC).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
-    path.mkdir(parents=True, exist_ok=False)
-    return path
+    """Atomically allocate a timestamped directory without reusing a prior run."""
+    root = Path(root)
+    stem = datetime.now(UTC).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+    root.mkdir(parents=True, exist_ok=True)
+    for index in range(10_000):
+        suffix = "" if index == 0 else f"-{index:03d}"
+        path = root / f"{stem}{suffix}"
+        try:
+            path.mkdir(exist_ok=False)
+        except FileExistsError:
+            continue
+        return path
+    raise RuntimeError(f"Could not allocate a unique output directory under {root}")
 
 
 def _atomic_savez(path: Path, **arrays: Any) -> None:
