@@ -86,3 +86,52 @@ def test_cancellation_closes_shutter_and_returns_mirror_home(monkeypatch, tmp_pa
     assert FakeShutter.instance.mode == laser_anneal.SC10Mode.MANUAL
     assert FakeShutter.instance.enabled == [False, True, False]
     assert FakeMirror.instance.moves[-1] == (0.25, -0.5)
+
+class FakeRotationStage:
+    instance = None
+
+    def __init__(self, *, move_timeout_s):
+        self.move_timeout_s = move_timeout_s
+        self.moves = []
+        type(self).instance = self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def move_to(self, coordinate):
+        self.moves.append(coordinate)
+
+
+def test_rotation_stage_returns_after_inner_anneal_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(laser_anneal, "KinesisRotationStage", FakeRotationStage)
+
+    def fail_inner(*_args, **_kwargs):
+        raise RuntimeError("inner anneal failed")
+
+    monkeypatch.setattr(
+        laser_anneal, "_run_laser_anneal_without_rotation_stage", fail_inner
+    )
+    monkeypatch.setattr(laser_anneal, "validate_run_config", lambda _config: None)
+
+    config = laser_anneal.LaserAnnealConfig(
+        anneal_rotation_coordinate=35_000.0,
+        return_rotation_coordinate=90_000.0,
+        return_rotation_stage=True,
+        rotation_stage_timeout_s=12.5,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+
+    try:
+        laser_anneal.run_laser_anneal(config)
+    except RuntimeError as error:
+        assert str(error) == "inner anneal failed"
+    else:
+        raise AssertionError("expected inner anneal failure")
+
+    assert FakeRotationStage.instance.move_timeout_s == 12.5
+    assert FakeRotationStage.instance.moves == [35_000.0, 90_000.0]
+

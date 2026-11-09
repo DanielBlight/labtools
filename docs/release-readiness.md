@@ -416,3 +416,12 @@ This establishes the ordinary cancellation path only; injected cleanup failures,
 rotation-stage return, native drivers, optical-path safety and operator acceptance
 remain separate gates.
 
+## Laser-anneal rotation-stage failure characterization (2026-11-09)
+
+An offline fake-stage test now characterizes failure of the inner anneal operation.
+It verifies that the original inner `RuntimeError` is preserved and that a configured
+rotation-stage return still moves from the anneal coordinate to the return coordinate.
+No production code or hardware behaviour changed. Return-move failure, competing
+primary/cleanup failures, native drivers, optical-path safety and operator acceptance
+remain separate gates.
+
