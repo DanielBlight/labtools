@@ -823,3 +823,12 @@ commands and public measurement APIs are unchanged. Focused Qt-free unit tests c
 primary cleanup notes and grouped labelled failures. This improves diagnostics only;
 native-device, physical-safety, optical-path and operator acceptance remain separate.
 
+## Anneal worker diagnostic signal validation (2026-11-09)
+
+A focused offline PyQt worker test now injects an `ExceptionGroup` with preserved
+cleanup notes into `AnnealWorker.run` and verifies that the existing `failed(str)`
+signal receives the complete Qt-free formatted diagnostic, including the group child
+and labelled note. The worker is called directly without a display, thread, hardware
+or anneal execution. Signal type, dialog flow and production code are unchanged. This
+is not Qt rendering, operator, physical-hardware or deployment acceptance.
+
