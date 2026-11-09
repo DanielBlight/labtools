@@ -870,3 +870,13 @@ No production code or hardware behaviour changed. Return-move failure, competing
 primary/cleanup failures, native drivers, optical-path safety and operator acceptance
 remain separate gates.
 
+## Laser-anneal competing-failure characterization (2026-11-09)
+
+An offline fake-stage test now records current Python exception semantics when both
+the inner anneal and configured return move fail. The stage-return `RuntimeError` is
+the raised exception; the inner `ValueError` remains available through `__context__`,
+and both requested moves are recorded. No production code or hardware behaviour
+changed. This is characterization, not approval of the exception policy; explicit
+primary/cleanup grouping, native drivers, physical safety and operator acceptance
+remain separate decisions.
+

@@ -135,3 +135,44 @@ def test_rotation_stage_returns_after_inner_anneal_failure(monkeypatch, tmp_path
     assert FakeRotationStage.instance.move_timeout_s == 12.5
     assert FakeRotationStage.instance.moves == [35_000.0, 90_000.0]
 
+class FailingReturnRotationStage(FakeRotationStage):
+    def move_to(self, coordinate):
+        self.moves.append(coordinate)
+        if len(self.moves) == 2:
+            raise RuntimeError("stage return failed")
+
+
+def test_stage_return_failure_is_raised_with_inner_failure_as_context(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        laser_anneal, "KinesisRotationStage", FailingReturnRotationStage
+    )
+
+    def fail_inner(*_args, **_kwargs):
+        raise ValueError("inner anneal failed")
+
+    monkeypatch.setattr(
+        laser_anneal, "_run_laser_anneal_without_rotation_stage", fail_inner
+    )
+    monkeypatch.setattr(laser_anneal, "validate_run_config", lambda _config: None)
+
+    config = laser_anneal.LaserAnnealConfig(
+        anneal_rotation_coordinate=35_000.0,
+        return_rotation_coordinate=90_000.0,
+        return_rotation_stage=True,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+
+    try:
+        laser_anneal.run_laser_anneal(config)
+    except RuntimeError as error:
+        assert str(error) == "stage return failed"
+        assert isinstance(error.__context__, ValueError)
+        assert str(error.__context__) == "inner anneal failed"
+    else:
+        raise AssertionError("expected stage return failure")
+
+    assert FailingReturnRotationStage.instance.moves == [35_000.0, 90_000.0]
+
