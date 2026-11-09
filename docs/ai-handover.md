@@ -803,3 +803,14 @@ failure tuple, and mirror homing is still attempted. No production code or hardw
 behaviour changed. LabJack context-exit competition, native drivers, physical safety,
 optical-path policy and operator acceptance remain separate gates.
 
+## LabJack context-exit failure preservation (2026-11-09)
+
+`LabJackU6.__exit__` now follows the existing SC10 and cleanup lifecycle contract.
+When a body failure is active, a competing LabJack close failure no longer replaces
+it; instead the primary exception receives a `LabJack cleanup also failed` note and
+`_labjack_cleanup_failures` tuple. A close-only failure still propagates unchanged.
+Focused isolated-wrapper and anneal fake-device tests verify that a mirror-home cleanup
+group remains active when LabJack close also fails. Device commands and public APIs are
+unchanged. Native-driver, physical-safety, optical-path and operator acceptance remain
+separate gates.
+

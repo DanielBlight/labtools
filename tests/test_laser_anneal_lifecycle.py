@@ -426,3 +426,52 @@ def test_sc10_exit_failure_preserves_shutter_cleanup_group_and_mirror_home(
     assert FailingCloseAndExitShutter.instance.enabled == [False, True, False]
     assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
 
+class FailingExitLabJack(FakeLabJack):
+    def __exit__(self, exc_type, exc_value, traceback):
+        cleanup = OSError("LabJack close failed")
+        if exc_value is None:
+            raise cleanup
+        exc_value.add_note(f"LabJack cleanup also failed: {cleanup!r}")
+        exc_value._labjack_cleanup_failures = (cleanup,)
+
+
+def test_labjack_exit_preserves_mirror_home_failure(monkeypatch, tmp_path):
+    CleanupOnlyMirror.fail_home = True
+    CleanupOnlyShutter.fail_close = False
+    monkeypatch.setattr(laser_anneal, "LabJackU6", FailingExitLabJack)
+    monkeypatch.setattr(laser_anneal, "ScanningMirror", CleanupOnlyMirror)
+    monkeypatch.setattr(laser_anneal, "SC10", CleanupOnlyShutter)
+
+    config = laser_anneal.LaserAnnealConfig(
+        x_start_v=-1.0,
+        x_stop_v=1.0,
+        x_points=2,
+        y_start_v=2.0,
+        y_stop_v=2.0,
+        y_points=1,
+        point_dwell_s=0.0,
+        mirror_settle_s=0.0,
+        home_x_voltage_v=0.25,
+        home_y_voltage_v=-0.5,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+
+    try:
+        laser_anneal._run_laser_anneal_without_rotation_stage(config)
+    except ExceptionGroup as group:
+        assert str(group) == "Acquisition cleanup failed (1 sub-exception)"
+        assert group.__notes__ == [
+            "LabJack cleanup also failed: OSError('LabJack close failed')"
+        ]
+        failure = group.exceptions[0]
+        assert isinstance(failure, RuntimeError)
+        assert str(failure) == "mirror home failed"
+        assert failure.__notes__ == ["Cleanup action: return mirror home"]
+        assert str(group._labjack_cleanup_failures[0]) == "LabJack close failed"
+    else:
+        raise AssertionError("expected mirror-home cleanup failure group")
+
+    assert CleanupOnlyShutter.instance.enabled == [False, True, False]
+    assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
+

@@ -55,5 +55,11 @@ class LabJackU6:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *_) -> None:
-        self.close()
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            self.close()
+        except BaseException as cleanup:
+            if exc_value is None:
+                raise
+            exc_value.add_note(f"LabJack cleanup also failed: {cleanup!r}")
+            exc_value._labjack_cleanup_failures = (cleanup,)
