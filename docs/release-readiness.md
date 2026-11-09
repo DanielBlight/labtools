@@ -458,3 +458,13 @@ and device commands are unchanged. Focused fake-device coverage establishes the
 competing-failure path only; native drivers, physical safety, optical-path policy and
 operator acceptance remain separate gates.
 
+## Laser-anneal cleanup-only failure characterization (2026-11-09)
+
+Focused fake-device tests now characterize successful scanning followed by
+shutter-close-only, mirror-home-only, and combined cleanup failures. Each case must
+raise the standard `Acquisition cleanup failed` `ExceptionGroup`; no successful
+anneal result is returned. Shutter closure and mirror homing remain independently
+attempted, with failures labelled `close shutter` and `return mirror home`. No
+production code or hardware behaviour changed. Native-driver, physical-safety,
+optical-path and operator acceptance remain separate gates.
+

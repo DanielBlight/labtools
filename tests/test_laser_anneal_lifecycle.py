@@ -263,3 +263,110 @@ def test_scan_failure_is_preserved_when_shutter_close_and_mirror_home_fail(
     assert FailingCloseShutter.instance.enabled == [False, True, False]
     assert FailingScanAndHomeMirror.instance.moves[-1] == (0.25, -0.5)
 
+class CleanupOnlyMirror(FakeMirror):
+    fail_home = False
+
+    def move(self, x_voltage, y_voltage):
+        self.moves.append((x_voltage, y_voltage))
+        if self.fail_home and len(self.moves) == 4:
+            raise RuntimeError("mirror home failed")
+
+
+class CleanupOnlyShutter(FakeShutter):
+    fail_close = False
+
+    def set_enabled(self, enabled):
+        self.enabled.append(enabled)
+        if self.fail_close and self.enabled == [False, True, False]:
+            raise RuntimeError("shutter close failed")
+
+
+def run_successful_scan_with_cleanup_failures(
+    monkeypatch, tmp_path, *, fail_close, fail_home
+):
+    CleanupOnlyMirror.fail_home = fail_home
+    CleanupOnlyShutter.fail_close = fail_close
+    monkeypatch.setattr(laser_anneal, "LabJackU6", FakeLabJack)
+    monkeypatch.setattr(laser_anneal, "ScanningMirror", CleanupOnlyMirror)
+    monkeypatch.setattr(laser_anneal, "SC10", CleanupOnlyShutter)
+
+    config = laser_anneal.LaserAnnealConfig(
+        x_start_v=-1.0,
+        x_stop_v=1.0,
+        x_points=2,
+        y_start_v=2.0,
+        y_stop_v=2.0,
+        y_points=1,
+        point_dwell_s=0.0,
+        mirror_settle_s=0.0,
+        home_x_voltage_v=0.25,
+        home_y_voltage_v=-0.5,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+    return laser_anneal._run_laser_anneal_without_rotation_stage(config)
+
+
+def cleanup_failures(group):
+    assert str(group) == "Acquisition cleanup failed (1 sub-exception)"
+    inner = group.exceptions[0]
+    if isinstance(inner, ExceptionGroup):
+        return list(inner.exceptions)
+    return [inner]
+
+
+def test_shutter_close_only_failure_raises_cleanup_group(monkeypatch, tmp_path):
+    try:
+        run_successful_scan_with_cleanup_failures(
+            monkeypatch, tmp_path, fail_close=True, fail_home=False
+        )
+    except ExceptionGroup as group:
+        failures = cleanup_failures(group)
+        assert [str(error) for error in failures] == ["shutter close failed"]
+        assert failures[0].__notes__ == ["Cleanup action: close shutter"]
+    else:
+        raise AssertionError("expected cleanup failure group")
+
+    assert CleanupOnlyShutter.instance.enabled == [False, True, False]
+    assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
+
+
+def test_mirror_home_only_failure_raises_cleanup_group(monkeypatch, tmp_path):
+    try:
+        run_successful_scan_with_cleanup_failures(
+            monkeypatch, tmp_path, fail_close=False, fail_home=True
+        )
+    except ExceptionGroup as group:
+        failures = cleanup_failures(group)
+        assert [str(error) for error in failures] == ["mirror home failed"]
+        assert failures[0].__notes__ == ["Cleanup action: return mirror home"]
+    else:
+        raise AssertionError("expected cleanup failure group")
+
+    assert CleanupOnlyShutter.instance.enabled == [False, True, False]
+    assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
+
+
+def test_both_inner_cleanup_failures_are_reported(monkeypatch, tmp_path):
+    try:
+        run_successful_scan_with_cleanup_failures(
+            monkeypatch, tmp_path, fail_close=True, fail_home=True
+        )
+    except ExceptionGroup as group:
+        assert str(group) == "Acquisition cleanup failed (1 sub-exception)"
+        assert len(group.exceptions) == 1
+
+        assert group.__notes__ == [
+            "Cleanup failed (return mirror home): RuntimeError('mirror home failed')"
+        ]
+
+        shutter_failure = group.exceptions[0]
+        assert isinstance(shutter_failure, RuntimeError)
+        assert str(shutter_failure) == "shutter close failed"
+        assert shutter_failure.__notes__ == ["Cleanup action: close shutter"]
+    else:
+        raise AssertionError("expected cleanup failure group")
+
+    assert CleanupOnlyShutter.instance.enabled == [False, True, False]
+    assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
+
