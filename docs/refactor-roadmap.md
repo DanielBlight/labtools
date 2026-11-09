@@ -851,3 +851,13 @@ mirror, rotation-stage and cancellation behaviour are unchanged. This is an offl
 filesystem reliability correction, not optical-path, physical-safety, native-driver,
 operator or deployment acceptance.
 
+## Laser-anneal cancellation cleanup characterization (2026-11-09)
+
+An offline fake-device test now characterizes cancellation during the first point
+dwell. It verifies that the shutter command sequence is closed, open, closed; the
+result is stopped and incomplete with no completed point; and the mirror is returned
+to its configured home coordinates. No production code or hardware behaviour changed.
+This establishes the ordinary cancellation path only; injected cleanup failures,
+rotation-stage return, native drivers, optical-path safety and operator acceptance
+remain separate gates.
+
