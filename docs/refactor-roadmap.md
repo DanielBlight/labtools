@@ -951,3 +951,20 @@ and labelled note. The worker is called directly without a display, thread, hard
 or anneal execution. Signal type, dialog flow and production code are unchanged. This
 is not Qt rendering, operator, physical-hardware or deployment acceptance.
 
+## Anneal offline software lifecycle boundary (2026-11-09)
+
+The bounded anneal software-lifecycle sequence is complete for the current candidate.
+Offline evidence now covers collision-safe output allocation; cancellation; shutter,
+mirror, SC10, LabJack and rotation-stage cleanup; primary-versus-cleanup failure
+preservation; cleanup-only grouping; Qt-free operator formatting; and direct offscreen
+`AnnealWorker.failed(str)` signal validation. The worker validation uses installed
+PyQt6 directly without a window, event loop, QThread, anneal execution or hardware.
+
+No additional anneal micro-fix is justified from the available offline evidence.
+Remaining anneal gates require approved operating limits and optical-path procedure,
+native SDK/device execution, supervised physical cleanup and cancellation checks,
+operator dialog/workflow acceptance, and deployment evidence. These are not waived by
+the offline tests. The next coherent software checkpoint is the current-candidate
+expanded-R1 offline gate and consolidated failure/configuration triage, not another
+anneal wrapper or packaging task.
+
