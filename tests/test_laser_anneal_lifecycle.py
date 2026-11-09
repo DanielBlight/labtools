@@ -211,3 +211,55 @@ def test_stage_return_only_failure_raises_cleanup_group(monkeypatch, tmp_path):
 
     assert FailingReturnRotationStage.instance.moves == [35_000.0, 90_000.0]
 
+class FailingScanAndHomeMirror(FakeMirror):
+    def move(self, x_voltage, y_voltage):
+        self.moves.append((x_voltage, y_voltage))
+        if len(self.moves) == 2:
+            raise ValueError("scan move failed")
+        if len(self.moves) == 3:
+            raise RuntimeError("mirror home failed")
+
+
+class FailingCloseShutter(FakeShutter):
+    def set_enabled(self, enabled):
+        self.enabled.append(enabled)
+        if self.enabled == [False, True, False]:
+            raise RuntimeError("shutter close failed")
+
+
+def test_scan_failure_is_preserved_when_shutter_close_and_mirror_home_fail(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(laser_anneal, "LabJackU6", FakeLabJack)
+    monkeypatch.setattr(laser_anneal, "ScanningMirror", FailingScanAndHomeMirror)
+    monkeypatch.setattr(laser_anneal, "SC10", FailingCloseShutter)
+
+    config = laser_anneal.LaserAnnealConfig(
+        x_start_v=-1.0,
+        x_stop_v=1.0,
+        x_points=2,
+        y_start_v=2.0,
+        y_stop_v=2.0,
+        y_points=1,
+        point_dwell_s=0.0,
+        mirror_settle_s=0.0,
+        home_x_voltage_v=0.25,
+        home_y_voltage_v=-0.5,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+
+    try:
+        laser_anneal._run_laser_anneal_without_rotation_stage(config)
+    except ValueError as error:
+        assert str(error) == "scan move failed"
+        assert error.__notes__ == [
+            "Cleanup failed (close shutter): RuntimeError('shutter close failed')",
+            "Cleanup failed (return mirror home): RuntimeError('mirror home failed')",
+        ]
+    else:
+        raise AssertionError("expected scan move failure")
+
+    assert FailingCloseShutter.instance.enabled == [False, True, False]
+    assert FailingScanAndHomeMirror.instance.moves[-1] == (0.25, -0.5)
+

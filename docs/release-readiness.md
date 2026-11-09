@@ -447,3 +447,14 @@ The GUI still displays `str(exc)` only, so structured notes/groups are not prese
 in full to operators; GUI diagnostics, native drivers, physical safety and operator
 acceptance remain separate gates.
 
+## Laser-anneal inner cleanup contract (2026-11-09)
+
+The inner anneal now applies the shared `cleanup_actions` contract independently to
+shutter closure and mirror homing. A primary scan failure remains the raised exception;
+competing shutter-close and mirror-home failures are attached as labelled notes, and
+both cleanup actions are attempted. Successful command order remains shutter closed,
+shutter opened, shutter closed, then mirror home. Public APIs, coordinates, scan order
+and device commands are unchanged. Focused fake-device coverage establishes the
+competing-failure path only; native drivers, physical safety, optical-path policy and
+operator acceptance remain separate gates.
+

@@ -205,70 +205,79 @@ def _run_laser_anneal_without_rotation_stage(
             status("Initialising scanning mirror")
             mirror = ScanningMirror(labjack, dio_pin=config.mirror_dio_pin)
             status("Connecting to SC10")
-            with SC10(
-                port=config.sc10_port,
-                baud_rate=config.sc10_baud_rate,
-                timeout_s=config.sc10_timeout_s,
-            ) as shutter:
-                shutter.set_mode(SC10Mode.MANUAL)
-                shutter.set_enabled(False)
-                status("Moving mirror to first point")
-                first = next(_indices(config))
-                _, fy, fx = first
-                mirror.move(float(xv[fx]), float(yv[fy]))
-                if stop.wait(config.mirror_settle_s):
-                    stopped = True
-                try:
-                    if not stopped:
-                        status("Opening shutter")
-                        shutter.set_enabled(True)
-                        shutter_open = True
-                        status("Shutter open; scanning")
-                        last_emit = 0.0
-                        for p, yi, xi in _indices(config):
-                            if stop.is_set():
-                                stopped = True
-                                break
-                            x = float(xv[xi])
-                            y = float(yv[yi])
-                            mirror.move(x, y)
-                            if stop.wait(config.mirror_settle_s):
-                                stopped = True
-                                break
-                            if stop.wait(config.point_dwell_s):
-                                stopped = True
-                                break
-                            completed += 1
-                            elapsed = time.monotonic() - started
-                            update = AnnealProgress(
-                                completed,
-                                config.total_points,
-                                p + 1,
-                                config.passes,
-                                xi,
-                                yi,
-                                x,
-                                y,
-                                elapsed,
-                            )
-                            if writer:
-                                writer.writerow(
-                                    (completed, p + 1, yi, xi, x, y, elapsed)
+            def return_mirror_home() -> None:
+                status("Returning mirror home")
+                mirror.move(config.home_x_voltage_v, config.home_y_voltage_v)
+
+            with (
+                cleanup_actions(("return mirror home", return_mirror_home)),
+                SC10(
+                    port=config.sc10_port,
+                    baud_rate=config.sc10_baud_rate,
+                    timeout_s=config.sc10_timeout_s,
+                ) as shutter,
+            ):
+                    def close_shutter() -> None:
+                        nonlocal shutter_open
+                        status("Closing shutter")
+                        try:
+                            shutter.set_enabled(False)
+                        finally:
+                            shutter_open = False
+
+                    with cleanup_actions(("close shutter", close_shutter)):
+                        shutter.set_mode(SC10Mode.MANUAL)
+                        shutter.set_enabled(False)
+                        status("Moving mirror to first point")
+                        first = next(_indices(config))
+                        _, fy, fx = first
+                        mirror.move(float(xv[fx]), float(yv[fy]))
+                        if stop.wait(config.mirror_settle_s):
+                            stopped = True
+                        if not stopped:
+                            status("Opening shutter")
+                            shutter.set_enabled(True)
+                            shutter_open = True
+                            status("Shutter open; scanning")
+                            last_emit = 0.0
+                            for p, yi, xi in _indices(config):
+                                if stop.is_set():
+                                    stopped = True
+                                    break
+                                x = float(xv[xi])
+                                y = float(yv[yi])
+                                mirror.move(x, y)
+                                if stop.wait(config.mirror_settle_s):
+                                    stopped = True
+                                    break
+                                if stop.wait(config.point_dwell_s):
+                                    stopped = True
+                                    break
+                                completed += 1
+                                elapsed = time.monotonic() - started
+                                update = AnnealProgress(
+                                    completed,
+                                    config.total_points,
+                                    p + 1,
+                                    config.passes,
+                                    xi,
+                                    yi,
+                                    x,
+                                    y,
+                                    elapsed,
                                 )
-                                handle.flush()
-                            now = time.monotonic()
-                            if progress_callback and (
-                                now - last_emit >= config.gui_update_interval_s
-                                or completed == config.total_points
-                            ):
-                                progress_callback(update)
-                                last_emit = now
-                finally:
-                    status("Closing shutter")
-                    shutter.set_enabled(False)
-                    shutter_open = False
-            status("Returning mirror home")
-            mirror.move(config.home_x_voltage_v, config.home_y_voltage_v)
+                                if writer:
+                                    writer.writerow(
+                                        (completed, p + 1, yi, xi, x, y, elapsed)
+                                    )
+                                    handle.flush()
+                                now = time.monotonic()
+                                if progress_callback and (
+                                    now - last_emit >= config.gui_update_interval_s
+                                    or completed == config.total_points
+                                ):
+                                    progress_callback(update)
+                                    last_emit = now
     except Exception:
         logger.exception("Laser anneal failed")
         raise
