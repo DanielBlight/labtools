@@ -992,3 +992,28 @@ not provide native-driver, physical-hardware, approved-limit, optical-path, oper
 deployment or rollback acceptance, and it does not resolve deferred ID900 histogram
 requirements.
 
+## Consolidated expanded-R1 blocker triage (2026-11-09)
+
+This triage uses the current-candidate 801-test non-hardware pass at source HEAD
+`235f70ca3f17bbd425c085010b9c5a9c0070daf1`, the successful Ruff `--fix` gate
+with no modifications, the prior staged-wheel synthetic smoke evidence, and the
+current X0-X7 register. Each blocker is assigned to exactly one next-evidence category.
+
+| ID | Category | Closed evidence | Remaining acceptance criterion | Responsible next environment or input |
+| --- | --- | --- | --- | --- |
+| X0 scope/configuration | 2: maintainer configuration or scope input | Expanded scope includes spectroscopy, laser, IDQ, mapping and annealing; offline candidate is clean. | Approve exact devices/presets, laser and TEC limits, IDQ modes, mapping type, optical-path arrangements, concurrency/access rules and operator policy. | Maintainer plus laboratory safety/process owner; no code change. |
+| X1 ITC software | 3: native SDK or connected hardware | ITC finite/readback/lifecycle contracts and current non-hardware suite pass; previous 195-case targeted evidence remains accepted. | Confirm native-library loading, real readback semantics, enable/delay/timeout behaviour and GUI/device integration on the intended controller. | Windows instrument environment with reviewed Thorlabs SDK and supervised ITC4000 access. |
+| X2 IDQ | 6: deferred fixtures/specification unavailable | Counter/mapping paths have offline coverage; current suite passes without hardware. | Define required IDQ modes. If histogram mode is required, supply approved ID900 response fixtures/specification before replacing the deferred `eval(raw)` parser. | Maintainer/IDQ documentation or captured approved fixtures; parser work stays closed meanwhile. |
+| X3 mapping | 4: supervised physical or operator acceptance | Offline mapping, simulation, resume/cancellation/output preservation, collision-safe allocation and shared ownership tests pass. | Supervise real repeated runs, IDQ/LabJack sharing, cancellation/resume, output review, calibration and operator workflow. | Lab PC with approved map configuration and connected mapping hardware. |
+| X4 annealing | 4: supervised physical or operator acceptance | Offline anneal configuration, cancellation, cleanup, failure preservation and offscreen worker diagnostics pass. | Approve limits and optical path, then supervise physical shutter/mirror/stage/LabJack cleanup, cancellation and operator-dialog workflow. | Laboratory safety/process owner and lab PC with connected approved hardware. |
+| X5 broad software/build | 1: closed by current offline evidence | Ruff `--fix` passed without changes; 801 non-hardware tests passed with zero failures/errors/skips; staged wheel imports and deterministic synthetic map smoke passed. | Reopen only after a candidate-changing commit or a demonstrated packaging/offline regression. | Closed for current candidate; no immediate environment/input. |
+| X6 native/operator/physical | 4: supervised physical or operator acceptance | Offline contracts and synthetic/offscreen paths pass; no physical claim is inferred. | Execute the approved per-workflow native/physical acceptance matrix with recorded devices, limits, drivers, cleanup outcomes and operator sign-off. | Supervised laboratory session on the intended lab PC and instruments. |
+| X7 deployment | 5: deployment or rollback evidence | Protected wheel/staging design and historical staged-wheel smoke are documented. | Install the release candidate side-by-side on the lab PC, verify permissions/drivers/operator launch/data separation, rehearse rollback, and record the release decision. | Intended lab PC after X0 and X6 acceptance inputs are available. |
+
+X5 is the only blocker closed by current offline evidence. No concrete development-PC
+implementation gap remains after this triage. The next step is not another software
+micro-fix: obtain the X0 maintainer configuration record first, because it defines the
+modes, limits and procedures needed to make X1, X3, X4 and X6 physical acceptance
+finite and meaningful. X2 remains deferred without approved fixtures/specification;
+X7 follows physical/operator acceptance rather than preceding it.
+
