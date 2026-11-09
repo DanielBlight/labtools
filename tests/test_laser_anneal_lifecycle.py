@@ -370,3 +370,59 @@ def test_both_inner_cleanup_failures_are_reported(monkeypatch, tmp_path):
     assert CleanupOnlyShutter.instance.enabled == [False, True, False]
     assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
 
+class FailingCloseAndExitShutter(CleanupOnlyShutter):
+    fail_close = True
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        cleanup = RuntimeError("SC10 context exit failed")
+        if exc_value is None:
+            raise cleanup
+        exc_value.add_note(f"SC10 cleanup also failed: {cleanup!r}")
+        exc_value._sc10_cleanup_failures = (cleanup,)
+
+
+def test_sc10_exit_failure_preserves_shutter_cleanup_group_and_mirror_home(
+    monkeypatch, tmp_path
+):
+    CleanupOnlyMirror.fail_home = False
+    monkeypatch.setattr(laser_anneal, "LabJackU6", FakeLabJack)
+    monkeypatch.setattr(laser_anneal, "ScanningMirror", CleanupOnlyMirror)
+    monkeypatch.setattr(laser_anneal, "SC10", FailingCloseAndExitShutter)
+
+    config = laser_anneal.LaserAnnealConfig(
+        x_start_v=-1.0,
+        x_stop_v=1.0,
+        x_points=2,
+        y_start_v=2.0,
+        y_stop_v=2.0,
+        y_points=1,
+        point_dwell_s=0.0,
+        mirror_settle_s=0.0,
+        home_x_voltage_v=0.25,
+        home_y_voltage_v=-0.5,
+        output_root=tmp_path,
+        save_run_log=False,
+    )
+
+    try:
+        laser_anneal._run_laser_anneal_without_rotation_stage(config)
+    except ExceptionGroup as group:
+        assert str(group) == "Acquisition cleanup failed (1 sub-exception)"
+        assert group.__notes__ == [
+            "SC10 cleanup also failed: RuntimeError('SC10 context exit failed')"
+        ]
+        assert len(group.exceptions) == 1
+        shutter_failure = group.exceptions[0]
+        assert isinstance(shutter_failure, RuntimeError)
+        assert str(shutter_failure) == "shutter close failed"
+        assert shutter_failure.__notes__ == ["Cleanup action: close shutter"]
+        assert group._sc10_cleanup_failures == (
+            group._sc10_cleanup_failures[0],
+        )
+        assert str(group._sc10_cleanup_failures[0]) == "SC10 context exit failed"
+    else:
+        raise AssertionError("expected shutter cleanup failure group")
+
+    assert FailingCloseAndExitShutter.instance.enabled == [False, True, False]
+    assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
+

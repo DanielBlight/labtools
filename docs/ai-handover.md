@@ -794,3 +794,12 @@ attempted, with failures labelled `close shutter` and `return mirror home`. No
 production code or hardware behaviour changed. Native-driver, physical-safety,
 optical-path and operator acceptance remain separate gates.
 
+## Laser-anneal SC10 context-exit characterization (2026-11-09)
+
+An offline fake-device test now characterizes SC10 context-exit failure after an
+explicit shutter-close cleanup failure. The shutter cleanup `ExceptionGroup` remains
+the active exception, the SC10 exit failure is retained as an SC10 cleanup note and
+failure tuple, and mirror homing is still attempted. No production code or hardware
+behaviour changed. LabJack context-exit competition, native drivers, physical safety,
+optical-path policy and operator acceptance remain separate gates.
+
