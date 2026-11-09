@@ -968,3 +968,27 @@ the offline tests. The next coherent software checkpoint is the current-candidat
 expanded-R1 offline gate and consolidated failure/configuration triage, not another
 anneal wrapper or packaging task.
 
+## Current-candidate expanded-R1 offline validation (2026-11-09)
+
+At HEAD `235f70ca3f17bbd425c085010b9c5a9c0070daf1` on
+`feature/shared-instrument-session`, the clean development checkout passed:
+
+- `uv run --no-sync ruff check --fix src tests`: exit 0, `All checks passed!`,
+  with no repository modifications.
+- `uv run --no-sync pytest -q -ra -m "not hardware" --junitxml=<external>/pytest.xml tests`:
+  801 passed, 0 failed, 0 errors, 0 skipped, 16 warnings in 34.31 s.
+
+Validation used `QT_QPA_PLATFORM=offscreen`, `MPLBACKEND=Agg`, and did not grant
+`--run-hardware`. The JUnit record reports 801 tests, zero failures/errors/skips,
+and includes the anneal worker diagnostic-signal case. Branch, HEAD and clean status
+were unchanged after validation. Raw Ruff, pytest, JUnit and repository-state evidence
+was stored outside the repository in
+`labtools-offline-validation-20261109-175921`.
+
+The 16 warnings are the existing Pydantic v2 `json_encoders` deprecation emitted
+while importing `tests/test_alignment_gui.py`; they are not test skips or failures.
+This checkpoint establishes current-candidate offline software evidence only. It does
+not provide native-driver, physical-hardware, approved-limit, optical-path, operator,
+deployment or rollback acceptance, and it does not resolve deferred ID900 histogram
+requirements.
+
