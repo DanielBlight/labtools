@@ -131,10 +131,20 @@ def _indices(c):
                 yield p, yi, xi
 
 
-def _new_dir(root):
-    p = root / datetime.now(UTC).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
-    p.mkdir(parents=True, exist_ok=False)
-    return p
+def _new_dir(root: Path) -> Path:
+    """Atomically allocate a timestamped directory without reusing a prior run."""
+    root = Path(root)
+    stem = datetime.now(UTC).astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+    root.mkdir(parents=True, exist_ok=True)
+    for index in range(10_000):
+        suffix = "" if index == 0 else f"-{index:03d}"
+        path = root / f"{stem}{suffix}"
+        try:
+            path.mkdir(exist_ok=False)
+        except FileExistsError:
+            continue
+        return path
+    raise RuntimeError(f"Could not allocate a unique output directory under {root}")
 
 
 def _run_laser_anneal_without_rotation_stage(

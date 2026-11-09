@@ -841,3 +841,13 @@ selected directory; file schemas, measurement facades, hardware behaviour and ba
 selection are unchanged. This is an offline filesystem reliability correction, not
 physical, native-driver, operator or deployment acceptance.
 
+## Collision-safe laser-anneal output allocation (2026-11-09)
+
+New logged anneal runs now allocate their timestamp directory atomically. If a run
+already owns the same second-resolution name, later runs retain the historical base
+name format and use deterministic `-001`, `-002`, and subsequent suffixes rather than
+failing or reusing an existing directory. Run-log schemas, scan ordering, shutter,
+mirror, rotation-stage and cancellation behaviour are unchanged. This is an offline
+filesystem reliability correction, not optical-path, physical-safety, native-driver,
+operator or deployment acceptance.
+

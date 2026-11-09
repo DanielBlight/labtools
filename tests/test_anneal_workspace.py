@@ -71,3 +71,29 @@ def test_workspace_does_not_overwrite(tmp_path):
     initialise_workspace(tmp_path)
     with pytest.raises(FileExistsError):
         initialise_workspace(tmp_path)
+
+def test_anneal_output_directory_collision_allocates_unique_suffix(
+    tmp_path, monkeypatch
+):
+    from datetime import UTC, datetime
+
+    import labtools.acquisition.laser_anneal as anneal_module
+
+    fixed = datetime(2026, 11, 9, 16, 45, 0, tzinfo=UTC)
+
+    class FixedDatetime:
+        @classmethod
+        def now(cls, tz):
+            return fixed
+
+    monkeypatch.setattr(anneal_module, "datetime", FixedDatetime)
+
+    first = anneal_module._new_dir(tmp_path)
+    second = anneal_module._new_dir(tmp_path)
+    third = anneal_module._new_dir(tmp_path)
+
+    assert first.name == "2026-11-09_16-45-00"
+    assert second.name == "2026-11-09_16-45-00-001"
+    assert third.name == "2026-11-09_16-45-00-002"
+    assert first.is_dir() and second.is_dir() and third.is_dir()
+
