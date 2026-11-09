@@ -810,3 +810,24 @@ superseded for this checkpoint by the linked tooling follow-up only.
 No production code, dependencies, device behavior or ID900 deferral is changed.
 Cleanup and archived-backup restoration remain separate from this checkpoint.
 Build/staging remains blocked pending reviewed build-only prerequisites.
+
+## Packaging and staged-wheel simulation checkpoint (2026-11-09)
+
+At source HEAD `6074fdad670ed0099c44bbab44c5049aee537c9a`, a clean Git
+archive was built outside the repository with `setuptools 84.2.1` in a separate
+build environment. The result was `lab_tools-0.1.0-py3-none-any.whl`. The wheel
+was installed non-editably into a separate staging environment, and core
+`labtools`, `labtools.measurements`, and `labtools.processing.spectrum` imports
+resolved from that staged installation.
+
+The staged wheel then completed the existing deterministic intensity-map
+simulation with `--points 5 --seed 12345`: all 25 synthetic points completed and
+the output was explicitly labelled `SYNTHETIC DATA ONLY`. Output, build and
+staging artifacts remained outside the repository. No hardware was accessed and
+the acquisition `.venv` was not modified.
+
+Third-party dependencies were inherited read-only from the acquisition `.venv`.
+This closes the immediate wheel-build, staged-install, staged-import and synthetic
+smoke-test gap only. It is not clean-room dependency, native-SDK, permissions,
+operator, physical-hardware, rollback, lab-PC deployment or release acceptance.
+
