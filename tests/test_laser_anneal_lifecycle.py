@@ -372,13 +372,10 @@ def test_both_inner_cleanup_failures_are_reported(monkeypatch, tmp_path):
 
 class FailingCloseAndExitShutter(CleanupOnlyShutter):
     fail_close = True
+    __exit__ = laser_anneal.SC10.__exit__
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        cleanup = RuntimeError("SC10 context exit failed")
-        if exc_value is None:
-            raise cleanup
-        exc_value.add_note(f"SC10 cleanup also failed: {cleanup!r}")
-        exc_value._sc10_cleanup_failures = (cleanup,)
+    def close(self):
+        raise RuntimeError("SC10 context exit failed")
 
 
 def test_sc10_exit_failure_preserves_shutter_cleanup_group_and_mirror_home(
@@ -416,9 +413,8 @@ def test_sc10_exit_failure_preserves_shutter_cleanup_group_and_mirror_home(
         assert isinstance(shutter_failure, RuntimeError)
         assert str(shutter_failure) == "shutter close failed"
         assert shutter_failure.__notes__ == ["Cleanup action: close shutter"]
-        assert group._sc10_cleanup_failures == (
-            group._sc10_cleanup_failures[0],
-        )
+        assert len(group._sc10_cleanup_failures) == 1
+        assert isinstance(group._sc10_cleanup_failures[0], RuntimeError)
         assert str(group._sc10_cleanup_failures[0]) == "SC10 context exit failed"
     else:
         raise AssertionError("expected shutter cleanup failure group")
@@ -427,12 +423,10 @@ def test_sc10_exit_failure_preserves_shutter_cleanup_group_and_mirror_home(
     assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
 
 class FailingExitLabJack(FakeLabJack):
-    def __exit__(self, exc_type, exc_value, traceback):
-        cleanup = OSError("LabJack close failed")
-        if exc_value is None:
-            raise cleanup
-        exc_value.add_note(f"LabJack cleanup also failed: {cleanup!r}")
-        exc_value._labjack_cleanup_failures = (cleanup,)
+    __exit__ = laser_anneal.LabJackU6.__exit__
+
+    def close(self):
+        raise OSError("LabJack close failed")
 
 
 def test_labjack_exit_preserves_mirror_home_failure(monkeypatch, tmp_path):
@@ -474,4 +468,3 @@ def test_labjack_exit_preserves_mirror_home_failure(monkeypatch, tmp_path):
 
     assert CleanupOnlyShutter.instance.enabled == [False, True, False]
     assert CleanupOnlyMirror.instance.moves[-1] == (0.25, -0.5)
-

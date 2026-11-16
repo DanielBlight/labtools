@@ -898,3 +898,40 @@ modes, limits and procedures needed to make X1, X3, X4 and X6 physical acceptanc
 finite and meaningful. X2 remains deferred without approved fixtures/specification;
 X7 follows physical/operator acceptance rather than preceding it.
 
+## Consolidated anneal cleanup review: superseding clarification
+
+This section supersedes earlier statements that failure-path hardware behaviour was
+unchanged or that all development-PC lifecycle gaps were closed. Successful command
+ordering is preserved, but earlier cleanup changes introduced mirror-home attempts
+after shutter-close failure and SC10 setup/exit failure. That current behaviour is
+retained in this correction, not approved as a physical safety policy.
+
+Required maintainer decision before connected annealing: should mirror homing and
+optional rotation-stage return proceed when shutter closure cannot be confirmed,
+and what should happen if SC10 setup fails? Record the approved response for each
+case with the optical-path owner. No new motion policy or limits are selected here.
+
+The correction prevents status-reporting exceptions from blocking device cleanup.
+Inner reporting failures are attached as notes to an active primary error, or logged
+on otherwise successful runs. Outer stage-status failures are logged. Progress
+callback exceptions remain acquisition failures. Failed shutter close no longer
+clears the possibly-open flag; failed open is treated as uncertain until a successful
+close command. This is command-state bookkeeping, not physical closure verification.
+Run-log close failure no longer replaces an active scan/cleanup error; close-only
+failure propagates. Final status distinguishes failure and uncertain shutter state.
+
+Regression tests exercise production SC10/LabJack context-exit methods with fake
+resources, exception identity, cross-device ordering, reporting failures and log
+finalization. Existing copied exit implementations and weak tuple assertions are
+replaced or strengthened. Local reconstructed-source validation: 42 focused cases
+passed using import-only u6/serial stubs because those packages are absent in the
+review sandbox. This is not Windows/native validation. Ruff is unavailable there;
+run ruff check --fix and focused tests in the existing development environment,
+then the complete non-hardware gate once for this coherent production-changing batch.
+
+Historical evidence remains immutable: 801 non-hardware passes and unchanged Ruff
+state belong to source HEAD 235f70ca3f17bbd425c085010b9c5a9c0070daf1.
+Wheel/staging evidence belongs to 6074fdad670ed0099c44bbab44c5049aee537c9a,
+not this corrected source. Current-candidate offline acceptance must be refreshed;
+packaging is deferred until the next release candidate. No native, physical,
+operator, deployment or safety acceptance is established.

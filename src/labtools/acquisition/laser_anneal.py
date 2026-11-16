@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -158,7 +159,16 @@ def _run_laser_anneal_without_rotation_stage(
     """Run an anneal; stop requests interrupt dwell and are checked during setup."""
     config.validate()
     stop = stop_event or Event()
-    status = status_callback or (lambda _x: None)
+    reporting_failures: list[Exception] = []
+
+    def status(message: str) -> None:
+        if status_callback is None:
+            return
+        try:
+            status_callback(message)
+        except Exception as error:  # noqa: BLE001 - reporting must not prevent cleanup
+            reporting_failures.append(error)
+
     xv = np.linspace(config.x_start_v, config.x_stop_v, config.x_points)
     yv = np.linspace(config.y_start_v, config.y_stop_v, config.y_points)
     out = _new_dir(config.output_root) if config.save_run_log else None
@@ -217,74 +227,98 @@ def _run_laser_anneal_without_rotation_stage(
                     timeout_s=config.sc10_timeout_s,
                 ) as shutter,
             ):
-                    def close_shutter() -> None:
-                        nonlocal shutter_open
-                        status("Closing shutter")
-                        try:
-                            shutter.set_enabled(False)
-                        finally:
-                            shutter_open = False
+                def close_shutter() -> None:
+                    nonlocal shutter_open
+                    status("Closing shutter")
+                    shutter.set_enabled(False)
+                    shutter_open = False
 
-                    with cleanup_actions(("close shutter", close_shutter)):
-                        shutter.set_mode(SC10Mode.MANUAL)
-                        shutter.set_enabled(False)
-                        status("Moving mirror to first point")
-                        first = next(_indices(config))
-                        _, fy, fx = first
-                        mirror.move(float(xv[fx]), float(yv[fy]))
-                        if stop.wait(config.mirror_settle_s):
-                            stopped = True
-                        if not stopped:
-                            status("Opening shutter")
-                            shutter.set_enabled(True)
-                            shutter_open = True
-                            status("Shutter open; scanning")
-                            last_emit = 0.0
-                            for p, yi, xi in _indices(config):
-                                if stop.is_set():
-                                    stopped = True
-                                    break
-                                x = float(xv[xi])
-                                y = float(yv[yi])
-                                mirror.move(x, y)
-                                if stop.wait(config.mirror_settle_s):
-                                    stopped = True
-                                    break
-                                if stop.wait(config.point_dwell_s):
-                                    stopped = True
-                                    break
-                                completed += 1
-                                elapsed = time.monotonic() - started
-                                update = AnnealProgress(
-                                    completed,
-                                    config.total_points,
-                                    p + 1,
-                                    config.passes,
-                                    xi,
-                                    yi,
-                                    x,
-                                    y,
-                                    elapsed,
+                with cleanup_actions(("close shutter", close_shutter)):
+                    shutter_open = True  # state is unknown until a close command succeeds
+                    shutter.set_mode(SC10Mode.MANUAL)
+                    shutter.set_enabled(False)
+                    shutter_open = False
+                    status("Moving mirror to first point")
+                    first = next(_indices(config))
+                    _, fy, fx = first
+                    mirror.move(float(xv[fx]), float(yv[fy]))
+                    if stop.wait(config.mirror_settle_s):
+                        stopped = True
+                    if not stopped:
+                        status("Opening shutter")
+                        # A failed enable command may still have reached the device.
+                        shutter_open = True
+                        shutter.set_enabled(True)
+                        status("Shutter open; scanning")
+                        last_emit = 0.0
+                        for p, yi, xi in _indices(config):
+                            if stop.is_set():
+                                stopped = True
+                                break
+                            x = float(xv[xi])
+                            y = float(yv[yi])
+                            mirror.move(x, y)
+                            if stop.wait(config.mirror_settle_s):
+                                stopped = True
+                                break
+                            if stop.wait(config.point_dwell_s):
+                                stopped = True
+                                break
+                            completed += 1
+                            elapsed = time.monotonic() - started
+                            update = AnnealProgress(
+                                completed,
+                                config.total_points,
+                                p + 1,
+                                config.passes,
+                                xi,
+                                yi,
+                                x,
+                                y,
+                                elapsed,
+                            )
+                            if writer:
+                                writer.writerow(
+                                    (completed, p + 1, yi, xi, x, y, elapsed)
                                 )
-                                if writer:
-                                    writer.writerow(
-                                        (completed, p + 1, yi, xi, x, y, elapsed)
-                                    )
-                                    handle.flush()
-                                now = time.monotonic()
-                                if progress_callback and (
-                                    now - last_emit >= config.gui_update_interval_s
-                                    or completed == config.total_points
-                                ):
-                                    progress_callback(update)
-                                    last_emit = now
+                                handle.flush()
+                            now = time.monotonic()
+                            if progress_callback and (
+                                now - last_emit >= config.gui_update_interval_s
+                                or completed == config.total_points
+                            ):
+                                progress_callback(update)
+                                last_emit = now
     except Exception:
         logger.exception("Laser anneal failed")
         raise
     finally:
-        if handle:
-            handle.close()
-        status("Finished" if not shutter_open else "Cleanup completed")
+        primary = sys.exception()
+        log_close_failed = False
+        try:
+            if handle:
+                handle.close()
+        except Exception as error:
+            log_close_failed = True
+            if primary is None:
+                raise
+            primary.add_note(f"Cleanup failed (close run log): {error!r}")
+        finally:
+            if shutter_open:
+                status("Cleanup incomplete: shutter state uncertain")
+            elif primary is not None or log_close_failed:
+                status("Failed; cleanup commands attempted")
+            else:
+                status("Finished")
+            if primary is not None:
+                for error in reporting_failures:
+                    primary.add_note(f"Status callback failed: {error!r}")
+            elif reporting_failures:
+                logger.warning(
+                    "Anneal status callback failed {} time(s): {!r}",
+                    len(reporting_failures),
+                    reporting_failures[-1],
+                )
     elapsed = time.monotonic() - started
     return LaserAnnealResult(
         completed == config.total_points,
@@ -306,7 +340,14 @@ def run_laser_anneal(
     """Select anneal power, run the scan, then optionally return the stage."""
     validate_run_config(config)
     config.validate()
-    status = status_callback or (lambda _message: None)
+    def status(message: str) -> None:
+        if status_callback is None:
+            return
+        try:
+            status_callback(message)
+        except Exception as error:  # noqa: BLE001 - reporting must not prevent cleanup
+            logger.warning("Anneal status callback failed: {!r}", error)
+
     status("Connecting to rotation stage")
     with KinesisRotationStage(
         move_timeout_s=config.rotation_stage_timeout_s,

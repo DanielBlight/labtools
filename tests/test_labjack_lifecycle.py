@@ -48,6 +48,7 @@ def test_labjack_startup_and_idempotent_close(monkeypatch, failure):
 
 def test_context_body_failure_survives_close_failure(monkeypatch):
     calls = []
+    cleanup = OSError("close failed")
 
     class Fake:
         def getCalibrationData(self):
@@ -55,7 +56,7 @@ def test_context_body_failure_survives_close_failure(monkeypatch):
 
         def close(self):
             calls.append("close")
-            raise OSError("close failed")
+            raise cleanup
 
     monkeypatch.setitem(sys.modules, "u6", SimpleNamespace(U6=Fake))
     path = Path(__file__).resolve().parents[1] / "src/labtools/devices/labjack_u6.py"
@@ -73,12 +74,10 @@ def test_context_body_failure_survives_close_failure(monkeypatch):
         assert error.__notes__ == [
             "LabJack cleanup also failed: OSError('close failed')"
         ]
-        assert error._labjack_cleanup_failures == (
-            error._labjack_cleanup_failures[0],
-        )
+        assert len(error._labjack_cleanup_failures) == 1
+        assert error._labjack_cleanup_failures[0] is cleanup
         assert str(error._labjack_cleanup_failures[0]) == "close failed"
     else:
         raise AssertionError("expected body failure")
 
     assert calls == ["calibration", "close"]
-
