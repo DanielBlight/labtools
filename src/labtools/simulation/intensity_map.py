@@ -11,21 +11,23 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gui", action="store_true")
     parser.add_argument(
-        "--output", type=Path, default=Path.home() / "Labtools Simulation"
+        "--output", type=Path, default=None
     )
-    parser.add_argument("--points", type=int, default=15)
+    parser.add_argument("--points", type=int, default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--realtime", action="store_true")
     parser.add_argument("--stop-after", type=int)
     parser.add_argument("--resume", type=Path)
     args = parser.parse_args(argv)
     if (
-        args.points < 2
+        (args.points is not None and args.points < 2)
         or args.seed < 0
         or (args.stop_after is not None and args.stop_after < 1)
     ):
         parser.error("points >= 2, seed >= 0 and stop-after >= 1 are required")
     if args.gui:
+        if args.resume is not None or args.stop_after is not None:
+            parser.error("With --gui, use the window's Resume and Stop buttons instead.")
         import sys
 
         from PyQt6.QtGui import QFont
@@ -35,11 +37,16 @@ def main(argv=None):
 
         app = QApplication([sys.argv[0]])
         app.setFont(QFont("Segoe UI", 9))
-        window = IntensityMapWindow()
-        window.simulation_mode.setChecked(True)
-        window.output_root.setText(str(args.output))
-        window.x_points.setValue(args.points)
-        window.y_points.setValue(args.points)
+        window = IntensityMapWindow(
+            simulation_only=True,
+            simulation_seed=args.seed,
+            simulation_realtime=args.realtime,
+        )
+        if args.output is not None:
+            window.output_root.setText(str(args.output))
+        if args.points is not None:
+            window.x_points.setValue(args.points)
+            window.y_points.setValue(args.points)
         window.show()
         raise SystemExit(app.exec())
     from labtools.acquisition.intensity_map import (
@@ -48,6 +55,8 @@ def main(argv=None):
         config_from_resume_directory,
     )
 
+    points = args.points if args.points is not None else 15
+    output = args.output if args.output is not None else Path.home() / "Labtools Simulation"
     if args.resume:
         config = config_from_resume_directory(args.resume)
         if config.backend != "simulation":
@@ -59,16 +68,16 @@ def main(argv=None):
         config = IntensityMapConfig(
             x_start_v=-1.0,
             x_stop_v=1.0,
-            x_points=args.points,
+            x_points=points,
             y_start_v=-1.0,
             y_stop_v=1.0,
-            y_points=args.points,
+            y_points=points,
             integration_time_s=0.02,
             settle_time_s=0.0,
             channels=(1, 2),
             channel_thresholds_v=(0.1, 0.1),
             channel_edges=("rising", "rising"),
-            output_root=args.output,
+            output_root=output,
             backend="simulation",
             simulation_seed=args.seed,
             simulation_realtime=args.realtime,

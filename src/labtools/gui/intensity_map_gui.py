@@ -66,7 +66,10 @@ from labtools.gui.map_controller import MapController  # compatibility export
 class IntensityMapWindow(QMainWindow):
     """Main window for live count maps, resume, and laser control."""
 
-    def __init__(self, *, acquisition=None, shared_mode=False) -> None:
+    def __init__(
+        self, *, acquisition=None, shared_mode=False, simulation_only=False,
+        simulation_seed=0, simulation_realtime=False,
+    ) -> None:
 
         super().__init__()
 
@@ -78,6 +81,9 @@ class IntensityMapWindow(QMainWindow):
 
         self.map_controller = MapController(self, acquisition=acquisition)
         self._shared_mode = bool(shared_mode)
+        self._simulation_only = bool(simulation_only)
+        self._simulation_seed = simulation_seed
+        self._simulation_realtime = simulation_realtime
         self.map_controller.progress.connect(self._on_progress)
         self.map_controller.finished.connect(self._on_finished)
         self.map_controller.failed.connect(self._on_failed)
@@ -269,6 +275,12 @@ class IntensityMapWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.simulation_banner)
         self.simulation_banner.hide()
         self.simulation_mode.toggled.connect(self._simulation_changed)
+        if self._simulation_only:
+            saved_output = self.output_root.text()
+            self.simulation_mode.setChecked(True)
+            self.output_root.setText(saved_output)
+            self.simulation_mode.setEnabled(False)
+            self.simulation_mode.setToolTip("This offline launcher cannot select real hardware.")
 
     def _apply_application_style(self) -> None:
 
@@ -1066,10 +1078,18 @@ class IntensityMapWindow(QMainWindow):
             serpentine=self.serpentine.isChecked(),
             output_root=Path(self.output_root.text().strip()),
             save_results=self.save_results.isChecked(),
-            backend="simulation" if self.simulation_mode.isChecked() else "real",
+            backend=(
+                "simulation"
+                if self._simulation_only or self.simulation_mode.isChecked()
+                else "real"
+            ),
+            simulation_seed=self._simulation_seed,
+            simulation_realtime=self._simulation_realtime,
         )
 
     def _apply_config(self, config: IntensityMapConfig) -> None:
+        self._simulation_seed = config.simulation_seed
+        self._simulation_realtime = config.simulation_realtime
 
         for control, value in (
             (self.x_start, config.x_start_v),
@@ -1292,7 +1312,7 @@ class IntensityMapWindow(QMainWindow):
 
     @pyqtSlot()
     def _cleanup_worker(self) -> None:
-        self.simulation_mode.setEnabled(True)
+        self.simulation_mode.setEnabled(not self._simulation_only)
         self.start_button.setEnabled(True)
         self.resume_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -1522,7 +1542,10 @@ class IntensityMapWindow(QMainWindow):
         """Restore widget preferences without connecting or applying hardware settings."""
         from PyQt6.QtCore import QSettings
 
-        self._map_preferences = QSettings("labtools", "IntensityMap")
+        settings_name = "IntensityMapSimulation" if self._simulation_only else "IntensityMap"
+        self._map_preferences = QSettings("labtools", settings_name)
+        if self._simulation_only:
+            self.output_root.setText(str(Path.home() / "Labtools Simulation"))
         widgets = self._map_preference_widgets()
         blocked = [(widget, widget.blockSignals(True)) for widget in widgets.values()]
         try:
@@ -1651,6 +1674,12 @@ class IntensityMapWindow(QMainWindow):
 
     def _simulation_changed(self, enabled):
         """Choose backend explicitly, never while a session owns hardware."""
+        if self._simulation_only and not enabled:
+            previous = self.simulation_mode.blockSignals(True)
+            self.simulation_mode.setChecked(True)
+            self.simulation_mode.blockSignals(previous)
+            self.set_status("SIMULATION only: real hardware is unavailable in this window.")
+            return
         if self._thread is not None or self.laser is not None:
             previous = self.simulation_mode.blockSignals(True)
             self.simulation_mode.setChecked(not enabled)
