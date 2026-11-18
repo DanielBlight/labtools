@@ -609,3 +609,33 @@ Wheel/staging evidence belongs to 6074fdad670ed0099c44bbab44c5049aee537c9a,
 not this corrected source. Current-candidate offline acceptance must be refreshed;
 packaging is deferred until the next release candidate. No native, physical,
 operator, deployment or safety acceptance is established.
+
+## Maintainer-selected anneal startup and cleanup policy (2026-11-16)
+
+Maintainer decisions: attempt mirror homing after shutter-close failure; attempt
+configured rotation-stage return despite uncertain shutter state; SC10 connection/setup
+failure before motion must raise without mirror or stage motion. These supersede the
+previous pending-policy handoff, not physical-safety or connected-device acceptance.
+
+The public run_laser_anneal entry now connects SC10, selects manual mode and issues
+initial disable before constructing the rotation stage or LabJack/mirror. Failure of
+SC10 construction, context entry, mode selection or initial disable propagates without
+motion-device construction or motion. The same shutter connection is retained for the
+scan; this is not a separate open/close preflight. Initial disable success is command
+readiness, not independently verified physical closure.
+
+The private scan helper accepts an optional already-prepared shutter. Direct private
+helper calls retain their standalone lifecycle; the no-startup-motion contract is for
+the public entry point. The scan still explicitly closes the shutter, homes the mirror,
+then closes LabJack and attempts configured stage return. SC10 connection teardown now
+occurs last, after stage teardown; the explicit shutter-close command remains before
+mirror homing and stage return. return_rotation_stage=False remains respected.
+
+Fake-device tests cover all four SC10 startup failures, connection reuse, successful
+cross-device order, competing scan/close failure with homing and stage return, and
+disabled stage return. Sandbox focused selection: 50 passed in 18.80s, using import-only
+u6/serial stubs in the launcher, not the delivered tests. Ruff and full Windows/native
+validation were not run in the sandbox. Run focused Windows validation for this batch;
+retain the prior user-reported full non-hardware pass for 52e158a without invented
+counts. Historical 801-test evidence belongs to 235f70ca..., and wheel/staging evidence
+to 6074fdad..., not this changed candidate. No hardware or packaging was executed.

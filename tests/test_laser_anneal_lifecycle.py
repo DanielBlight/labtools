@@ -106,6 +106,7 @@ class FakeRotationStage:
 
 
 def test_rotation_stage_returns_after_inner_anneal_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(laser_anneal, "SC10", FakeShutter)
     monkeypatch.setattr(laser_anneal, "KinesisRotationStage", FakeRotationStage)
 
     def fail_inner(*_args, **_kwargs):
@@ -145,6 +146,7 @@ class FailingReturnRotationStage(FakeRotationStage):
 def test_inner_failure_is_preserved_when_stage_return_also_fails(
     monkeypatch, tmp_path
 ):
+    monkeypatch.setattr(laser_anneal, "SC10", FakeShutter)
     monkeypatch.setattr(
         laser_anneal, "KinesisRotationStage", FailingReturnRotationStage
     )
@@ -179,6 +181,7 @@ def test_inner_failure_is_preserved_when_stage_return_also_fails(
 
 
 def test_stage_return_only_failure_raises_cleanup_group(monkeypatch, tmp_path):
+    monkeypatch.setattr(laser_anneal, "SC10", FakeShutter)
     monkeypatch.setattr(
         laser_anneal, "KinesisRotationStage", FailingReturnRotationStage
     )

@@ -7,6 +7,7 @@ import json
 import sys
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -155,6 +156,7 @@ def _run_laser_anneal_without_rotation_stage(
     stop_event: Event | None = None,
     progress_callback: ProgressCallback | None = None,
     status_callback: StatusCallback | None = None,
+    _prepared_shutter: SC10 | None = None,
 ) -> LaserAnnealResult:
     """Run an anneal; stop requests interrupt dwell and are checked during setup."""
     config.validate()
@@ -221,10 +223,14 @@ def _run_laser_anneal_without_rotation_stage(
 
             with (
                 cleanup_actions(("return mirror home", return_mirror_home)),
-                SC10(
-                    port=config.sc10_port,
-                    baud_rate=config.sc10_baud_rate,
-                    timeout_s=config.sc10_timeout_s,
+                (
+                    SC10(
+                        port=config.sc10_port,
+                        baud_rate=config.sc10_baud_rate,
+                        timeout_s=config.sc10_timeout_s,
+                    )
+                    if _prepared_shutter is None
+                    else nullcontext(_prepared_shutter)
                 ) as shutter,
             ):
                 def close_shutter() -> None:
@@ -234,9 +240,10 @@ def _run_laser_anneal_without_rotation_stage(
                     shutter_open = False
 
                 with cleanup_actions(("close shutter", close_shutter)):
-                    shutter_open = True  # state is unknown until a close command succeeds
-                    shutter.set_mode(SC10Mode.MANUAL)
-                    shutter.set_enabled(False)
+                    if _prepared_shutter is None:
+                        shutter_open = True  # unknown until a close command succeeds
+                        shutter.set_mode(SC10Mode.MANUAL)
+                        shutter.set_enabled(False)
                     shutter_open = False
                     status("Moving mirror to first point")
                     first = next(_indices(config))
@@ -348,31 +355,42 @@ def run_laser_anneal(
         except Exception as error:  # noqa: BLE001 - reporting must not prevent cleanup
             logger.warning("Anneal status callback failed: {!r}", error)
 
-    status("Connecting to rotation stage")
-    with KinesisRotationStage(
-        move_timeout_s=config.rotation_stage_timeout_s,
-    ) as rotation_stage:
-        status(
-            "Moving rotation stage to anneal coordinate "
-            f"{config.anneal_rotation_coordinate:g}"
-        )
-        rotation_stage.move_to(config.anneal_rotation_coordinate)
-        def return_rotation_stage() -> None:
+    # Establish shutter readiness before constructing or moving motion devices.
+    # Keep this same connection for the scan; a separate preflight would race.
+    status("Connecting to SC10")
+    with SC10(
+        port=config.sc10_port,
+        baud_rate=config.sc10_baud_rate,
+        timeout_s=config.sc10_timeout_s,
+    ) as shutter:
+        shutter.set_mode(SC10Mode.MANUAL)
+        shutter.set_enabled(False)
+        status("Connecting to rotation stage")
+        with KinesisRotationStage(
+            move_timeout_s=config.rotation_stage_timeout_s,
+        ) as rotation_stage:
             status(
-                "Moving rotation stage to return coordinate "
-                f"{config.return_rotation_coordinate:g}"
+                "Moving rotation stage to anneal coordinate "
+                f"{config.anneal_rotation_coordinate:g}"
             )
-            rotation_stage.move_to(config.return_rotation_coordinate)
+            rotation_stage.move_to(config.anneal_rotation_coordinate)
+            def return_rotation_stage() -> None:
+                status(
+                    "Moving rotation stage to return coordinate "
+                    f"{config.return_rotation_coordinate:g}"
+                )
+                rotation_stage.move_to(config.return_rotation_coordinate)
 
-        cleanup = (
-            (("return rotation stage", return_rotation_stage),)
-            if config.return_rotation_stage
-            else ()
-        )
-        with cleanup_actions(*cleanup):
-            return _run_laser_anneal_without_rotation_stage(
-                config,
-                stop_event=stop_event,
-                progress_callback=progress_callback,
-                status_callback=status_callback,
+            cleanup = (
+                (("return rotation stage", return_rotation_stage),)
+                if config.return_rotation_stage
+                else ()
             )
+            with cleanup_actions(*cleanup):
+                return _run_laser_anneal_without_rotation_stage(
+                    config,
+                    stop_event=stop_event,
+                    progress_callback=progress_callback,
+                    status_callback=status_callback,
+                    _prepared_shutter=shutter,
+                )

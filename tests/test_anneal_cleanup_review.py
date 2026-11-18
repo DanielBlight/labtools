@@ -165,6 +165,10 @@ def test_log_close_failure_does_not_replace_primary(rig, monkeypatch, scan_fails
 
 
 def test_outer_status_failure_cannot_prevent_stage_return(monkeypatch):
+    from test_laser_anneal_lifecycle import FakeShutter
+
+    monkeypatch.setattr(anneal, "SC10", FakeShutter)
+
     events = []
     result = object()
 
