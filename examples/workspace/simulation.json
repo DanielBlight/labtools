@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "configuration_id": "toy-scene-v1",
+  "backend": "simulation",
+  "resources": [
+    "simulation-optical-path"
+  ],
+  "map_resources": [
+    "simulation-optical-path"
+  ],
+  "spectrum_resources": [
+    "simulation-optical-path"
+  ],
+  "simulation_seed": 0,
+  "simulation_realtime": true
+}

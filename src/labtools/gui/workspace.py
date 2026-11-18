@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from labtools.config.workspace import WorkspaceConfig
 from labtools.gui.workspace_panels import OwnedMapPanel, OwnedSpectrumPanel
 from labtools.simulation.ownership import WorkspaceOwnership
 from labtools.simulation.workspace import (
@@ -30,8 +31,13 @@ from labtools.simulation.workspace import (
 class SimulationWorkspace(QMainWindow):
     """Reuse both complete workflows with one navigation and cooperative Stop all."""
 
-    def __init__(self, *, output_root: Path):
+    def __init__(self, *, output_root: Path, config=None, map_acquisition=None, spectrum_service=None):
+        config = config if config is not None else WorkspaceConfig()
+        config.validate()
+        if map_acquisition is not None and not callable(map_acquisition):
+            raise ValueError("map_acquisition must be callable")
         super().__init__()
+        self.config = config
         self.setWindowTitle("Labtools Workspace - SIMULATION ONLY")
         self.resize(1500, 1000)
         central = QWidget(self)
@@ -42,6 +48,7 @@ class SimulationWorkspace(QMainWindow):
         banner.setWordWrap(True)
         layout.addWidget(banner)
         self.output_root = Path(output_root).expanduser().resolve()
+        layout.addWidget(QLabel(f"Configuration: {config.configuration_id} | Logical resources: {', '.join(config.resources)}"))
         output_label = QLabel(f"Outputs: {self.output_root} (separate Maps and Spectra folders)")
         output_label.setWordWrap(True)
         layout.addWidget(output_label)
@@ -56,12 +63,12 @@ class SimulationWorkspace(QMainWindow):
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
         self.pages = {}
-        self.ownership = WorkspaceOwnership()
+        self.ownership = WorkspaceOwnership(config)
         try:
-            mapping = OwnedMapPanel(ownership=self.ownership)
+            mapping = OwnedMapPanel(ownership=self.ownership, acquisition=map_acquisition)
             self.pages["Intensity map"] = mapping
             mapping.output_root.setText(str(self.output_root / "Maps"))
-            spectrum = OwnedSpectrumPanel(ownership=self.ownership)
+            spectrum = OwnedSpectrumPanel(ownership=self.ownership, service=spectrum_service)
             self.pages["Spectrum"] = spectrum
             spectrum.output_directory.setText(str(self.output_root / "Spectra"))
             spectrum.start_wl.setValue(500)

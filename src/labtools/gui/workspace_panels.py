@@ -6,10 +6,14 @@ from labtools.runtime.session import ResourceBusyError
 
 
 class OwnedMapPanel(IntensityMapWindow):
-    def __init__(self, *, ownership):
+    def __init__(self, *, ownership, acquisition=None):
         self._ownership = ownership
         self._workspace_lease = None
-        super().__init__(simulation_only=True, simulation_realtime=True)
+        super().__init__(
+            acquisition=acquisition, simulation_only=True,
+            simulation_seed=ownership.config.simulation_seed,
+            simulation_realtime=ownership.config.simulation_realtime,
+        )
         self.map_controller.idle.connect(self._release_workspace_lease)
 
     def _release_workspace_lease(self):
@@ -34,10 +38,13 @@ class OwnedMapPanel(IntensityMapWindow):
 
 
 class OwnedSpectrumPanel(HoribaRangeWindow):
-    def __init__(self, *, ownership):
+    def __init__(self, *, ownership, service=None):
         self._ownership = ownership
         self._workspace_lease = None
-        super().__init__(backend="simulation", configuration_id="toy-scene-v1")
+        super().__init__(
+            service=service, backend="simulation",
+            configuration_id=ownership.config.configuration_id,
+        )
 
     def _release_workspace_lease(self):
         if self._workspace_lease is not None:

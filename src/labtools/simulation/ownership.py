@@ -1,5 +1,6 @@
 """Workspace leases backed by the existing InstrumentSession, not a new registry."""
 
+from labtools.config.workspace import WorkspaceConfig
 from labtools.runtime.session import InstrumentSession
 
 
@@ -14,11 +15,13 @@ class WorkspaceOwnership:
     acquisition workers retain their thread/async-loop ownership.
     """
 
-    def __init__(self):
-        self.session = InstrumentSession({"simulation-optical-path": _reservation_only})
+    def __init__(self, config=None):
+        self.config = config if config is not None else WorkspaceConfig()
+        self.config.validate()
+        self.session = InstrumentSession({name: _reservation_only for name in self.config.resources})
 
     def reserve(self, owner):
-        return self.session.reserve(owner, ("simulation-optical-path",))
+        return self.session.reserve(owner, self.config.for_workflow(owner))
 
     def status(self):
         return self.session.status()

@@ -120,7 +120,9 @@ def test_cli_routes_to_one_simulation_workspace(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as caught:
         main(["simulate", "workspace", "--output", str(tmp_path)])
     assert caught.value.code == 0
-    assert created == [{"output_root": tmp_path}, "shown"]
+    assert created[0]["output_root"] == tmp_path
+    assert created[0]["config"].backend == "simulation"
+    assert created[1] == "shown"
 
 
 def test_actual_workspace_switch_acquire_stop_and_close(tmp_path):

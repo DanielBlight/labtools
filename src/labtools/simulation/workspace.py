@@ -52,13 +52,21 @@ def close_workflows(pages):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Unified simulation workspace; no hardware control")
     parser.add_argument("--output", type=Path, default=Path.home() / "Labtools Simulation")
+    parser.add_argument("--config", type=Path, help="Explicit simulation resource configuration JSON")
     args = parser.parse_args(argv)
+    from labtools.config.workspace import WorkspaceConfig, load_workspace_config
+
+    try:
+        config = load_workspace_config(args.config) if args.config else WorkspaceConfig()
+        config.validate()
+    except (OSError, ValueError, TypeError) as error:
+        parser.error(str(error))
     from PyQt6.QtWidgets import QApplication
 
     from labtools.gui.workspace import SimulationWorkspace
 
     app = QApplication([sys.argv[0]])
-    window = SimulationWorkspace(output_root=args.output.expanduser())
+    window = SimulationWorkspace(output_root=args.output.expanduser(), config=config)
     window.show()
     raise SystemExit(app.exec())
 
