@@ -48,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     tools = simulation.add_subparsers(dest="simulation_tool", required=True)
     tools.add_parser("intensity-map", add_help=False)
     tools.add_parser("spectrum", add_help=False)
+    tools.add_parser("workspace", add_help=False)
     return parser
 
 
@@ -55,7 +56,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
     args, remaining = parser.parse_known_args(argv)
     if args.command == "simulate":
-        if args.simulation_tool == "spectrum":
+        if args.simulation_tool == "workspace":
+            from labtools.simulation.workspace import main as simulate
+        elif args.simulation_tool == "spectrum":
             from labtools.simulation.spectrum import main as simulate
         else:
             from labtools.simulation.intensity_map import main as simulate
