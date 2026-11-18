@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from labtools.gui.intensity_map_gui import IntensityMapWindow
-from labtools.gui.spectrum_gui_horiba import HoribaRangeWindow
+from labtools.gui.workspace_panels import OwnedMapPanel, OwnedSpectrumPanel
+from labtools.simulation.ownership import WorkspaceOwnership
 from labtools.simulation.workspace import (
     busy_workflows,
     close_workflows,
@@ -56,13 +56,12 @@ class SimulationWorkspace(QMainWindow):
         layout.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
         self.pages = {}
+        self.ownership = WorkspaceOwnership()
         try:
-            mapping = IntensityMapWindow(simulation_only=True, simulation_realtime=True)
+            mapping = OwnedMapPanel(ownership=self.ownership)
             self.pages["Intensity map"] = mapping
             mapping.output_root.setText(str(self.output_root / "Maps"))
-            mapping.x_points.setValue(5)
-            mapping.y_points.setValue(5)
-            spectrum = HoribaRangeWindow(backend="simulation", configuration_id="toy-scene-v1")
+            spectrum = OwnedSpectrumPanel(ownership=self.ownership)
             self.pages["Spectrum"] = spectrum
             spectrum.output_directory.setText(str(self.output_root / "Spectra"))
             spectrum.start_wl.setValue(500)
@@ -76,6 +75,7 @@ class SimulationWorkspace(QMainWindow):
         except BaseException:
             for page in self.pages.values():
                 page.close()
+            self.ownership.close()
             raise
         self._activity_timer = QTimer(self)
         self._activity_timer.setInterval(200)
@@ -85,7 +85,11 @@ class SimulationWorkspace(QMainWindow):
 
     def refresh_activity(self):
         active = busy_workflows(self.pages)
-        self.activity.setText("Active / finishing cleanup: " + ", ".join(active) if active else "Ready - all workers idle")
+        owners = [resource.owner for resource in self.ownership.status().resources if resource.owner]
+        self.activity.setText(
+            "Reserved by: " + ", ".join(owners) + " (includes cleanup)"
+            if owners else "Active: " + ", ".join(active) if active else "Ready - all workers idle"
+        )
         self.stop_all_button.setEnabled(bool(active))
 
     def stop_all(self):
@@ -105,5 +109,6 @@ class SimulationWorkspace(QMainWindow):
             self.activity.setText("A workflow declined close; inspect its status")
             event.ignore()
             return
+        self.ownership.close()
         self._activity_timer.stop()
         super().closeEvent(event)

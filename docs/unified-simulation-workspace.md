@@ -1,78 +1,69 @@
-# Unified simulation workspace: first integrated operator window
+# Unified simulation workspace: operation ownership
 
-## Launch
+Launch with `uv run --no-sync labtools simulate workspace` as before. Both existing
+panels, output handling, cooperative Stop all and close-during-acquisition remain.
 
-```powershell
-uv run --no-sync labtools simulate workspace
-```
+## Map settings memory correction
 
-Optional initial output root:
+The previous shell explicitly set X/Y points to 5 after the map panel had restored its
+preferences. Those two assignments are removed. The map's existing isolated simulation
+settings now determine X/Y points on reopen. No new settings store is added. Settings
+are saved by the original map close handler when the workspace closes successfully.
+An attempted close while acquisition is active does not save/close the panel yet.
+Output roots are still chosen by the workspace launch root; this batch fixes the grid,
+not workspace output-root persistence. Spectrum defaults remain unchanged.
 
-```powershell
-uv run --no-sync labtools simulate workspace --output "C:\Labtools Simulation"
-```
+## Operation ownership
 
-One application/event loop contains Intensity map and Spectrum tabs. The existing
-complete workflow windows are embedded as panels, not launched as separate processes.
-Each panel keeps its controls, status, plot, acquisition worker and close behaviour.
-Switching tabs does not recreate a panel or discard its result/dark/settings.
+Workspace-only adapters reserve one logical `simulation-optical-path` resource using
+the existing InstrumentSession. This explicitly serializes map and spectrum operations
+in this rehearsal shell. It is a logical conflict demonstration, not a claim that the
+two native workflows necessarily share every device. No physical resource inventory,
+second registry, device factories or hardware ownership policy is invented.
 
-This first integrated window is simulation-only. There is no real-backend switch,
-laser connection, device registry or shared native connection. Independent synthetic
-workflows can run concurrently; that is not permission for concurrent real hardware.
-Existing standalone launchers and the InstrumentSession implementation are unchanged.
+- Map start/resume reserves before worker start. Validation refusal/start failure releases.
+- Spectrum connection test, dark capture and acquisition reserve before worker start.
+- A conflicting operation is rejected in that panel's status with the current owner.
+  It is not queued or silently started later.
+- Stop requests do not release ownership. Map releases on the existing controller idle
+  signal after QThread teardown. Spectrum releases after its existing thread-finished
+  cleanup. Completion, failure and cancellation use those same teardown paths.
+- The header shows the owner including cleanup. Close remains blocked while workers
+  are active; the session closes only after idle panels have closed.
 
-## Shared controls
+The session is reservation-only: no `.call()` routes acquisition through its executor,
+and its resource factory refuses calls. Existing map and spectrum workers retain their
+thread/async-loop affinity. Standalone GUIs and the InstrumentSession implementation
+are unchanged. This is not real-device connection sharing, an interlock or cross-process
+lock. The workspace remains simulation-only.
 
-- Permanent simulation identification and one window title.
-- Common initial output root, with separate Maps and Spectra folders. Individual panels
-  can still choose their output folder; the header describes the initial root.
-- Global activity indicator includes acquisition and worker teardown.
-- Stop all active workflows calls each existing cooperative cancellation method.
-- Closing during an operation requests Stop all and refuses close until cleanup ends.
-  Wait for Ready, then close again. No active worker is forcibly terminated.
+## Rehearse once
 
-The 200 ms activity timer is presentation only. Close/Stop inspect live worker state
-synchronously. It stops when the window closes. Stop all is not an emergency interlock.
+1. Set X/Y points to distinct values, close normally and reopen. Confirm both values.
+2. Start a sufficiently long synthetic map (e.g. 30x31, integration .02 s).
+3. Switch to Spectrum and try Acquire. Confirm Workspace busy identifies Intensity map
+   and no spectrum worker starts.
+4. Stop all, wait for Ready, then acquire a spectrum. Confirm it succeeds and releases.
+5. Repeat map/spectrum after cleanup. Existing saved outputs must remain separate.
+6. Close during acquisition, wait for cleanup, close again. No lease should remain.
 
-## One useful rehearsal
-
-1. Confirm two tabs in one SIMULATION ONLY window and disabled laser controls.
-2. In Intensity map, complete the initial 5x5 grid. Its existing real-time simulation
-   option is enabled to make progress and Stop observable. Inspect its saved output.
-3. Switch to Spectrum, tick Save CSV/PNG, acquire raw, capture a reusable dark and
-   subtract it as in the previous accepted spectroscopy rehearsal.
-4. Switch back. The map result should still be present. Repeat without overwriting it.
-5. Start a larger map, switch tabs, then use Stop all. Wait for cleanup and inspect
-   the incomplete checkpoint. Resume through the existing map control.
-6. Attempt to close during a map. The window should remain open while cancellation
-   completes; close again when Ready. Reopen and confirm no orphan worker warnings.
-
-Initial grid and spectrum range are deliberately 5x5 and 500-600 nm for this rehearsal;
-this shell does not add new workspace persistence. Existing map preferences still save
-through its original close handler. Spectrum remains toy-scene-v1; values are not
-approved detector or optical-path settings.
-
-## Validation and next boundary
+## Focused validation
 
 ```powershell
-uv run --no-sync ruff check --fix src/labtools/cli.py src/labtools/gui/workspace.py src/labtools/simulation/workspace.py tests/test_simulation_workspace.py
-uv run --no-sync pytest -q -ra tests/test_simulation_workspace.py
+uv run --no-sync ruff check --fix src/labtools/gui/workspace.py src/labtools/gui/workspace_panels.py src/labtools/simulation/ownership.py tests/test_workspace_ownership.py
+uv run --no-sync pytest -q -ra tests/test_workspace_ownership.py tests/test_simulation_workspace.py
 ```
 
-Sandbox results: 12 passed, 1 skipped in 12.19s. Passing tests exercise actual Qt-free
-lifecycle helpers and CLI routing with fake Qt construction. The skipped test uses real
-Qt, embedded existing panels, synthetic acquisition, tab switching, global activity,
-close-during-map cancellation and idle close, with native imports forbidden. PyQt6 is
-absent in the sandbox; this is not actual unified-window acceptance. Local execution
-and visual rehearsal are required. Ruff is unavailable there. No full-suite rerun.
+Sandbox: 22 passed, 2 skipped in 20.19s. Passing tests use the actual existing session,
+actual adapter method bodies against fake worker bases, reservation conflicts,
+startup refusal/failure, cancellation/cleanup ownership and release. The two skips are
+actual Qt integration tests because PyQt6 is absent; they are not GUI acceptance.
+The new Qt test also closes/reopens with isolated temporary settings to verify X/Y
+memory, then exercises conflict rejection, Stop all and reuse after cleanup. Ruff is
+unavailable in the sandbox; local lint and Qt execution remain required. No full suite,
+hardware, packaging, ID900 or anneal work is performed.
 
-The accepted standalone spectroscopy GUI milestone is closed by user confirmation and
-supplied raw/corrected outputs. Historical validation remains attached to its source
-revisions. This new composition has separate validation; no hardware/packaging/anneal
-or ID900 changes are made.
-
-Next after successful rehearsal: integrate explicit shared operation ownership and
-configuration at the workspace boundary before exposing real controls. Do not treat
-these two tabs as shared native-device ownership. Use the existing session mechanisms
-rather than inventing a second registry, and preserve native thread/async-loop affinity.
+The next integration boundary is explicit native resource configuration and service
+injection, not enabling real controls. Preserve the existing worker affinity and use
+existing session mechanisms; do not turn logical leases into claimed physical safety.
+Historical test/package evidence stays linked to its original source revisions.
