@@ -1,6 +1,7 @@
 """Bounded offline source-audit gates with durable logs and JSON evidence.
 
-Run with the existing labtools environment; never installs dependencies or mutates Git.
+Run in the existing environment. Ruff uses --fix; changes stop acceptance before tests.
+No dependency installation, Git mutation or hardware permission is performed.
 """
 from __future__ import annotations
 
@@ -17,15 +18,6 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON_FILES = [
-    "src/labtools/gui/hyperspectral_controller.py",
-    "src/labtools/gui/hyperspectral_gui.py",
-    "src/labtools/measurements/hyperspectral.py",
-    "tests/test_audit_hyperspectral_regressions.py",
-    "tests/test_audit_hyperspectral_worker.py",
-    "tests/test_audit_hyperspectral_lifecycle.py",
-    "scripts/validate_source_audit.py",
-]
 CORE_TESTS = [
     "tests/test_audit_hyperspectral_regressions.py",
     "tests/test_audit_hyperspectral_lifecycle.py",
@@ -66,6 +58,7 @@ def execute(label, args, output, env, limit):
     log = output / f"{label}.log"
     print(f"RUN {label}: {subprocess.list2cmdline(command)}", flush=True)
     result = {"gate": label, "command": command, "limit_seconds": limit, "log": str(log)}
+    result["interrupted"] = False
     with log.open("w", encoding="utf-8") as handle:
         options = {"start_new_session": True} if os.name != "nt" else {}
         with subprocess.Popen(
@@ -79,18 +72,66 @@ def execute(label, args, output, env, limit):
                 stop_tree(process)
                 result["returncode"] = process.returncode
                 result["timed_out"] = True
-    result["passed"] = result["returncode"] == 0 and not result["timed_out"]
+            except KeyboardInterrupt:
+                stop_tree(process)
+                result["returncode"] = process.returncode
+                result["timed_out"] = False
+                result["interrupted"] = True
+    result["passed"] = (
+        result["returncode"] == 0
+        and not result["timed_out"]
+        and not result["interrupted"]
+    )
     print(f"{'PASS' if result['passed'] else 'FAIL'} {label}: {log}", flush=True)
     return result
 
 
 def counts(path):
-    suites = ElementTree.parse(path).getroot().iter("testsuite")
+    """Validate pytest XML rather than accepting an exit code alone."""
+    root = ElementTree.parse(path).getroot()
+    if root.tag not in {"testsuites", "testsuite"}:
+        raise ValueError("Not a JUnit testsuite document")
+    suites = [suite for suite in root.iter("testsuite") if not list(suite.iterfind("testsuite"))]
+    if not suites:
+        raise ValueError("No test suites recorded")
     total = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
     for suite in suites:
+        values = {name: int(suite.get(name, "0")) for name in total}
+        if any(value < 0 for value in values.values()):
+            raise ValueError("Negative JUnit count")
+        if sum(values[name] for name in ("failures", "errors", "skipped")) > values["tests"]:
+            raise ValueError("Inconsistent JUnit counts")
         for name in total:
-            total[name] += int(suite.get(name, "0"))
+            total[name] += values[name]
+    if total["tests"] == 0:
+        raise ValueError("No tests executed")
     return total
+
+
+def check_pytest_result(result, xml):
+    """Fail closed on missing/broken evidence, failures, errors or any skips."""
+    try:
+        result["counts"] = counts(xml)
+    except (OSError, ElementTree.ParseError, ValueError) as error:
+        result["passed"] = False
+        result["reason"] = f"Invalid or missing pytest XML: {error}"
+        return
+    if any(result["counts"][name] for name in ("failures", "errors", "skipped")):
+        result["passed"] = False
+        result["reason"] = "Failures, errors or skips do not establish offline acceptance"
+
+
+def source_hashes():
+    """Detect Ruff/test edits, including newly created Python files."""
+    paths = {
+        path for folder in ("src", "tests", "scripts")
+        for path in (ROOT / folder).rglob("*.py")
+    }
+    paths.update(ROOT / name for name in ("pyproject.toml", "uv.lock") if (ROOT / name).is_file())
+    return {
+        path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(paths)
+    }
 
 
 def main():
@@ -99,11 +140,14 @@ def main():
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    output = args.output or ROOT / ".labtools-validation" / f"source-audit-{stamp}"
+    output = args.output or ROOT.parent / f"labtools-source-audit-{stamp}"
     output = output.resolve()
+    if output.is_relative_to(ROOT):
+        parser.error("Evidence output must be outside the repository")
     output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ)
     env["QT_QPA_PLATFORM"] = "offscreen"
+    env["MPLBACKEND"] = "Agg"
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
     versions = {}
     for package in ("pytest", "PyQt6", "ruff", "numpy", "matplotlib"):
@@ -115,10 +159,9 @@ def main():
         "created_utc": stamp, "root": str(ROOT), "python": sys.version,
         "executable": sys.executable, "versions": versions, "requested_gate": args.gate,
         "results": [], "all_gates_passed": False, "hardware_acceptance": "not performed",
-        "source_sha256": {
-            name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-            for name in PYTHON_FILES
-        },
+        "source_sha256": source_hashes(),
+        "environment": {"QT_QPA_PLATFORM": "offscreen", "MPLBACKEND": "Agg"},
+        "hardware_permission": False,
     }
     selected = ["lint", "core", "widgets", "full"] if args.gate == "all" else [args.gate]
     for gate in selected:
@@ -129,28 +172,34 @@ def main():
             if not probe["passed"]:
                 break
         if gate == "lint":
-            command, limit = ["-m", "ruff", "check", *PYTHON_FILES], 60
+            command, limit = [
+                "-m", "ruff", "check", "--fix", "src", "tests",
+                "scripts/validate_source_audit.py",
+            ], 60
         else:
             xml = output / f"{gate}.xml"
             tests = CORE_TESTS if gate == "core" else WIDGET_TESTS
-            command = ["-m", "pytest", "-q", f"--junitxml={xml}"]
-            command += ["-m", "not hardware"] if gate == "full" else tests
+            command = ["-m", "pytest", "-vv", "-ra", f"--junitxml={xml}"]
+            command += ["-m", "not hardware", "tests"] if gate == "full" else tests
             limit = 600 if gate == "full" else 240
         result = execute(gate, command, output, env, limit)
         if gate != "lint":
-            if not xml.exists():
-                result["passed"] = False
-                result["reason"] = "Missing pytest XML; completion not established"
-            else:
-                result["counts"] = counts(xml)
-                if gate != "full" and result["counts"]["skipped"]:
-                    result["passed"] = False
-                    result["reason"] = "Targeted skips are not acceptance"
+            check_pytest_result(result, xml)
+        after = source_hashes()
+        changed = sorted(
+            name for name in set(evidence["source_sha256"]) | set(after)
+            if evidence["source_sha256"].get(name) != after.get(name)
+        )
+        if changed:
+            result["passed"] = False
+            result["changed_paths"] = changed
+            result["reason"] = "Source changed during validation; review edits before rerunning"
         evidence["results"].append(result)
         if not result["passed"]:
             break
     completed = [r["gate"] for r in evidence["results"] if r["gate"] in selected and r["passed"]]
     passed = completed == selected
+    evidence["source_sha256_after"] = source_hashes()
     evidence["all_gates_passed"] = args.gate == "all" and passed
     evidence["requested_gates_passed"] = passed
     (output / "results.json").write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")

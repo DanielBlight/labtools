@@ -965,3 +965,27 @@ validation were not run in the sandbox. Run focused Windows validation for this 
 retain the prior user-reported full non-hardware pass for 52e158a without invented
 counts. Historical 801-test evidence belongs to 235f70ca..., and wheel/staging evidence
 to 6074fdad..., not this changed candidate. No hardware or packaging was executed.
+
+## Development-PC validation-runner hardening (2026-11-18)
+
+The anneal startup-policy batch at 607c7db72e784cbbe76c4232ecdff3cc059b99f4
+is closed by the user's confirmation of focused and full development-PC passes;
+counts/skips/duration were not supplied. No acquisition or device changes are made here.
+
+A concrete non-anneal tooling gap was reproduced: the existing full source-audit gate
+returned success for exit-zero pytest XML containing a skipped test. The runner now
+rejects skips in every selected gate, missing/malformed/empty/inconsistent XML, and
+reported failures/errors. Nested suite counts are not double-counted. It uses Ruff
+--fix and stops acceptance before subsequent tests if Python/configuration content
+changes. It retains raw verbose pytest logs, explicit full tests selection, offscreen
+Qt/Agg child environment, and source hashes before/after. Ctrl+C records an incomplete
+gate after stopping its owned child tree. Evidence now defaults outside the repository;
+custom internal output directories are rejected. See docs/offline-validation-runner.md.
+
+This is a tooling-only checkpoint, not another anneal correction. Focused sandbox
+runner tests: 23 passed in 13.38s, without instrument imports, dependency stubs or a
+full acquisition-suite run. Ruff is unavailable in the sandbox; development-PC lint
+and focused runner tests remain required. Existing historical results are unchanged:
+801-test evidence belongs to 235f70ca..., wheel/staging evidence to 6074fdad....
+No hardware, packaging, ID900 parsing, physical/operator acceptance or full-suite
+rerun was performed for this tooling checkpoint.
