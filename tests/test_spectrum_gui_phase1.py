@@ -74,11 +74,11 @@ try:
  elif mode=="save":
   w._save_options=(True,False,Path(sys.argv[2])); out=result(settings,"none")
   w._maybe_save_result(out)
-  archive=next(Path(sys.argv[2]).glob("horiba_*.npz"))
+  archive=next(Path(sys.argv[2]).glob("synthetic_*.npz"))
   with np.load(archive,allow_pickle=False) as data:
    meta=json.loads(data["metadata"].item()); assert meta["settings"]["configuration_id"]=="test-config"
    assert meta["dark_mode"]=="none" and meta["raw_available"] is True
-  assert next(Path(sys.argv[2]).glob("horiba_*.csv")).exists()
+  assert next(Path(sys.argv[2]).glob("synthetic_*.csv")).exists()
  else:
   w.mode_combo.setCurrentText("single"); w.exposure_box.setValue(.1); w.acquire_spectrum()
   spin(lambda:w._spectrometer_busy)

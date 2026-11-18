@@ -62,3 +62,48 @@ async def open_simulated_alignment(settings):
             return x, raw - dark if subtract_dark else raw.copy(), raw
 
     yield Backend()
+
+
+# These options describe the existing toy backend, not a physical detector preset.
+TOY_PRESET_OPTIONS = {
+    "syncerity": {
+        "gains": (("Toy gain (no detector)", 0),),
+        "speeds": (("Toy speed (no detector)", 0),),
+        "default_gain": 0,
+        "default_speed": 0,
+        "minimum_exposure_s": 0.065,
+    },
+}
+
+
+def main(argv=None):
+    """Launch the existing spectrum GUI with an explicit synthetic backend."""
+    import argparse
+    import sys
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description="Synthetic spectrum GUI; no hardware")
+    parser.add_argument("--gui", action="store_true", help="Open the synthetic operator window")
+    parser.add_argument("--output", type=Path, default=Path.home() / "Labtools Simulation" / "Spectra")
+    args = parser.parse_args(argv)
+    if not args.gui:
+        parser.error("Use --gui; for the saved end-to-end rehearsal use examples/measurements/rehearse_spectrum.py")
+    from PyQt6.QtWidgets import QApplication
+
+    from labtools.gui.spectrum_gui_horiba import HoribaRangeWindow
+
+    app = QApplication([sys.argv[0]])
+    window = HoribaRangeWindow(
+        backend="simulation", configuration_id="toy-scene-v1",
+        preset_options=TOY_PRESET_OPTIONS,
+    )
+    window.start_wl.setValue(500.0)
+    window.end_wl.setValue(600.0)
+    window.exposure_box.setValue(0.065)
+    window.output_directory.setText(str(args.output.expanduser()))
+    window.show()
+    raise SystemExit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

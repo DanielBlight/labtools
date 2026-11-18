@@ -100,6 +100,10 @@ class HoribaRangeWindow(QMainWindow):
             raise ValueError(
                 "A maintainer-supplied spectrum configuration_id is required"
             )
+        if preset_options is None and backend == "simulation":
+            from labtools.simulation.spectrum import TOY_PRESET_OPTIONS
+
+            preset_options = TOY_PRESET_OPTIONS
         self._preset_options = (
             preset_options if preset_options is not None else _real_preset_options()
         )
@@ -109,7 +113,9 @@ class HoribaRangeWindow(QMainWindow):
         self._cancel_event = Event()
         self.latest_result: SpectrumResult | None = None
         self._save_options: tuple[bool, bool, Path] | None = None
-        self.setWindowTitle("HORIBA Spectrum Acquisition")
+        self.setWindowTitle(
+            "SIMULATION - Spectrum" if backend == "simulation" else "HORIBA Spectrum Acquisition"
+        )
         self.resize(1440, 900)
         self.setMinimumSize(1120, 720)
 
@@ -126,6 +132,10 @@ class HoribaRangeWindow(QMainWindow):
         outer = QVBoxLayout(central)
         outer.setContentsMargins(14, 12, 14, 12)
         outer.setSpacing(10)
+        if self._backend == "simulation":
+            banner = QLabel("SIMULATION: synthetic spectra only. No detector or laser is connected.")
+            banner.setWordWrap(True)
+            outer.addWidget(banner)
 
         header = QHBoxLayout()
         title_column = QVBoxLayout()
@@ -209,6 +219,11 @@ class HoribaRangeWindow(QMainWindow):
         self._update_frame_controls()
         self._update_background_controls()
         self._toggle_laser_controls(False)
+        if self._backend == "simulation":
+            self.laser_group.setEnabled(False)
+            self.laser_light.setText("SIMULATION - no laser")
+            self.output_directory.setText(str(Path.home() / "Labtools Simulation" / "Spectra"))
+            self.set_status("SYNTHETIC DATA ONLY - no detector, laser or optical-path validation")
         self._update_spectrometer_buttons()
 
     def _apply_application_style(self) -> None:
@@ -283,7 +298,10 @@ class HoribaRangeWindow(QMainWindow):
         """Prepare a clean, readable spectrum canvas."""
         self.ax.clear()
         self.ax.set_xlabel("Wavelength (nm)", fontsize=11)
-        self.ax.set_ylabel("Intensity (counts)", fontsize=11)
+        synthetic = self._backend == "simulation"
+        self.ax.set_ylabel(
+            "Toy intensity (arbitrary units)" if synthetic else "Intensity (counts)", fontsize=11
+        )
         self.ax.set_title("Ready for acquisition", fontsize=13, pad=12)
         self.ax.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.8)
         self.ax.set_facecolor("#fbfcfd")
@@ -299,7 +317,7 @@ class HoribaRangeWindow(QMainWindow):
         form.setVerticalSpacing(9)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItems(["syncerity", "symphony"])
+        self.preset_combo.addItems(list(self._preset_options))
         self.preset_combo.setToolTip(
             "The selected preset verifies detector identity, grating, exit "
             "mirror and detector settings before acquisition."
@@ -846,9 +864,13 @@ class HoribaRangeWindow(QMainWindow):
         identity = "Raw" if result.dark_mode == "none" else "Dark-corrected"
         self.ax.plot(x_data, y_data, color="#0b6fa4", linewidth=1.35, label=identity)
         self.ax.set_xlabel("Wavelength (nm)", fontsize=11)
-        self.ax.set_ylabel("Intensity (counts)", fontsize=11)
+        synthetic = result.settings.backend == "simulation"
+        self.ax.set_ylabel(
+            "Toy intensity (arbitrary units)" if synthetic else "Intensity (counts)", fontsize=11
+        )
         self.ax.set_title(
-            f"HORIBA range spectrum ({identity.lower()})", fontsize=14, pad=12
+            ("SYNTHETIC " if synthetic else "HORIBA ")
+            + f"range spectrum ({identity.lower()})", fontsize=14, pad=12
         )
         self.ax.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.85)
         self.ax.set_facecolor("#fbfcfd")
@@ -856,7 +878,8 @@ class HoribaRangeWindow(QMainWindow):
         self.figure.tight_layout()
         self.canvas.draw_idle()
         self.plot_meta.setText(
-            f"{x_data[0]:.2f}-{x_data[-1]:.2f} nm | {len(x_data)} points | {identity}"
+            ("SYNTHETIC | " if synthetic else "")
+            + f"{x_data[0]:.2f}-{x_data[-1]:.2f} nm | {len(x_data)} points | {identity}"
         )
         try:
             saved = self._maybe_save_result(result)
@@ -960,7 +983,8 @@ class HoribaRangeWindow(QMainWindow):
             return None
         csv_enabled, png_enabled, output_dir = options
         output_dir.mkdir(parents=True, exist_ok=True)
-        base = f"horiba_{result.settings.start_nm:.0f}_{result.settings.end_nm:.0f}nm"
+        prefix = "synthetic" if result.settings.backend == "simulation" else "horiba"
+        base = f"{prefix}_{result.settings.start_nm:.0f}_{result.settings.end_nm:.0f}nm"
         stem = base
         suffix = 1
         while any(
@@ -975,6 +999,8 @@ class HoribaRangeWindow(QMainWindow):
             with (output_dir / f"{stem}.csv").open(
                 "x", newline="", encoding="utf-8"
             ) as handle:
+                if result.settings.backend == "simulation":
+                    handle.write("# SYNTHETIC DATA ONLY; settings/provenance are in the companion NPZ\n")
                 writer = csv.writer(handle)
                 writer.writerow(["wavelength_nm", "intensity"])
                 writer.writerows(
@@ -1010,6 +1036,9 @@ class HoribaRangeWindow(QMainWindow):
         self.laser_set.setEnabled(enabled and connected)
 
     def connect_laser(self) -> None:
+        if self._backend == "simulation":
+            self.set_status("Simulation mode: laser actions are unavailable.")
+            return
         address = self.laser_address.text().strip() or ITC4000.DEFAULT_ADDRESS
         self.laser_connect.setEnabled(False)
         self.set_status(f"Connecting to laser at {address}...")
@@ -1051,6 +1080,9 @@ class HoribaRangeWindow(QMainWindow):
             self.laser_connect.setEnabled(True)
 
     def turn_laser_on(self) -> None:
+        if self._backend == "simulation":
+            self.set_status("Simulation mode: laser actions are unavailable.")
+            return
         if self.laser is None:
             QMessageBox.warning(self, "No laser", "Connect the laser first.")
             return
@@ -1070,6 +1102,9 @@ class HoribaRangeWindow(QMainWindow):
             self._show_error("Laser enable failed", str(exc), traceback.format_exc())
 
     def turn_laser_off(self) -> None:
+        if self._backend == "simulation":
+            self.set_status("Simulation mode: laser actions are unavailable.")
+            return
         if self.laser is None:
             QMessageBox.warning(self, "No laser", "Connect the laser first.")
             return
@@ -1086,6 +1121,9 @@ class HoribaRangeWindow(QMainWindow):
             self._show_error("Laser shutdown failed", str(exc), traceback.format_exc())
 
     def set_laser_current(self) -> None:
+        if self._backend == "simulation":
+            self.set_status("Simulation mode: laser actions are unavailable.")
+            return
         if self.laser is None:
             QMessageBox.warning(self, "No laser", "Connect the laser first.")
             return
