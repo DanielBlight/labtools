@@ -11,12 +11,14 @@ from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
 
+from labtools.acquisition.spectrum_service import SpectrumService
 from labtools.config.native_candidate import DISABLED_REASON, preflight_candidate
 from labtools.runtime.map_devices import MapTransportFactories
 from labtools.runtime.native_candidate import (
     DisabledNativeCandidate,
     NativeExecutionDisabled,
 )
+from labtools.runtime.native_workflows import NativeWorkflowInputs
 from labtools.simulation.ownership import WorkspaceOwnership
 
 
@@ -79,6 +81,8 @@ class NativeWorkspace:
             raise NativeWorkspaceInputError(data)
         self._preflight = report
         self.plan = report.plan
+        self.workflows = NativeWorkflowInputs(self.plan)
+        self.spectrum_service = SpectrumService(self._workflow_backend)
         self._closed = False
         self._ownership = WorkspaceOwnership(self.plan.reservation_config)
         try:
@@ -107,6 +111,8 @@ class NativeWorkspace:
             "configured_map": mapping,
             "configured_spectrum": asdict(self.plan.spectrum_request.settings),
             "workspace_kind": "native-candidate",
+            "operator_workflows_bound": True,
+            "operator_drafts": "in-memory only; source files and standalone QSettings unchanged",
             "selection": {
                 "labjack": {"policy": settings["labjack_selection"], "physical_serial": None,
                             "status": "implicit-first-device; not discovered or confirmed"},
@@ -124,17 +130,30 @@ class NativeWorkspace:
             "operation_ownership": "existing map worker / spectrum coroutine; no handles on reservation executor",
         }
 
-    def acquire_map(self, *args, **kwargs):
+    def workflow_preview(self, mapping=None, spectrum=None):
         self._require_open()
-        return self.services.acquire_map(*args, **kwargs)
+        return self.workflows.preview(mapping, spectrum)
 
-    async def acquire_spectrum(self):
+    def acquire_map(self, config=None, **kwargs):
         self._require_open()
-        return await self.services.spectrum.acquire(self.plan.spectrum_request.settings)
+        config = self.workflows.map_config(config)
+        return self.services.acquire_map(config, **kwargs)
 
-    async def capture_dark(self):
+    def _workflow_backend(self, settings):
         self._require_open()
-        return await self.services.spectrum.capture_dark(self.plan.spectrum_request.settings)
+        settings = self.workflows.spectrum_settings(settings)
+        # Existing candidate refuses here, before constructing a backend/handle.
+        return self.services._disabled_backend(settings)
+
+    async def acquire_spectrum(self, settings=None, **kwargs):
+        self._require_open()
+        settings = self.workflows.spectrum_settings(settings)
+        return await self.spectrum_service.acquire(settings, **kwargs)
+
+    async def capture_dark(self, settings=None, **kwargs):
+        self._require_open()
+        settings = self.workflows.spectrum_settings(settings)
+        return await self.spectrum_service.capture_dark(settings, **kwargs)
 
     def close(self):
         if not self._closed:

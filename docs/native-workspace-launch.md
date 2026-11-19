@@ -1,5 +1,9 @@
 # Native workspace launch, execution disabled
 
+Current operator tabs and draft validation: see [Native operator workflows](native-operator-workflows.md).
+This launch-only checkpoint below is retained as historical context; the current window
+reuses the existing map/spectrum panels while all hardware actions remain gated.
+
 Base: 892b4cf7fba29b0fe925d72ee7b26016fadebfba, the fourteen-path working-lab
 configuration migration commit. The supplied snapshot records a clean index/tree
 and stable HEAD. The user reports local lint passed. No current local pytest,
