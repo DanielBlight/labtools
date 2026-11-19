@@ -44,6 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="Required for real execution; never inferred or prompted",
             )
+    workspace = sub.add_parser("workspace", help="Read-only native-candidate preflight; no hardware")
+    candidate = workspace.add_subparsers(dest="workspace_action", required=True)
+    preflight = candidate.add_parser("preflight", help="Report missing native inputs; execution stays disabled")
+    preflight.add_argument("manifest", type=Path)
     simulation = sub.add_parser("simulate", help="Run explicitly synthetic data tools")
     tools = simulation.add_subparsers(dest="simulation_tool", required=True)
     tools.add_parser("intensity-map", add_help=False)
@@ -55,6 +59,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
     args, remaining = parser.parse_known_args(argv)
+    if args.command == "workspace":
+        from labtools.config.native_candidate import preflight_candidate
+
+        if remaining:
+            parser.error("unrecognized arguments: " + " ".join(remaining))
+        report = preflight_candidate(args.manifest)
+        print(json.dumps(report.to_data(), indent=2))
+        if report.errors:
+            parser.exit(2)
+        return
     if args.command == "simulate":
         if args.simulation_tool == "workspace":
             from labtools.simulation.workspace import main as simulate

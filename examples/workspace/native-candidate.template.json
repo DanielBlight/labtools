@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "configuration_id": null,
+  "resources": {
+    "labjack": null,
+    "counter": null,
+    "spectrometer": null,
+    "optical_path": null
+  },
+  "instrument_profile": null,
+  "map_recipe": null,
+  "spectrum_recipe": null,
+  "device_selection_review": null,
+  "wiring_review": null,
+  "operating_limits_review": null,
+  "native_environment_review": null,
+  "optical_path_procedure": null
+}
