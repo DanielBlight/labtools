@@ -19,7 +19,7 @@ def create_window(workspace):
         QWidget,
     )
 
-    from labtools.gui.camera_window import CameraWindow
+    from labtools.gui.camera_tools import CameraWindow
     from labtools.gui.native_anneal_panel import NativeAnnealPanel
     from labtools.gui.native_workflow_panels import NativeMapPanel, NativeSpectrumPanel
     from labtools.simulation.workspace import (

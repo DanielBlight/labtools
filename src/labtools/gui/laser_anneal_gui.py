@@ -110,7 +110,7 @@ class LaserAnnealWindow(QMainWindow):
         self._thread: QThread | None = None
         self._worker: AnnealWorker | None = None
         self._stop_event = Event()
-        from labtools.gui.camera_window import CameraWindow
+        from labtools.gui.camera_tools import CameraWindow
 
         self._owns_camera_window = camera_window is None
         self.camera_window = CameraWindow(self) if camera_window is None else camera_window
