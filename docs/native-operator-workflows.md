@@ -1,5 +1,8 @@
 # Native operator-workflow binding, execution still disabled
 
+Current three-workflow integration and persistent settings: see [Unified native candidate](unified-native-candidate.md).
+Earlier draft-only/no-persistence statements below describe the prior checkpoint.
+
 ## Accepted starting checkpoint
 
 labtools_evidence_20261119T123312Z.txt records 190c1a0e4d66ad58c55b3be7aacf6ce66250bbd2,

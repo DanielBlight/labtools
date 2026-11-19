@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_native_operator_panels_preview_refuse_and_cleanup(tmp_path, monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("PROGRAMDATA", str(tmp_path / "program"))
+    monkeypatch.delenv("LABTOOLS_INSTRUMENT_PROFILE", raising=False)
     try:
         from PyQt6.QtCore import QSettings
         from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -60,7 +63,7 @@ def test_native_operator_panels_preview_refuse_and_cleanup(tmp_path, monkeypatch
         try:
             window.show()
             app.processEvents()
-            assert window.tabs.count() == 3
+            assert window.tabs.count() == 4
             assert mapping._config() == workspace.plan.map_config
             assert spectrum._snapshot_settings() == workspace.plan.spectrum_request.settings
             assert mapping.map_controller._acquisition.__self__ is workspace

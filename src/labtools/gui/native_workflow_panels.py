@@ -20,7 +20,7 @@ class NativeMapPanel(OwnedMapPanel):
         self.workspace = workspace
         super().__init__(ownership=workspace._ownership, acquisition=workspace.acquire_map, simulation_only=False)
         self.setWindowTitle("Native map - execution disabled")
-        config = workspace.plan.map_config
+        config = workspace.drafts.values["map"]
         for control in (self.x_start, self.x_stop, self.y_start, self.y_stop):
             control.setRange(config.safe_voltage_min_v, config.safe_voltage_max_v)
         self._apply_config(config)
@@ -93,7 +93,7 @@ class NativeSpectrumPanel(OwnedSpectrumPanel):
             preset_options=deepcopy(workspace.plan.hardware_settings["detectors"]),
         )
         self.setWindowTitle("Native spectrum - execution disabled")
-        settings = workspace.plan.spectrum_request.settings
+        settings = workspace.drafts.values["spectrum"]
         self.preset_combo.setCurrentText(settings.preset)
         self._update_preset_controls()
         self.start_wl.setValue(settings.start_nm)

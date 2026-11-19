@@ -18,6 +18,8 @@ def busy_workflows(pages):
             active = page.map_controller.busy
         elif name == "Spectrum":
             active = page._spectrometer_busy or bool(page._async_tasks)
+        elif name == "Annealing":
+            active = page._thread is not None or page._camera_thread is not None
         else:
             raise ValueError(f"Unknown workspace workflow: {name}")
         if active:

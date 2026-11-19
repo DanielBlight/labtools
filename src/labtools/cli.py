@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("manifest", type=Path)
     launch = candidate.add_parser("launch", help="Open native workspace with execution disabled; no hardware")
     launch.add_argument("manifest", type=Path)
+    launch.add_argument("--anneal-profile", type=Path, help="Existing local anneal profile; never created or overwritten")
     launch.add_argument("--headless", action="store_true", help="Compose, report selection/gate and close without Qt")
     simulation = sub.add_parser("simulate", help="Run explicitly synthetic data tools")
     tools = simulation.add_subparsers(dest="simulation_tool", required=True)
@@ -74,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
 
             try:
-                with NativeWorkspace(args.manifest) as workspace:
+                with NativeWorkspace(args.manifest, anneal_profile=args.anneal_profile) as workspace:
                     if args.headless:
                         print(json.dumps(workspace.describe(), indent=2))
                     else:

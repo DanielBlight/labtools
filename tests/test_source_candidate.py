@@ -166,7 +166,7 @@ def test_anneal_defaults_aligned_but_explicit_local_profile_preserved(tmp_path):
     with pytest.raises(ValueError):
         validate_recipe(recipe, narrow)
     # Read the actual acquisition dataclass defaults without importing devices.
-    tree = ast.parse((ROOT / "src/labtools/acquisition/laser_anneal.py").read_text())
+    tree = ast.parse((ROOT / "src/labtools/config/anneal_types.py").read_text())
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "LaserAnnealConfig")
     defaults = {n.target.id: ast.literal_eval(n.value) for n in cls.body
                 if isinstance(n, ast.AnnAssign) and n.target.id in

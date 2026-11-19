@@ -16,6 +16,7 @@ class WorkspaceConfig:
     spectrum_resources: tuple[str, ...] = ("simulation-optical-path",)
     simulation_seed: int = 0
     simulation_realtime: bool = True
+    anneal_resources: tuple[str, ...] = ()
 
     def validate(self):
         if self.backend != "simulation":
@@ -30,9 +31,14 @@ class WorkspaceConfig:
                 raise ValueError(f"{field} must contain nonempty resource names")
             if len(set(names)) != len(names):
                 raise ValueError(f"{field} contains duplicate resource names")
-        if not set(self.map_resources + self.spectrum_resources) <= set(self.resources):
+        if (not isinstance(self.anneal_resources, tuple)
+                or any(not isinstance(name, str) or not name.strip() for name in self.anneal_resources)
+                or len(set(self.anneal_resources)) != len(self.anneal_resources)):
+            raise ValueError("anneal_resources must be a tuple of unique resource names")
+        used = self.map_resources + self.spectrum_resources + self.anneal_resources
+        if not set(used) <= set(self.resources):
             raise ValueError("Workflow resource names must exist in resources")
-        if set(self.map_resources + self.spectrum_resources) != set(self.resources):
+        if set(used) != set(self.resources):
             raise ValueError("Every declared resource must be used by a workflow")
         if type(self.simulation_seed) is not int or not 0 <= self.simulation_seed <= 2**32 - 1:
             raise ValueError("simulation_seed must be an integer in 0..4294967295")
@@ -44,6 +50,8 @@ class WorkspaceConfig:
             return self.map_resources
         if owner == "Spectrum":
             return self.spectrum_resources
+        if owner == "Annealing" and self.anneal_resources:
+            return self.anneal_resources
         raise ValueError(f"Unknown workspace workflow: {owner}")
 
 
@@ -59,10 +67,14 @@ def load_workspace_config(path: Path) -> WorkspaceConfig:
     data = json.loads(Path(path).read_text(encoding="utf-8-sig"), object_pairs_hook=unique_object)
     expected = {"schema_version", "configuration_id", "backend", "resources", "map_resources",
                 "spectrum_resources", "simulation_seed", "simulation_realtime"}
-    if not isinstance(data, dict) or set(data) != expected:
+    if not isinstance(data, dict) or set(data) not in (expected, expected | {"anneal_resources"}):
         raise ValueError("Workspace configuration must contain exactly the documented schema fields")
     if type(data["schema_version"]) is not int or data.pop("schema_version") != 1:
         raise ValueError("Unsupported workspace schema_version")
+    if "anneal_resources" in data:
+        if not isinstance(data["anneal_resources"], list):
+            raise TypeError("anneal_resources must be a JSON array")
+        data["anneal_resources"] = tuple(data["anneal_resources"])
     for name in ("resources", "map_resources", "spectrum_resources"):
         if not isinstance(data[name], list):
             raise TypeError(f"{name} must be a JSON array")

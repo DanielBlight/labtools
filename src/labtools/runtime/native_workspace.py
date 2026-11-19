@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import importlib
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from labtools.acquisition.spectrum_service import SpectrumService
@@ -69,7 +69,7 @@ class NativeWorkspace:
     requests and even direct calls to its native constructors refuse execution.
     """
 
-    def __init__(self, manifest):
+    def __init__(self, manifest, *, preferences_path=None, anneal_profile=None):
         self.manifest = Path(manifest).expanduser().resolve()
         report = preflight_candidate(self.manifest)
         if report.errors:
@@ -79,10 +79,21 @@ class NativeWorkspace:
             data["inputs_complete"] = False
             data["input_errors"] = [{"field": "source_profile", "message": "Native launch requires a schema-2 source-backed candidate"}]
             raise NativeWorkspaceInputError(data)
-        self._preflight = report
-        self.plan = report.plan
+        config = report.plan.reservation_config
+        shared = tuple(dict.fromkeys((config.map_resources[0], *sorted(set(config.map_resources).intersection(config.spectrum_resources)))))
+        extras = tuple(config.configuration_id + ":" + name for name in ("anneal-shutter", "rotation-stage", "anneal-camera"))
+        if set(extras) & set(config.resources):
+            raise ValueError("Anneal logical resource labels collide with existing resources")
+        config = replace(config, resources=config.resources + extras, anneal_resources=shared + extras)
+        config.validate()
+        self.plan = replace(report.plan, reservation_config=config)
+        self._preflight = replace(report, plan=self.plan)
         self.workflows = NativeWorkflowInputs(self.plan)
         self.spectrum_service = SpectrumService(self._workflow_backend)
+        from labtools.runtime.unified_inputs import UnifiedDrafts
+
+        self.drafts = UnifiedDrafts(self, preferences_path, anneal_profile)
+        self._preflight = replace(self._preflight, plan=self.plan)
         self._closed = False
         self._ownership = WorkspaceOwnership(self.plan.reservation_config)
         try:
@@ -112,7 +123,15 @@ class NativeWorkspace:
             "configured_spectrum": asdict(self.plan.spectrum_request.settings),
             "workspace_kind": "native-candidate",
             "operator_workflows_bound": True,
-            "operator_drafts": "in-memory only; source files and standalone QSettings unchanged",
+            "workflows": ["Intensity map", "Spectrum", "Annealing"],
+            "anneal": {"configuration_origin": "existing anneal defaults plus shared source wiring/envelope",
+                       "local_profile": self.drafts.local_profile.profile_id if self.drafts.local_profile else None,
+                       "profile_error": self.drafts.profile_error,
+                       "sc10_port": self.drafts.anneal_base.sc10_port,
+                       "physical_shutter_stage_camera": "not probed; not interchangeable with spectroscopy TTL shutter",
+                       "execution_enabled": False},
+            "preferences": {"path": str(self.drafts.store.path), "messages": list(self.drafts.store.messages)},
+            "operator_drafts": "validated per-user preferences; source files and standalone QSettings unchanged",
             "selection": {
                 "labjack": {"policy": settings["labjack_selection"], "physical_serial": None,
                             "status": "implicit-first-device; not discovered or confirmed"},
@@ -154,6 +173,15 @@ class NativeWorkspace:
         self._require_open()
         settings = self.workflows.spectrum_settings(settings)
         return await self.spectrum_service.capture_dark(settings, **kwargs)
+
+    def acquire_anneal(self, config=None, **kwargs):
+        self._require_open()
+        self.drafts.validate("anneal", self.drafts.values["anneal"] if config is None else config)
+        _refuse_execution()
+
+    def save_preferences(self, **drafts):
+        self._require_open()
+        self.drafts.save(**drafts)
 
     def close(self):
         if not self._closed:

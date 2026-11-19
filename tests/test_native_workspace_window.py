@@ -11,10 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_native_window_is_disabled_refreshes_and_closes(tmp_path, monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("PROGRAMDATA", str(tmp_path / "program"))
+    monkeypatch.delenv("LABTOOLS_INSTRUMENT_PROFILE", raising=False)
     try:
-        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtWidgets import QApplication, QMessageBox
     except ImportError as error:
         pytest.skip(f"Actual Qt window acceptance unavailable: {error}")
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
     from labtools.gui.native_workspace import create_window
     from labtools.runtime.native_workspace import NativeWorkspace
 

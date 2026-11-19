@@ -32,11 +32,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from labtools.acquisition.laser_anneal import (
+from labtools.config.anneal_types import (
     AnnealProgress,
     LaserAnnealConfig,
     LaserAnnealResult,
-    run_laser_anneal,
 )
 
 # labtools operator workspace v1
@@ -44,9 +43,32 @@ from labtools.config.anneal_workspace import (
     resolve_gui_config,
     validate_stage_coordinate,
 )
-from labtools.devices.kinesis_rotation_stage import KinesisRotationStage
-from labtools.devices.sc10 import SC10
-from labtools.devices.uc480_camera import ThorlabsUC480Camera
+
+
+# Native constructors remain lazy; merely displaying an embedded panel does no I/O.
+def run_laser_anneal(*args, **kwargs):
+    from labtools.acquisition.laser_anneal import run_laser_anneal as run
+
+    return run(*args, **kwargs)
+
+
+def KinesisRotationStage(*args, **kwargs):
+    from labtools.devices.kinesis_rotation_stage import KinesisRotationStage as stage
+
+    return stage(*args, **kwargs)
+
+
+def SC10(*args, **kwargs):
+    from labtools.devices.sc10 import SC10 as shutter
+
+    return shutter(*args, **kwargs)
+
+
+def ThorlabsUC480Camera(*args, **kwargs):
+    from labtools.devices.uc480_camera import ThorlabsUC480Camera as camera
+
+    return camera(*args, **kwargs)
+
 from labtools.gui.error_formatting import format_operator_exception
 from labtools.gui.recipe_controls import setup_recipe_controls
 
@@ -59,15 +81,16 @@ class AnnealWorker(QObject):
     failed = pyqtSignal(str)
     status = pyqtSignal(str)
 
-    def __init__(self, config: LaserAnnealConfig, stop_event: Event) -> None:
+    def __init__(self, config: LaserAnnealConfig, stop_event: Event, acquisition=None) -> None:
         super().__init__()
         self.config = config
         self.stop_event = stop_event
+        self._acquisition = acquisition if acquisition is not None else run_laser_anneal
 
     @pyqtSlot()
     def run(self) -> None:
         try:
-            result = run_laser_anneal(
+            result = self._acquisition(
                 self.config,
                 stop_event=self.stop_event,
                 progress_callback=self.progress.emit,
@@ -290,8 +313,9 @@ class CameraDisplay(QLabel):
 class LaserAnnealWindow(QMainWindow):
     """Laser anneal controls with a live Thorlabs UC480 camera preview."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, acquisition=None, recipe_controls=True) -> None:
         super().__init__()
+        self._acquisition = acquisition
         self._settings = QSettings(
             "labtools",
             "LaserAnneal",
@@ -503,7 +527,8 @@ class LaserAnnealWindow(QMainWindow):
         self._update_camera_settings()
         self._update_estimate()
         self._apply_style()
-        setup_recipe_controls(self)
+        if recipe_controls:
+            setup_recipe_controls(self)
 
     def _make_collapsible(
         self,
@@ -935,9 +960,12 @@ class LaserAnnealWindow(QMainWindow):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
+        self._start_worker(config)
+
+    def _start_worker(self, config):
         self._stop_event.clear()
         self._thread = QThread(self)
-        self._worker = AnnealWorker(config, self._stop_event)
+        self._worker = AnnealWorker(config, self._stop_event, acquisition=self._acquisition)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_progress)

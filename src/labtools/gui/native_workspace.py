@@ -19,6 +19,7 @@ def create_window(workspace):
         QWidget,
     )
 
+    from labtools.gui.native_anneal_panel import NativeAnnealPanel
     from labtools.gui.native_workflow_panels import NativeMapPanel, NativeSpectrumPanel
     from labtools.simulation.workspace import (
         busy_workflows,
@@ -53,10 +54,17 @@ def create_window(workspace):
             self.preview_button = QPushButton("Validate and preview operator drafts (no execution)")
             self.preview_button.clicked.connect(self.preview)
             overview_layout.addWidget(self.preview_button)
+            self.save_button = QPushButton("Save operator settings")
+            self.save_button.clicked.connect(self.save_preferences)
+            overview_layout.addWidget(self.save_button)
+            self.stop_all_button = QPushButton("Stop all workflows")
+            self.stop_all_button.clicked.connect(self.stop_all)
+            overview_layout.addWidget(self.stop_all_button)
             self.tabs.addTab(overview, "Configuration and draft preview")
             try:
                 self.pages["Intensity map"] = NativeMapPanel(workspace=workspace)
                 self.pages["Spectrum"] = NativeSpectrumPanel(workspace=workspace)
+                self.pages["Annealing"] = NativeAnnealPanel(workspace=workspace)
                 for name, page in self.pages.items():
                     page.setParent(self.tabs)
                     page.setWindowFlags(Qt.WindowType.Widget)
@@ -69,12 +77,63 @@ def create_window(workspace):
             self.operation_buttons = [
                 mapping.start_button, mapping.resume_button,
                 spectrum.connect_button, spectrum.acquire_button, spectrum.capture_dark_button,
+                self.pages["Annealing"].start_button, self.pages["Annealing"].start_camera_button,
             ]
             close_button = QPushButton("Close workspace")
             close_button.clicked.connect(self.close)
             layout.addWidget(close_button)
             self.setCentralWidget(body)
+            self.restore_display()
             self.refresh()
+
+        def restore_display(self):
+            data = workspace.drafts.display
+            mapping, spectrum, anneal = (self.pages[name] for name in ("Intensity map", "Spectrum", "Annealing"))
+            for key, widget in (("map_log", mapping.log_colour_scale), ("map_manual_limits", mapping.custom_colour_limits),
+                                ("spectrum_csv", spectrum.save_csv), ("spectrum_png", spectrum.save_png)):
+                if key in data:
+                    widget.setChecked(data[key])
+            for key, widget in (("map_min", mapping.colour_min), ("map_max", mapping.colour_max),
+                                ("camera_exposure_ms", anneal.camera_exposure_ms), ("camera_gain", anneal.camera_gain),
+                                ("camera_interval_ms", anneal.camera_interval_ms)):
+                if key in data:
+                    widget.setValue(data[key])
+            if "spectrum_output" in data:
+                spectrum.output_directory.setText(data["spectrum_output"])
+
+        def display_preferences(self):
+            mapping, spectrum, anneal = (self.pages[name] for name in ("Intensity map", "Spectrum", "Annealing"))
+            return {"map_log": mapping.log_colour_scale.isChecked(),
+                    "map_manual_limits": mapping.custom_colour_limits.isChecked(),
+                    "map_min": mapping.colour_min.value(), "map_max": mapping.colour_max.value(),
+                    "spectrum_output": spectrum.output_directory.text(), "spectrum_csv": spectrum.save_csv.isChecked(),
+                    "spectrum_png": spectrum.save_png.isChecked(), "camera_exposure_ms": anneal.camera_exposure_ms.value(),
+                    "camera_gain": anneal.camera_gain.value(), "camera_interval_ms": anneal.camera_interval_ms.value()}
+
+        def save_preferences(self):
+            drafts = {"display": self.display_preferences()}
+            for name, key, method in (("Intensity map", "map", "_config"), ("Spectrum", "spectrum", "_snapshot_settings"),
+                                      ("Annealing", "anneal", "_build_config")):
+                try:
+                    drafts[key] = getattr(self.pages[name], method)()
+                except (OSError, ValueError, TypeError) as error:
+                    workspace.drafts.store.messages.append(f"{name} draft not saved: {error}")
+            try:
+                workspace.save_preferences(**drafts)
+            except (OSError, ValueError, TypeError, RuntimeError) as error:
+                self.report.setPlainText("Settings could not be saved: " + str(error))
+                return False
+            self.report.setPlainText("Operator settings saved to " + str(workspace.drafts.store.path)
+                                     + "\n" + "\n".join(workspace.drafts.store.messages))
+            return True
+
+        def stop_all(self):
+            errors = stop_workflows(self.pages)
+            if errors:
+                self.report.setPlainText("Stop request errors:\n" + "\n".join(errors))
+
+        def any_busy(self):
+            return bool(busy_workflows(self.pages))
 
         def refresh(self):
             try:
@@ -100,6 +159,12 @@ def create_window(workspace):
                     if dark is None:
                         raise ValueError("Load a compatible native dark archive before previewing pre-taken subtraction")
                     dark.validate_for(spectrum._snapshot_settings())
+                from dataclasses import asdict
+
+                anneal = asdict(self.pages["Annealing"]._build_config())
+                anneal["output_root"] = str(anneal["output_root"])
+                data["anneal"] = anneal
+                data["anneal_execution_enabled"] = False
                 data["dark_mode"] = mode
                 data["dark_record_id"] = dark.record_id if mode == "pre_taken" else None
                 self.report.setPlainText(json.dumps(
@@ -110,11 +175,20 @@ def create_window(workspace):
             self.tabs.setCurrentIndex(0)
 
         def closeEvent(self, event):
-            if busy_workflows(self.pages):
-                stop_workflows(self.pages)
+            if self.any_busy():
+                self.stop_all()
                 self.report.setPlainText("Stop requested; wait for worker cleanup and close again.")
                 event.ignore()
                 return
+            if not self.save_preferences():
+                from PyQt6.QtWidgets import QMessageBox
+
+                answer = QMessageBox.question(self, "Settings not saved", "Close without saving operator settings?",
+                                              QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                              QMessageBox.StandardButton.No)
+                if answer != QMessageBox.StandardButton.Yes:
+                    event.ignore()
+                    return
             if not close_workflows(self.pages):
                 event.ignore()
                 return
