@@ -384,9 +384,8 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         output_path=output / "summed_intensity_map.png",
         show=False,
     )
-    import matplotlib.pyplot as plt
-
-    plt.close(figure)
+    # Export figures are unmanaged Agg figures, not pyplot/Qt windows.
+    figure.clear()
 
 
 def _plot_title(channels: Sequence[int]) -> str:

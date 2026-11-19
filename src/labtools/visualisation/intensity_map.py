@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm, Normalize
@@ -123,7 +122,18 @@ def plot_intensity_map(
 
     plot_settings = settings or PlotSettings()
     display, norm = colour_mapping(values, plot_settings)
-    figure, axes = plt.subplots(figsize=(7.2, 5.8))
+    if show:
+        # Interactive plotting remains on the caller's GUI/main thread.
+        import matplotlib.pyplot as plt
+
+        figure, axes = plt.subplots(figsize=(7.2, 5.8))
+    else:
+        # Export must never create a QApplication from an acquisition worker.
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+        figure = Figure(figsize=(7.2, 5.8))
+        FigureCanvasAgg(figure)
+        axes = figure.subplots()
     image = axes.imshow(
         display,
         origin="lower",
