@@ -21,11 +21,14 @@ class WorkspaceSpectrumTransport:
     No handle is submitted to InstrumentSession's executor or retained across loops.
     """
 
-    def __init__(self, *, ownership, spectrometer_factory):
+    def __init__(self, *, ownership, spectrometer_factory, stitcher=None):
         if not callable(spectrometer_factory):
             raise TypeError("An explicit spectrometer_factory callable is required")
         self._ownership = ownership
+        if stitcher is not None and not callable(stitcher):
+            raise TypeError("stitcher must be callable when supplied")
         self._factory = spectrometer_factory
+        self._stitcher = stitcher
         self.service = SpectrumService(self._backend)
 
     def _require_reservation(self, settings):
@@ -47,7 +50,10 @@ class WorkspaceSpectrumTransport:
         active = True
         boundary = self
         # Existing adapter owns connect/configure/disconnect and error preservation.
-        async with open_real_range(settings, spectrometer_factory=self._factory) as backend:
+        async with open_real_range(
+            settings, spectrometer_factory=self._factory,
+            **({"stitcher": self._stitcher} if self._stitcher is not None else {}),
+        ) as backend:
             class Operation:
                 def check(self):
                     if not active or get_ident() != thread or asyncio.get_running_loop() is not loop:

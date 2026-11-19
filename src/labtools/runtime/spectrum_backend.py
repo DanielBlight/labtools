@@ -26,6 +26,7 @@ async def open_real_range(
     settings: SpectrumSettings,
     *,
     spectrometer_factory: Callable[..., Any] | None = None,
+    stitcher=None,
 ) -> AsyncIterator[RangeBackend]:
     settings.validate()
     if settings.backend != "real":
@@ -63,6 +64,7 @@ async def open_real_range(
                     stitch_pixel_overlap=settings.overlap_pixels,
                     n_frames=settings.n_frames,
                     mode=settings.combine_mode,
+                    **({"stitcher": stitcher} if stitcher is not None else {}),
                 )
                 return dark.wavelength_nm, dark.intensity
 
@@ -75,6 +77,7 @@ async def open_real_range(
                     n_frames=settings.n_frames,
                     mode=settings.combine_mode,
                     dark_mode=dark_mode,
+                    **({"stitcher": stitcher} if stitcher is not None else {}),
                 )
 
         yield Backend()

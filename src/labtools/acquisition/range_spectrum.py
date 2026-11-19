@@ -110,6 +110,7 @@ async def capture_range_dark(
     stitch_pixel_overlap: int = 20,
     n_frames: int = 1,
     mode: CombineMode = "single",
+    stitcher=None,
 ) -> DarkSpectrum:
     """Capture one reusable stitched dark spectrum across the full range."""
     if end_wavelength < start_wavelength:
@@ -137,7 +138,7 @@ async def capture_range_dark(
         )
         captures.append(_vendor_capture(x_data, y_data))
 
-    x_out, y_out = _stitch_and_filter(
+    x_out, y_out = (stitcher if stitcher is not None else _stitch_and_filter)(
         captures,
         start_wavelength,
         end_wavelength,
@@ -155,6 +156,7 @@ async def get_range_spectrum(
     mode: CombineMode = "single",
     dark_mode: RangeDarkMode = "none",
     pre_taken_dark: DarkSpectrum | None = None,
+    stitcher=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Acquire a stitched spectrum with selectable dark-frame behaviour."""
     if dark_mode not in {"none", "per_center", "per_frame", "pre_taken"}:
@@ -197,7 +199,7 @@ async def get_range_spectrum(
         )
         captures.append(_vendor_capture(x_data, y_data))
 
-    x_out, y_out = _stitch_and_filter(
+    x_out, y_out = (stitcher if stitcher is not None else _stitch_and_filter)(
         captures,
         start_wavelength,
         end_wavelength,
