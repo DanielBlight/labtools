@@ -44,10 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="Required for real execution; never inferred or prompted",
             )
-    workspace = sub.add_parser("workspace", help="Read-only native-candidate preflight; no hardware")
+    workspace = sub.add_parser("workspace", help="Native-candidate preflight and disabled workspace launch; no hardware")
     candidate = workspace.add_subparsers(dest="workspace_action", required=True)
     preflight = candidate.add_parser("preflight", help="Report missing native inputs; execution stays disabled")
     preflight.add_argument("manifest", type=Path)
+    launch = candidate.add_parser("launch", help="Open native workspace with execution disabled; no hardware")
+    launch.add_argument("manifest", type=Path)
+    launch.add_argument("--headless", action="store_true", help="Compose, report selection/gate and close without Qt")
     simulation = sub.add_parser("simulate", help="Run explicitly synthetic data tools")
     tools = simulation.add_subparsers(dest="simulation_tool", required=True)
     tools.add_parser("intensity-map", add_help=False)
@@ -64,6 +67,26 @@ def main(argv: Sequence[str] | None = None) -> None:
 
         if remaining:
             parser.error("unrecognized arguments: " + " ".join(remaining))
+        if args.workspace_action == "launch":
+            from labtools.runtime.native_workspace import (
+                NativeWorkspace,
+                NativeWorkspaceInputError,
+            )
+
+            try:
+                with NativeWorkspace(args.manifest) as workspace:
+                    if args.headless:
+                        print(json.dumps(workspace.describe(), indent=2))
+                    else:
+                        from labtools.gui.native_workspace import launch_window
+
+                        code = launch_window(workspace)
+                        if code:
+                            parser.exit(code)
+            except NativeWorkspaceInputError as error:
+                print(json.dumps(error.report, indent=2))
+                parser.exit(2)
+            return
         report = preflight_candidate(args.manifest)
         print(json.dumps(report.to_data(), indent=2))
         if report.errors:

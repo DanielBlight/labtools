@@ -1,5 +1,9 @@
 # Native workspace candidate: read-only preflight and disabled composition
 
+Current launch route: see [Native workspace launch](native-workspace-launch.md).
+The native candidate now has a read-only launch window and headless composition;
+execution remains disabled. Earlier no-launch statements below describe the prior checkpoint.
+
 This is the native input/composition boundary, not another fake-only workspace mode.
 It reuses the existing strict measurement recipes, instrument-profile loader, map and
 spectrum transport boundaries, and InstrumentSession-backed workspace ownership.

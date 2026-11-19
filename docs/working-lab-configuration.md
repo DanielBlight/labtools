@@ -1,5 +1,9 @@
 # Working-lab configuration migration
 
+Current launch route: see [Native workspace launch](native-workspace-launch.md).
+The native candidate now has a read-only launch window and headless composition;
+execution remains disabled. Earlier no-launch statements below describe the prior checkpoint.
+
 This migrates settings from labtools_working_lab_20261119_113535.txt, captured from
 C:\Users\mbcx4db7\Downloads\labtools, into the development project's existing recipe
 and disabled native-candidate mechanisms. It does not modify that working lab copy,
