@@ -50,6 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("manifest", type=Path)
     launch = candidate.add_parser("launch", help="Open native workspace with execution disabled; no hardware")
     launch.add_argument("manifest", type=Path)
+    launch.add_argument("--simulate", action="store_true", help="Explicit synthetic map/spectrum/anneal/camera; no hardware")
+    launch.add_argument("--simulation-realtime", action="store_true", help="Honour synthetic map/anneal dwell timing")
+    launch.add_argument("--simulation-output", type=Path, help="Initial synthetic output root; separate from native preferences")
     launch.add_argument("--anneal-profile", type=Path, help="Existing local anneal profile; never created or overwritten")
     launch.add_argument("--headless", action="store_true", help="Compose, report selection/gate and close without Qt")
     simulation = sub.add_parser("simulate", help="Run explicitly synthetic data tools")
@@ -75,7 +78,18 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
 
             try:
-                with NativeWorkspace(args.manifest, anneal_profile=args.anneal_profile) as workspace:
+                if not args.simulate and (args.simulation_realtime or args.simulation_output is not None):
+                    parser.error("--simulation-realtime/--simulation-output require --simulate")
+                if args.simulate:
+                    from labtools.simulation.operator_session import (
+                        SimulatedOperatorSession,
+                    )
+
+                    session = SimulatedOperatorSession(args.manifest, anneal_profile=args.anneal_profile,
+                                                       output_root=args.simulation_output, realtime=args.simulation_realtime)
+                else:
+                    session = NativeWorkspace(args.manifest, anneal_profile=args.anneal_profile)
+                with session as workspace:
                     if args.headless:
                         print(json.dumps(workspace.describe(), indent=2))
                     else:

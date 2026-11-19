@@ -28,19 +28,34 @@ def create_window(workspace):
         stop_workflows,
     )
 
+    simulated = bool(getattr(workspace, "simulation_only", False))
+    if simulated:
+        from labtools.gui.simulated_workflow_panels import (
+            SimulatedAnnealPanel,
+            SimulatedMapPanel,
+            SimulatedSpectrumPanel,
+        )
+
     class NativeWindow(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("Labtools native workspace - execution disabled")
+            self.setWindowTitle("Labtools Workspace - SIMULATION ONLY" if simulated
+                                else "Labtools native workspace - execution disabled")
             self.resize(1500, 1000)
             self.pages = {}
             self.camera_window = CameraWindow(self, reserve=workspace.reserve_camera)
+            if simulated:
+                self.camera_window.source.removeItem(1)
+                self.camera_window.source.setToolTip("Whole-workspace simulation: real camera selection is unavailable")
             body = QWidget()
             layout = QVBoxLayout(body)
             label = QLabel(
                 "NATIVE CANDIDATE: operator drafts only. No hardware is opened. "
                 "Settings and detector serials are source expectations, not readbacks."
             )
+            if simulated:
+                label.setText("SIMULATION ONLY: generated map, spectra, anneal state and camera. "
+                              "No physical instruments, laser, shutter or stage are connected. Native execution remains gated.")
             label.setWordWrap(True)
             layout.addWidget(label)
             self.camera_button = QPushButton("Open camera window")
@@ -67,9 +82,12 @@ def create_window(workspace):
             overview_layout.addWidget(self.stop_all_button)
             self.tabs.addTab(overview, "Configuration and draft preview")
             try:
-                self.pages["Intensity map"] = NativeMapPanel(workspace=workspace)
-                self.pages["Spectrum"] = NativeSpectrumPanel(workspace=workspace)
-                self.pages["Annealing"] = NativeAnnealPanel(workspace=workspace, camera_window=self.camera_window)
+                map_panel = SimulatedMapPanel if simulated else NativeMapPanel
+                spectrum_panel = SimulatedSpectrumPanel if simulated else NativeSpectrumPanel
+                anneal_panel = SimulatedAnnealPanel if simulated else NativeAnnealPanel
+                self.pages["Intensity map"] = map_panel(workspace=workspace)
+                self.pages["Spectrum"] = spectrum_panel(workspace=workspace)
+                self.pages["Annealing"] = anneal_panel(workspace=workspace, camera_window=self.camera_window)
                 for name, page in self.pages.items():
                     page.setParent(self.tabs)
                     page.setWindowFlags(Qt.WindowType.Widget)
@@ -178,6 +196,7 @@ def create_window(workspace):
                 anneal["output_root"] = str(anneal["output_root"])
                 data["anneal"] = anneal
                 data["anneal_execution_enabled"] = False
+                data["anneal_simulation_enabled"] = simulated
                 data["dark_mode"] = mode
                 data["dark_record_id"] = dark.record_id if mode == "pre_taken" else None
                 self.report.setPlainText(json.dumps(

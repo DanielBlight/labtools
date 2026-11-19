@@ -151,7 +151,7 @@ def test_cli_headless_closes_without_qt(manifest, capsys):
     assert not report["execution_enabled"]
 
 
-@pytest.mark.parametrize("flag", ["--execute", "--enable", "--simulate", "--discover"])
+@pytest.mark.parametrize("flag", ["--execute", "--enable", "--discover"])
 def test_cli_has_no_gate_bypass(manifest, flag):
     from labtools.cli import main
 
@@ -191,3 +191,20 @@ def test_source_change_before_context_entry_closes_session(manifest):
     with pytest.raises(ValueError, match="source changed"), workspace:
         pytest.fail("Changed source entered context")
     assert workspace._closed
+
+
+def test_cli_explicit_simulation_is_not_native_gate_bypass(manifest, capsys):
+    from labtools.cli import main
+
+    main(["workspace", "launch", str(manifest), "--headless", "--simulate"])
+    report = json.loads(capsys.readouterr().out)
+    assert report["workspace_kind"] == "explicit-simulation"
+    assert report["simulation_execution_enabled"] and report["synthetic"]
+    assert not report["execution_enabled"] and not report["native_execution_enabled"]
+    assert not report["hardware_opened"] and not report["environment_probed"]
+    assert report["camera_preview"]["source"] == "simulation only"
+    with native.NativeWorkspace(manifest) as workspace:
+        with pytest.raises(NativeExecutionDisabled):
+            workspace.acquire_map()
+        with pytest.raises(NativeExecutionDisabled):
+            workspace.acquire_anneal()
