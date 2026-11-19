@@ -103,7 +103,7 @@ def test_missing_reference_is_reported(manifest, field):
     ("profile.json", lambda data: data.update(home_x_voltage_v=.1), "instrument_profile.home"),
     ("map.json", lambda data: data["recipe"]["config"].update(mirror_dio_pin=4), "map_recipe.config.mirror_dio_pin"),
     ("map.json", lambda data: data["recipe"]["config"].update(spad_gate_pin=2), "map_recipe.config.spad_gate_pin"),
-    ("map.json", lambda data: data["recipe"]["config"].update(safe_voltage_min_v=-6), "map_recipe.config.safe_voltage_limits"),
+    ("map.json", lambda data: data["recipe"]["config"].update(safe_voltage_min_v=-11), "map_recipe.config.safe_voltage_limits"),
     ("map.json", lambda data: data["recipe"]["config"].update(backend="simulation"), "map_recipe"),
     ("spectrum.json", lambda data: data["recipe"]["settings"].update(configuration_id="wrong"), "spectrum_recipe"),
     ("spectrum.json", lambda data: data["recipe"]["settings"].update(backend="simulation"), "spectrum_recipe"),

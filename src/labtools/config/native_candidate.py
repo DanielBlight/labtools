@@ -59,6 +59,7 @@ class NativeCandidatePlan:
     map_config: object
     spectrum_request: object
     sources: tuple[SourceStamp, ...]
+    hardware_settings: dict | None = None
 
     def verify_sources(self):
         for source in self.sources:
@@ -68,6 +69,7 @@ class NativeCandidatePlan:
     def describe(self):
         return {
             "configuration_id": self.configuration_id, "profile_id": self.profile_id,
+            "hardware_settings": self.hardware_settings,
             "map_resources": list(self.reservation_config.map_resources),
             "spectrum_resources": list(self.reservation_config.spectrum_resources),
             "map_provider": "WorkspaceMapTransport / operation-scoped synchronous worker",
@@ -80,6 +82,7 @@ class NativeCandidatePlan:
 class CandidatePreflight:
     errors: tuple[dict, ...]
     plan: NativeCandidatePlan | None = None
+    runtime_inputs: tuple[str, ...] = ()
 
     def to_data(self):
         return {
@@ -87,6 +90,7 @@ class CandidatePreflight:
             "execution_enabled": False, "disabled_reason": DISABLED_REASON,
             "hardware_opened": False, "environment_probed": False,
             "input_errors": list(self.errors),
+            "runtime_inputs": list(self.runtime_inputs),
             "binding_plan": self.plan.describe() if self.plan is not None else None,
             "review_limit": "Referenced documents are present and hashed, not interpreted as physical approval.",
         }
@@ -102,6 +106,10 @@ def preflight_candidate(manifest_path):
 
     try:
         data = _json(manifest_path)
+        if isinstance(data, dict) and type(data.get("schema_version")) is int and data["schema_version"] == 2:
+            from labtools.config.source_candidate import preflight_source_candidate
+
+            return preflight_source_candidate(manifest_path, data)
         expected = {"schema_version", "configuration_id", "resources", *REFERENCE_FIELDS}
         if not isinstance(data, dict) or set(data) != expected:
             raise ValueError("Manifest fields must match the native-candidate template exactly")

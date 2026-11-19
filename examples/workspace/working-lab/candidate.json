@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "configuration_id": "working-lab-20261119-source-defaults",
+  "resources": {
+    "labjack": "working-lab-u6",
+    "counter": "working-lab-counter",
+    "spectrometer": "working-lab-horiba",
+    "optical_path": "working-lab-optical-path"
+  },
+  "source_profile": "profile.json",
+  "map_recipe": "map.json",
+  "spectrum_recipe": "spectrum.json",
+  "source_record": "source-record.json"
+}

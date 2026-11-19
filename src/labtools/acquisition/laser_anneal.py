@@ -43,8 +43,8 @@ class LaserAnnealConfig:
     point_dwell_s: float = 0.001
     mirror_settle_s: float = 0.0
     serpentine: bool = False
-    minimum_mirror_voltage_v: float = -5.0
-    maximum_mirror_voltage_v: float = 5.0
+    minimum_mirror_voltage_v: float = -10.0
+    maximum_mirror_voltage_v: float = 10.0
     mirror_dio_pin: int = 2
     home_x_voltage_v: float = 0.0
     home_y_voltage_v: float = 0.0

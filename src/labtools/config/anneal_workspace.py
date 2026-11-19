@@ -44,8 +44,8 @@ class InstrumentProfile:
     sc10_baud_rate: int = 9600
     sc10_timeout_s: float = 0.5
     mirror_dio_pin: int = 2
-    minimum_mirror_voltage_v: float = -5.0
-    maximum_mirror_voltage_v: float = 5.0
+    minimum_mirror_voltage_v: float = -10.0
+    maximum_mirror_voltage_v: float = 10.0
     home_x_voltage_v: float = 0.0
     home_y_voltage_v: float = 0.0
     rotation_stage_timeout_s: float = 60.0

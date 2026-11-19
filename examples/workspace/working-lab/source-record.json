@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "origin": "working-lab-source",
+  "snapshot_name": "labtools_working_lab_20261119_113535.txt",
+  "snapshot_sha256": "536032b6f9e7dd8710735e318bddaec4a39865b4b57ba482dfadf1c6e638ed1a",
+  "source_root": "C:\\Users\\mbcx4db7\\Downloads\\labtools",
+  "sources": [
+    {
+      "path": "README.md",
+      "sha256": "9c6f728dd9a91f3ae9d36504353b5e52917f56bb40074e774821827f9b6f6ca8",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "247343dbe112648764017b411599c02e2deeb9c03d2a89c0b41e11a49cc345bf",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/acquisition/intensity_map.py",
+      "sha256": "066c1c0af97f6671fb0fc19c74517a211ab04eac917a4678eac28ca6471bfedc",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/devices/horiba_spectrometer.py",
+      "sha256": "0b9c89a42c3a66be33feb963f680ce530fc2f89795a1e9c89e2e21101c8b153c",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/devices/idq_time_controller/controller.py",
+      "sha256": "f737d3f44a2c7563f7036674ac87f1da12c76caeb97e6554b2c014e1ad8f2400",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/devices/labjack_u6.py",
+      "sha256": "537606ce104977f915dbc923798b35c00fcd13847eb0462dd7aa63e25dd21a55",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/devices/scanning_mirror.py",
+      "sha256": "5c4194ce41364b6d7bf665a022e95bb10307175d0c44204f25acbd8eac563b7d",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/devices/spad_gate.py",
+      "sha256": "83dcb24e44289ce70bf37180326c5f97cc106603f8bbe92fd3166f739835c4a9",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/gui/intensity_map_gui.py",
+      "sha256": "358a118337b94f407f935e113dcf8a32dff62a216a5d1238bb025b7738bd7295",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    },
+    {
+      "path": "src/labtools/gui/spectrum_gui_horiba.py",
+      "sha256": "76069434287dbdba7a481ad50ce705a40f1f2f28adf0de2874a31f39b7f0ddeb",
+      "hash_basis": "UTF-8 captured section including trailing newlines"
+    }
+  ],
+  "claims": [
+    {
+      "field": "detectors.syncerity",
+      "value": {
+        "ccd_index": 1,
+        "expected_device_type": "HORIBA Syncerity",
+        "expected_chip_width": 1024,
+        "expected_chip_height": 256,
+        "expected_serial_number": "Camera SN: 926",
+        "grating": "SECOND",
+        "mirror_position": "AXIAL",
+        "roi": {
+          "x_size": 1024,
+          "x_bin": 1,
+          "y_origin": 0,
+          "y_size": 256,
+          "y_bin": 256
+        },
+        "default_gain": 2,
+        "default_speed": 0,
+        "gains": [
+          [
+            "Best Dynamic Range",
+            1
+          ],
+          [
+            "High Sensitivity",
+            2
+          ],
+          [
+            "High Light",
+            0
+          ]
+        ],
+        "speeds": [
+          [
+            "1 MHz",
+            1
+          ],
+          [
+            "1 MHz Ultra",
+            2
+          ],
+          [
+            "500 kHz Wrap",
+            127
+          ],
+          [
+            "45 kHz",
+            0
+          ]
+        ],
+        "minimum_exposure_s": 0.065
+      },
+      "source": "src/labtools/devices/horiba_spectrometer.py",
+      "line": 47
+    },
+    {
+      "field": "detectors.symphony",
+      "value": {
+        "ccd_index": 0,
+        "expected_device_type": "HORIBA Synapse / Symphony II",
+        "expected_chip_width": 512,
+        "expected_chip_height": 1,
+        "expected_serial_number": "Camera SN: 26070",
+        "grating": "THIRD",
+        "mirror_position": "LATERAL",
+        "roi": {
+          "x_size": 512,
+          "x_bin": 1,
+          "y_origin": 0,
+          "y_size": 1,
+          "y_bin": 1
+        },
+        "default_gain": 2,
+        "default_speed": 0,
+        "gains": [
+          [
+            "High Dynamic Range",
+            1
+          ],
+          [
+            "High Sensitivity",
+            2
+          ]
+        ],
+        "speeds": [
+          [
+            "1.5 MHz",
+            1
+          ],
+          [
+            "500 kHz Wrap",
+            127
+          ],
+          [
+            "300 kHz",
+            0
+          ]
+        ],
+        "minimum_exposure_s": 0.1
+      },
+      "source": "src/labtools/devices/horiba_spectrometer.py",
+      "line": 77
+    },
+    {
+      "field": "mirror_dio_pin",
+      "value": 2,
+      "source": "src/labtools/acquisition/intensity_map.py",
+      "line": 54
+    },
+    {
+      "field": "spad_gate_pin",
+      "value": 0,
+      "source": "src/labtools/acquisition/intensity_map.py",
+      "line": 55
+    },
+    {
+      "field": "minimum_mirror_voltage_v",
+      "value": -10.0,
+      "source": "src/labtools/acquisition/intensity_map.py",
+      "line": 59
+    },
+    {
+      "field": "maximum_mirror_voltage_v",
+      "value": 10.0,
+      "source": "src/labtools/acquisition/intensity_map.py",
+      "line": 60
+    },
+    {
+      "field": "counter_address",
+      "value": "169.254.99.159",
+      "source": "src/labtools/acquisition/intensity_map.py",
+      "line": 51
+    },
+    {
+      "field": "gate_active_high",
+      "value": true,
+      "source": "src/labtools/devices/spad_gate.py",
+      "line": 31
+    },
+    {
+      "field": "home",
+      "value": [
+        0,
+        0
+      ],
+      "source": "src/labtools/devices/scanning_mirror.py",
+      "line": 85
+    },
+    {
+      "field": "counter_port",
+      "value": 5555,
+      "source": "src/labtools/devices/idq_time_controller/controller.py",
+      "line": 80
+    },
+    {
+      "field": "labjack_selection",
+      "value": "u6.U6()",
+      "source": "src/labtools/devices/labjack_u6.py",
+      "line": 22
+    },
+    {
+      "field": "monochromator_selection",
+      "value": "first-discovered",
+      "source": "src/labtools/devices/horiba_spectrometer.py",
+      "line": 167
+    },
+    {
+      "field": "map_startup_defaults",
+      "value": {
+        "x_start_v": -2,
+        "x_stop_v": 2,
+        "x_points": 40,
+        "y_start_v": -2,
+        "y_stop_v": 2,
+        "y_points": 40,
+        "integration_time_s": 0.1,
+        "channels": [
+          1
+        ],
+        "settle_time_s": 0.01,
+        "time_controller_address": "169.254.99.159",
+        "channel_thresholds_v": [
+          0.1
+        ],
+        "channel_edges": [
+          "rising"
+        ],
+        "mirror_dio_pin": 2,
+        "spad_gate_pin": 0,
+        "serpentine": true,
+        "output_root": "C:/LabData/roman/Er_Si_summer/intensity_mapping",
+        "save_results": true,
+        "safe_voltage_min_v": -10.0,
+        "safe_voltage_max_v": 10.0,
+        "checkpoint_every_points": 10,
+        "backend": "real",
+        "simulation_seed": 0,
+        "simulation_realtime": true,
+        "simulation_fail_after_points": null
+      },
+      "source": "src/labtools/gui/intensity_map_gui.py",
+      "line": 503
+    },
+    {
+      "field": "spectrum_startup_defaults",
+      "value": {
+        "configuration_id": "working-lab-20261119-source-defaults",
+        "preset": "syncerity",
+        "exposure_s": 0.5,
+        "gain": 2,
+        "speed": 0,
+        "slit_width_mm": 0.5,
+        "start_nm": 600,
+        "end_nm": 900,
+        "overlap_pixels": 20,
+        "n_frames": 1,
+        "combine_mode": "single",
+        "backend": "real"
+      },
+      "source": "src/labtools/gui/spectrum_gui_horiba.py",
+      "line": 279
+    },
+    {
+      "field": "shutter_context",
+      "value": "Detector TTL through SDrive-500; either active-high input can hold shared shutter open",
+      "source": "README.md",
+      "line": 301
+    }
+  ],
+  "notes": [
+    "New configuration/resource labels identify software composition only, not invented physical serials.",
+    "Recipes use GUI startup defaults, not persisted QSettings or historical hyperspectral script constants.",
+    "User authorized anneal default software envelope alignment to -10/+10 V; existing local profiles are not rewritten.",
+    "Map simulation/checkpoint fields and scripted owner labels are development recipe compatibility fields, not extracted physical settings."
+  ]
+}

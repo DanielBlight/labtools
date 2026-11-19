@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "kind": "intensity_map",
+  "recipe": {
+    "config": {
+      "x_start_v": -2,
+      "x_stop_v": 2,
+      "x_points": 40,
+      "y_start_v": -2,
+      "y_stop_v": 2,
+      "y_points": 40,
+      "integration_time_s": 0.1,
+      "channels": [
+        1
+      ],
+      "settle_time_s": 0.01,
+      "time_controller_address": "169.254.99.159",
+      "channel_thresholds_v": [
+        0.1
+      ],
+      "channel_edges": [
+        "rising"
+      ],
+      "mirror_dio_pin": 2,
+      "spad_gate_pin": 0,
+      "serpentine": true,
+      "output_root": "C:/LabData/roman/Er_Si_summer/intensity_mapping",
+      "save_results": true,
+      "safe_voltage_min_v": -10.0,
+      "safe_voltage_max_v": 10.0,
+      "checkpoint_every_points": 10,
+      "backend": "real",
+      "simulation_seed": 0,
+      "simulation_realtime": true,
+      "simulation_fail_after_points": null
+    },
+    "owner": "scripted-intensity-map",
+    "resume_directory": null
+  }
+}

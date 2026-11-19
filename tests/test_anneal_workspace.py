@@ -38,7 +38,7 @@ def test_round_trip(tmp_path):
         {"x_points": True},
         {"x_points": 0},
         {"x_start_v": float("nan")},
-        {"x_stop_v": 6.0},
+        {"x_stop_v": 10.1},
         {"maximum_open_time_s": 901.0},
         {"return_rotation_stage": False},
         {"anneal_rotation_coordinate": 1.0},
@@ -96,4 +96,3 @@ def test_anneal_output_directory_collision_allocates_unique_suffix(
     assert second.name == "2026-11-09_16-45-00-001"
     assert third.name == "2026-11-09_16-45-00-002"
     assert first.is_dir() and second.is_dir() and third.is_dir()
-

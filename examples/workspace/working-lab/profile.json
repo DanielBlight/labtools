@@ -1,0 +1,112 @@
+{
+  "schema_version": 2,
+  "profile_id": "working-lab-20261119",
+  "origin": "working-lab-source",
+  "mirror_dio_pin": 2,
+  "spad_gate_pin": 0,
+  "gate_active_high": true,
+  "minimum_mirror_voltage_v": -10.0,
+  "maximum_mirror_voltage_v": 10.0,
+  "home_x_voltage_v": 0.0,
+  "home_y_voltage_v": 0.0,
+  "counter_address": "169.254.99.159",
+  "counter_port": 5555,
+  "labjack_selection": "u6.U6()",
+  "monochromator_selection": "first-discovered",
+  "detectors": {
+    "syncerity": {
+      "ccd_index": 1,
+      "expected_device_type": "HORIBA Syncerity",
+      "expected_chip_width": 1024,
+      "expected_chip_height": 256,
+      "expected_serial_number": "Camera SN: 926",
+      "grating": "SECOND",
+      "mirror_position": "AXIAL",
+      "roi": {
+        "x_size": 1024,
+        "x_bin": 1,
+        "y_origin": 0,
+        "y_size": 256,
+        "y_bin": 256
+      },
+      "default_gain": 2,
+      "default_speed": 0,
+      "gains": [
+        [
+          "Best Dynamic Range",
+          1
+        ],
+        [
+          "High Sensitivity",
+          2
+        ],
+        [
+          "High Light",
+          0
+        ]
+      ],
+      "speeds": [
+        [
+          "1 MHz",
+          1
+        ],
+        [
+          "1 MHz Ultra",
+          2
+        ],
+        [
+          "500 kHz Wrap",
+          127
+        ],
+        [
+          "45 kHz",
+          0
+        ]
+      ],
+      "minimum_exposure_s": 0.065
+    },
+    "symphony": {
+      "ccd_index": 0,
+      "expected_device_type": "HORIBA Synapse / Symphony II",
+      "expected_chip_width": 512,
+      "expected_chip_height": 1,
+      "expected_serial_number": "Camera SN: 26070",
+      "grating": "THIRD",
+      "mirror_position": "LATERAL",
+      "roi": {
+        "x_size": 512,
+        "x_bin": 1,
+        "y_origin": 0,
+        "y_size": 1,
+        "y_bin": 1
+      },
+      "default_gain": 2,
+      "default_speed": 0,
+      "gains": [
+        [
+          "High Dynamic Range",
+          1
+        ],
+        [
+          "High Sensitivity",
+          2
+        ]
+      ],
+      "speeds": [
+        [
+          "1.5 MHz",
+          1
+        ],
+        [
+          "500 kHz Wrap",
+          127
+        ],
+        [
+          "300 kHz",
+          0
+        ]
+      ],
+      "minimum_exposure_s": 0.1
+    }
+  }
+}

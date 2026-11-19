@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "kind": "spectrum",
+  "recipe": {
+    "settings": {
+      "configuration_id": "working-lab-20261119-source-defaults",
+      "preset": "syncerity",
+      "exposure_s": 0.5,
+      "gain": 2,
+      "speed": 0,
+      "slit_width_mm": 0.5,
+      "start_nm": 600,
+      "end_nm": 900,
+      "overlap_pixels": 20,
+      "n_frames": 1,
+      "combine_mode": "single",
+      "backend": "real"
+    },
+    "owner": "scripted-spectrum",
+    "dark_mode": "none",
+    "dark_record_path": null
+  }
+}
