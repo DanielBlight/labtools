@@ -39,7 +39,6 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -51,6 +50,7 @@ from labtools.acquisition.spectrum_service import (
 )
 from labtools.config.spectrum import SpectrumSettings
 from labtools.gui.async_runner import AsyncTaskRunner
+from labtools.gui.operator_ui import ResponsiveSplitter
 from labtools.io.spectrum_records import (
     load_dark_record,
     save_dark_record,
@@ -117,7 +117,7 @@ class HoribaRangeWindow(QMainWindow):
             "SIMULATION - Spectrum" if backend == "simulation" else "HORIBA Spectrum Acquisition"
         )
         self.resize(1440, 900)
-        self.setMinimumSize(1120, 720)
+        self.setMinimumSize(640, 480)
 
         self.laser: ITC4000 | None = None
         self.pre_taken_dark: DarkRecord | None = None
@@ -134,6 +134,7 @@ class HoribaRangeWindow(QMainWindow):
         outer.setSpacing(10)
         if self._backend == "simulation":
             banner = QLabel("SIMULATION: synthetic spectra only. No detector or laser is connected.")
+            banner.setObjectName("simulationNotice")
             banner.setWordWrap(True)
             outer.addWidget(banner)
 
@@ -151,7 +152,7 @@ class HoribaRangeWindow(QMainWindow):
         header.addStretch(1)
         outer.addLayout(header)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter = ResponsiveSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
         splitter.setHandleWidth(8)
         outer.addWidget(splitter, 1)
@@ -162,11 +163,11 @@ class HoribaRangeWindow(QMainWindow):
         controls_scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        controls_scroll.setMinimumWidth(510)
-        controls_scroll.setMaximumWidth(575)
+        controls_scroll.setMinimumWidth(0)
+        controls_scroll.setMaximumWidth(480)
 
         controls = QWidget()
-        controls.setMinimumWidth(490)
+        controls.setMinimumWidth(320)
         controls.setObjectName("controlsPanel")
         controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(8, 4, 8, 8)
@@ -201,7 +202,7 @@ class HoribaRangeWindow(QMainWindow):
         self.canvas.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.canvas.setMinimumHeight(430)
+        self.canvas.setMinimumSize(160, 160)
         self.toolbar = NavigationToolbar(self.canvas, self)
         plot_layout.addWidget(self.toolbar)
         plot_layout.addWidget(self.canvas, 1)

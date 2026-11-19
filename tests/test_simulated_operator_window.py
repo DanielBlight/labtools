@@ -53,7 +53,10 @@ def test_simulated_workspace_all_workflows_and_camera(tmp_path, monkeypatch):
         try:
             window.show()
             app.processEvents()
-            assert window.tabs.count() == 4 and "SIMULATION" in window.windowTitle()
+            assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == [
+                "Workspace", "Intensity map", "Spectrum", "Annealing", "Laser",
+            ]
+            assert "SIMULATION" in window.windowTitle()
             assert mapping.simulation_mode.isChecked() and not mapping.simulation_mode.isEnabled()
             assert window.camera_window.source.count() == 1
             window.open_camera()

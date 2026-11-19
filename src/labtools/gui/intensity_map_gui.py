@@ -36,7 +36,6 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
-    QSplitter,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -48,6 +47,7 @@ from labtools.acquisition.intensity_map import (
     config_from_resume_directory,
     estimated_minimum_duration_s,
 )
+from labtools.gui.operator_ui import ResponsiveSplitter
 from labtools.runtime.lazy_devices import LazyITC4000 as ITC4000
 from labtools.visualisation.intensity_map import update_map_axes
 
@@ -77,7 +77,7 @@ class IntensityMapWindow(QMainWindow):
 
         self.resize(1440, 900)
 
-        self.setMinimumSize(1120, 720)
+        self.setMinimumSize(640, 480)
 
         self.map_controller = MapController(self, acquisition=acquisition)
         self._shared_mode = bool(shared_mode)
@@ -140,7 +140,7 @@ class IntensityMapWindow(QMainWindow):
 
         outer.addLayout(header)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter = ResponsiveSplitter(Qt.Orientation.Horizontal)
 
         splitter.setChildrenCollapsible(False)
 
@@ -158,13 +158,13 @@ class IntensityMapWindow(QMainWindow):
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
 
-        controls_scroll.setMinimumWidth(430)
+        controls_scroll.setMinimumWidth(0)
 
-        controls_scroll.setMaximumWidth(500)
+        controls_scroll.setMaximumWidth(480)
 
         controls = QWidget()
 
-        controls.setMinimumWidth(410)
+        controls.setMinimumWidth(320)
 
         controls_layout = QVBoxLayout(controls)
 
@@ -230,7 +230,7 @@ class IntensityMapWindow(QMainWindow):
             QSizePolicy.Policy.Expanding,
         )
 
-        self.canvas.setMinimumHeight(430)
+        self.canvas.setMinimumSize(160, 160)
 
         self.toolbar = NavigationToolbar(self.canvas, self)
 

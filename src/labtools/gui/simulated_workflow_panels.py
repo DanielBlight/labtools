@@ -13,7 +13,7 @@ from labtools.runtime.session import ResourceBusyError
 def label_simulation(panel):
     for label in panel.findChildren(QLabel):
         if label.objectName() == "pageSubtitle":
-            label.setText("SIMULATION ONLY: generated output; no hardware connected or physical identities verified")
+            label.setText("Simulation")
 
 
 class SimulatedMapPanel(OwnedMapPanel):
@@ -32,7 +32,7 @@ class SimulatedMapPanel(OwnedMapPanel):
         self.laser_group.hide()
         self.laser_light.setText("SIMULATED optical path; no physical laser")
         self.laser_light.setStyleSheet("")
-        self.set_status("SIMULATION ONLY: Start map generates synthetic counts")
+        self.set_status("Ready")
         label_simulation(self)
 
     def _intensity_map_preferences_v1(self):
@@ -75,7 +75,7 @@ class SimulatedSpectrumPanel(OwnedSpectrumPanel):
         self.laser_group.hide()
         self.laser_light.setText("SIMULATED optical path; no physical laser")
         self.laser_light.setStyleSheet("")
-        self.set_status("SIMULATION ONLY: acquire/capture dark use the existing toy spectrum backend")
+        self.set_status("Ready")
         label_simulation(self)
 
     def _snapshot_settings(self):
@@ -88,7 +88,7 @@ class SimulatedAnnealPanel(NativeAnnealPanel):
         self.setWindowTitle("SIMULATED annealing")
         self.confirm.hide()
         self._show_state()
-        self.status.setText("SIMULATION ONLY: Start anneal generates synthetic grid/state/logs, not heating or dose")
+        self.status.setText("Ready")
 
     def _update_start_state(self):
         if hasattr(self, "start_button"):

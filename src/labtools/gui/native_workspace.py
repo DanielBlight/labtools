@@ -10,11 +10,15 @@ def create_window(workspace):
     # Qt and operator panels remain lazy: headless launch never loads them.
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import (
+        QFormLayout,
+        QHBoxLayout,
         QLabel,
         QMainWindow,
         QPlainTextEdit,
         QPushButton,
+        QSizePolicy,
         QTabWidget,
+        QToolButton,
         QVBoxLayout,
         QWidget,
     )
@@ -22,6 +26,12 @@ def create_window(workspace):
     from labtools.gui.camera_tools import CameraWindow
     from labtools.gui.native_anneal_panel import NativeAnnealPanel
     from labtools.gui.native_workflow_panels import NativeMapPanel, NativeSpectrumPanel
+    from labtools.gui.operator_ui import (
+        STYLE,
+        fit_initial_window,
+        polish_panel,
+        protect_parameter_wheels,
+    )
     from labtools.simulation.workspace import (
         busy_workflows,
         close_workflows,
@@ -41,7 +51,8 @@ def create_window(workspace):
             super().__init__()
             self.setWindowTitle("Labtools Workspace - SIMULATION ONLY" if simulated
                                 else "Labtools native workspace - execution disabled")
-            self.resize(1500, 1000)
+            self.setStyleSheet(STYLE)
+            fit_initial_window(self)
             self.pages = {}
             self.camera_window = CameraWindow(self, reserve=workspace.reserve_camera)
             if simulated:
@@ -49,38 +60,74 @@ def create_window(workspace):
                 self.camera_window.source.setToolTip("Whole-workspace simulation: real camera selection is unavailable")
             body = QWidget()
             layout = QVBoxLayout(body)
-            label = QLabel(
-                "NATIVE CANDIDATE: operator drafts only. No hardware is opened. "
-                "Settings and detector serials are source expectations, not readbacks."
-            )
-            if simulated:
-                label.setText("SIMULATION ONLY: generated map, spectra, anneal state and camera. "
-                              "No physical instruments, laser, shutter or stage are connected. Native execution remains gated.")
-            label.setWordWrap(True)
-            layout.addWidget(label)
-            self.camera_button = QPushButton("Open camera window")
+            layout.setContentsMargins(12, 10, 12, 10)
+            layout.setSpacing(10)
+            header = QHBoxLayout()
+            app_title = QLabel("Labtools")
+            app_title.setObjectName("appTitle")
+            header.addWidget(app_title)
+            header.addStretch(1)
+            self.mode_badge = QLabel("Simulation" if simulated else "Native execution disabled")
+            self.mode_badge.setObjectName("modeBadge")
+            header.addWidget(self.mode_badge)
+            self.camera_button = QPushButton("Camera")
             self.camera_button.clicked.connect(self.open_camera)
-            layout.addWidget(self.camera_button)
+            header.addWidget(self.camera_button)
+            self.stop_all_button = QPushButton("Stop all")
+            self.stop_all_button.clicked.connect(self.stop_all)
+            header.addWidget(self.stop_all_button)
+            layout.addLayout(header)
             self.tabs = QTabWidget()
-            layout.addWidget(self.tabs)
+            layout.addWidget(self.tabs, 1)
             overview = QWidget()
             overview_layout = QVBoxLayout(overview)
+            title = QLabel("Workspace")
+            title.setObjectName("pageTitle")
+            overview_layout.addWidget(title)
+            summary = QFormLayout()
+            self.configuration_label = QLabel(str(workspace.plan.configuration_id))
+            self.configuration_label.setWordWrap(True)
+            self.configuration_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.configuration_label.setMinimumWidth(360)
+            self.configuration_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Preferred,
+            )
+            summary.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            summary.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+            summary.addRow('Configuration', self.configuration_label)
+            summary.addRow("Mode", QLabel("Simulation" if simulated else "Native execution disabled"))
+            self.overview_status = QLabel("Ready")
+            self.overview_status.setWordWrap(True)
+            summary.addRow("Status", self.overview_status)
+            overview_layout.addLayout(summary)
+            actions = QHBoxLayout()
+            self.refresh_button = QPushButton("Refresh")
+            self.refresh_button.clicked.connect(self.refresh)
+            actions.addWidget(self.refresh_button)
+            self.preview_button = QPushButton("Validate settings")
+            self.preview_button.clicked.connect(self.preview)
+            actions.addWidget(self.preview_button)
+            self.save_button = QPushButton("Save settings")
+            self.save_button.clicked.connect(self.save_preferences)
+            actions.addWidget(self.save_button)
+            actions.addStretch(1)
+            overview_layout.addLayout(actions)
+            self.details_toggle = QToolButton()
+            self.details_toggle.setText("Diagnostics")
+            self.details_toggle.setCheckable(True)
+            self.details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            self.details_toggle.setArrowType(Qt.ArrowType.RightArrow)
+            overview_layout.addWidget(self.details_toggle)
             self.report = QPlainTextEdit()
             self.report.setReadOnly(True)
-            overview_layout.addWidget(self.report)
-            self.refresh_button = QPushButton("Refresh source status (no device probe)")
-            self.refresh_button.clicked.connect(self.refresh)
-            overview_layout.addWidget(self.refresh_button)
-            self.preview_button = QPushButton("Validate and preview operator drafts (no execution)")
-            self.preview_button.clicked.connect(self.preview)
-            overview_layout.addWidget(self.preview_button)
-            self.save_button = QPushButton("Save operator settings")
-            self.save_button.clicked.connect(self.save_preferences)
-            overview_layout.addWidget(self.save_button)
-            self.stop_all_button = QPushButton("Stop all workflows")
-            self.stop_all_button.clicked.connect(self.stop_all)
-            overview_layout.addWidget(self.stop_all_button)
-            self.tabs.addTab(overview, "Configuration and draft preview")
+            self.report.setVisible(False)
+            self.details_toggle.toggled.connect(self.report.setVisible)
+            self.details_toggle.toggled.connect(lambda expanded: self.details_toggle.setArrowType(
+                Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow))
+            overview_layout.addWidget(self.report, 1)
+            overview_layout.addStretch(1)
+            self.tabs.addTab(overview, "Workspace")
             try:
                 map_panel = SimulatedMapPanel if simulated else NativeMapPanel
                 spectrum_panel = SimulatedSpectrumPanel if simulated else NativeSpectrumPanel
@@ -91,6 +138,7 @@ def create_window(workspace):
                 for name, page in self.pages.items():
                     page.setParent(self.tabs)
                     page.setWindowFlags(Qt.WindowType.Widget)
+                    polish_panel(page, simulated=simulated)
                     self.tabs.addTab(page, name)
             except BaseException:
                 for page in self.pages.values():
@@ -102,12 +150,13 @@ def create_window(workspace):
                 spectrum.connect_button, spectrum.acquire_button, spectrum.capture_dark_button,
                 self.pages["Annealing"].start_button,
             ]
-            close_button = QPushButton("Close workspace")
-            close_button.clicked.connect(self.close)
-            layout.addWidget(close_button)
             self.setCentralWidget(body)
+            protect_parameter_wheels(self)
+            self.camera_window.setStyleSheet(STYLE)
             self.restore_display()
             self.refresh()
+            from labtools.gui.workspace_studio import install_studio
+            install_studio(self, workspace)
 
         def open_camera(self):
             self.camera_window.show()
@@ -150,8 +199,10 @@ def create_window(workspace):
             try:
                 workspace.save_preferences(**drafts)
             except (OSError, ValueError, TypeError, RuntimeError) as error:
+                self.overview_status.setText("Settings could not be saved: " + str(error))
                 self.report.setPlainText("Settings could not be saved: " + str(error))
                 return False
+            self.overview_status.setText("Settings saved")
             self.report.setPlainText("Operator settings saved to " + str(workspace.drafts.store.path)
                                      + "\n" + "\n".join(workspace.drafts.store.messages))
             return True
@@ -161,6 +212,9 @@ def create_window(workspace):
             if self.camera_window.busy:
                 self.camera_window.request_stop()
             if errors:
+                self.overview_status.setText("Stop request errors: " + "; ".join(errors))
+                self.details_toggle.setChecked(True)
+                self.tabs.setCurrentIndex(0)
                 self.report.setPlainText("Stop request errors:\n" + "\n".join(errors))
 
         def any_busy(self):
@@ -170,14 +224,18 @@ def create_window(workspace):
             try:
                 data = workspace.describe()
             except (OSError, ValueError, RuntimeError) as error:
+                self.overview_status.setText("Configuration invalid: " + str(error))
+                self.details_toggle.setChecked(True)
                 self.report.setPlainText(
                     "Source status invalid; close and relaunch after correcting inputs.\n" + str(error))
                 for page in self.pages.values():
                     page.setEnabled(False)
             else:
+                self.overview_status.setText("Ready" if simulated else "Native execution disabled")
                 self.report.setPlainText(json.dumps(data, indent=2))
 
         def preview(self):
+            self.details_toggle.setChecked(True)
             try:
                 data = workspace.workflow_preview(
                     self.pages["Intensity map"]._config(),
@@ -209,6 +267,9 @@ def create_window(workspace):
         def closeEvent(self, event):
             if self.any_busy():
                 self.stop_all()
+                self.overview_status.setText("Stopping; close again after cleanup")
+                self.tabs.setCurrentIndex(0)
+                self.details_toggle.setChecked(True)
                 self.report.setPlainText("Stop requested; wait for worker cleanup and close again.")
                 event.ignore()
                 return

@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QToolButton,
@@ -40,6 +42,7 @@ from labtools.config.anneal_workspace import (
     resolve_gui_config,
     validate_stage_coordinate,
 )
+from labtools.gui.operator_ui import ResponsiveSplitter
 
 
 # Native constructors remain lazy; merely displaying an embedded panel does no I/O.
@@ -126,8 +129,8 @@ class LaserAnnealWindow(QMainWindow):
         root = QVBoxLayout(root_widget)
 
         title_row = QHBoxLayout()
-        title = QLabel("Laser Anneal")
-        title.setObjectName("title")
+        title = QLabel("Annealing")
+        title.setObjectName("pageTitle")
         title_row.addWidget(title)
         title_row.addStretch(1)
         self.shutter_state = QLabel("Shutter: closed until start")
@@ -135,12 +138,16 @@ class LaserAnnealWindow(QMainWindow):
         title_row.addWidget(self.shutter_state)
         root.addLayout(title_row)
 
-        main_row = QHBoxLayout()
-        root.addLayout(main_row, 1)
+        main_row = ResponsiveSplitter()
+        root.addWidget(main_row, 1)
         controls = QWidget()
-        controls.setMaximumWidth(440)
+        controls.setMinimumWidth(320)
         control_layout = QVBoxLayout(controls)
-        main_row.addWidget(controls)
+        controls_scroll = QScrollArea()
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        controls_scroll.setWidget(controls)
+        main_row.addWidget(controls_scroll)
 
         scan_group = QGroupBox("Scan configuration")
         scan_form = QFormLayout(scan_group)
@@ -252,15 +259,13 @@ class LaserAnnealWindow(QMainWindow):
 
         preview_group = QGroupBox("Annealing status")
         preview_layout = QVBoxLayout(preview_group)
-        main_row.addWidget(preview_group, 1)
-        camera_note = QLabel("Camera preview is now an independent window. "
-                             "Use Open camera window to view it alongside any workflow.")
-        camera_note.setWordWrap(True)
-        preview_layout.addWidget(camera_note)
+        main_row.addWidget(preview_group)
         self.progress = QProgressBar()
         preview_layout.addWidget(self.progress)
         self.status = QLabel("Ready")
-        root.addWidget(self.status)
+        self.status.setObjectName("statusText")
+        self.status.setWordWrap(True)
+        self.statusBar().addWidget(self.status, 1)
 
         for widget in (
             self.x_points,
