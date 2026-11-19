@@ -185,7 +185,8 @@ class UnifiedDrafts:
 
 DISPLAY_TYPES = {"map_log": bool, "map_manual_limits": bool, "map_min": float, "map_max": float,
                  "spectrum_output": str, "spectrum_csv": bool, "spectrum_png": bool,
-                 "camera_exposure_ms": float, "camera_gain": float, "camera_interval_ms": float}
+                 "camera_exposure_ms": float, "camera_gain": float, "camera_interval_ms": float,
+                 "camera_white_level": float}
 
 
 def validate_display(data):
@@ -200,7 +201,7 @@ def validate_display(data):
             raise ValueError("Invalid display preference type")
     if data.get("map_manual_limits") and data.get("map_min", 0) >= data.get("map_max", 1):
         raise ValueError("Manual colour limits must increase")
-    for name, low, high in (("camera_exposure_ms", .01, 10000), ("camera_gain", 1, 100), ("camera_interval_ms", 16, 10000)):
+    for name, low, high in (("camera_exposure_ms", .01, 10000), ("camera_gain", 1, 100), ("camera_interval_ms", 16, 10000), ("camera_white_level", 1, 65535)):
         if name in data and not low <= data[name] <= high:
             raise ValueError("Camera display preference outside GUI range")
     return dict(data)

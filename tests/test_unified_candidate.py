@@ -234,3 +234,21 @@ def test_boolean_preference_schema_is_not_integer_version(tmp_path):
                                      "source_fingerprint": "fingerprint", "workflows": {}}))
     assert store.read() == {}
     assert store.messages
+
+
+def test_independent_camera_reservation_allows_other_workflows(inputs):
+    manifest, prefs = inputs
+    with NativeWorkspace(manifest, preferences_path=prefs) as workspace:
+        config = workspace.plan.reservation_config
+        assert set(config.camera_resources).isdisjoint(config.anneal_resources + config.map_resources + config.spectrum_resources)
+        with workspace.reserve_camera():
+            report = workspace.describe()
+            assert report["camera_preview"]["reservation_active"]
+            assert report["hardware_opened"] is None and report["experiment_hardware_opened"] is False
+            with pytest.raises(ResourceBusyError):
+                workspace.reserve_camera()
+            for owner in ("Intensity map", "Spectrum", "Annealing"):
+                with workspace._ownership.reserve(owner):
+                    assert any(state.owner == "Camera preview" for state in workspace._ownership.status().resources)
+        assert not workspace._ownership.session.reservations()
+        assert not workspace.describe()["execution_enabled"]

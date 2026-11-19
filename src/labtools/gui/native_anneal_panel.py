@@ -19,10 +19,10 @@ CHECKS = {"serpentine": "serpentine", "return_rotation_stage": "return_stage", "
 
 
 class NativeAnnealPanel(LaserAnnealWindow):
-    def __init__(self, *, workspace):
+    def __init__(self, *, workspace, camera_window=None):
         self.workspace = workspace
         self._workspace_lease = None
-        super().__init__(acquisition=workspace.acquire_anneal, recipe_controls=False)
+        super().__init__(acquisition=workspace.acquire_anneal, recipe_controls=False, camera_window=camera_window)
         config = workspace.drafts.values["anneal"]
         for control in (self.x_start, self.x_stop, self.y_start, self.y_stop):
             control.setRange(config.minimum_mirror_voltage_v, config.maximum_mirror_voltage_v)
@@ -64,10 +64,12 @@ class NativeAnnealPanel(LaserAnnealWindow):
         return self.workspace.drafts.validate("anneal", config)
 
     def _lock_actions(self):
-        # All native/manual/camera entry points are refused below as well. Leave
-        # only the output-folder picker and purely visual collapse buttons usable.
+        # Experiment/manual entry points remain refused. Camera opens separately;
+        # its explicit Start controls only the camera, never annealing hardware.
         for button in self.findChildren(QPushButton):
-            if button.text().lower() not in {"browse", "browse...", "browse…"}:
+            if self.camera_window.isAncestorOf(button):
+                continue
+            if button is not self.open_camera_button and button.text().lower() not in {"browse", "browse...", "browse…"}:
                 button.setEnabled(False)
                 button.setToolTip(DISABLED_REASON)
 
@@ -83,7 +85,6 @@ class NativeAnnealPanel(LaserAnnealWindow):
     _test_sc10 = _refuse
     _move_stage_to_anneal = _refuse
     _test_rotation_stage = _refuse
-    _start_camera = _refuse
 
     def _start_worker(self, config):
         # Trusted internal worker seam for the existing runtime gate. Public Start

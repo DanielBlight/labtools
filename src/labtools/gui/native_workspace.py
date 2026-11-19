@@ -19,6 +19,7 @@ def create_window(workspace):
         QWidget,
     )
 
+    from labtools.gui.camera_window import CameraWindow
     from labtools.gui.native_anneal_panel import NativeAnnealPanel
     from labtools.gui.native_workflow_panels import NativeMapPanel, NativeSpectrumPanel
     from labtools.simulation.workspace import (
@@ -33,6 +34,7 @@ def create_window(workspace):
             self.setWindowTitle("Labtools native workspace - execution disabled")
             self.resize(1500, 1000)
             self.pages = {}
+            self.camera_window = CameraWindow(self, reserve=workspace.reserve_camera)
             body = QWidget()
             layout = QVBoxLayout(body)
             label = QLabel(
@@ -41,6 +43,9 @@ def create_window(workspace):
             )
             label.setWordWrap(True)
             layout.addWidget(label)
+            self.camera_button = QPushButton("Open camera window")
+            self.camera_button.clicked.connect(self.open_camera)
+            layout.addWidget(self.camera_button)
             self.tabs = QTabWidget()
             layout.addWidget(self.tabs)
             overview = QWidget()
@@ -64,7 +69,7 @@ def create_window(workspace):
             try:
                 self.pages["Intensity map"] = NativeMapPanel(workspace=workspace)
                 self.pages["Spectrum"] = NativeSpectrumPanel(workspace=workspace)
-                self.pages["Annealing"] = NativeAnnealPanel(workspace=workspace)
+                self.pages["Annealing"] = NativeAnnealPanel(workspace=workspace, camera_window=self.camera_window)
                 for name, page in self.pages.items():
                     page.setParent(self.tabs)
                     page.setWindowFlags(Qt.WindowType.Widget)
@@ -77,7 +82,7 @@ def create_window(workspace):
             self.operation_buttons = [
                 mapping.start_button, mapping.resume_button,
                 spectrum.connect_button, spectrum.acquire_button, spectrum.capture_dark_button,
-                self.pages["Annealing"].start_button, self.pages["Annealing"].start_camera_button,
+                self.pages["Annealing"].start_button,
             ]
             close_button = QPushButton("Close workspace")
             close_button.clicked.connect(self.close)
@@ -85,6 +90,11 @@ def create_window(workspace):
             self.setCentralWidget(body)
             self.restore_display()
             self.refresh()
+
+        def open_camera(self):
+            self.camera_window.show()
+            self.camera_window.raise_()
+            self.camera_window.activateWindow()
 
         def restore_display(self):
             data = workspace.drafts.display
@@ -95,7 +105,7 @@ def create_window(workspace):
                     widget.setChecked(data[key])
             for key, widget in (("map_min", mapping.colour_min), ("map_max", mapping.colour_max),
                                 ("camera_exposure_ms", anneal.camera_exposure_ms), ("camera_gain", anneal.camera_gain),
-                                ("camera_interval_ms", anneal.camera_interval_ms)):
+                                ("camera_interval_ms", anneal.camera_interval_ms), ("camera_white_level", self.camera_window.white_level)):
                 if key in data:
                     widget.setValue(data[key])
             if "spectrum_output" in data:
@@ -108,7 +118,8 @@ def create_window(workspace):
                     "map_min": mapping.colour_min.value(), "map_max": mapping.colour_max.value(),
                     "spectrum_output": spectrum.output_directory.text(), "spectrum_csv": spectrum.save_csv.isChecked(),
                     "spectrum_png": spectrum.save_png.isChecked(), "camera_exposure_ms": anneal.camera_exposure_ms.value(),
-                    "camera_gain": anneal.camera_gain.value(), "camera_interval_ms": anneal.camera_interval_ms.value()}
+                    "camera_gain": anneal.camera_gain.value(), "camera_interval_ms": anneal.camera_interval_ms.value(),
+                    "camera_white_level": self.camera_window.white_level.value()}
 
         def save_preferences(self):
             drafts = {"display": self.display_preferences()}
@@ -129,11 +140,13 @@ def create_window(workspace):
 
         def stop_all(self):
             errors = stop_workflows(self.pages)
+            if self.camera_window.busy:
+                self.camera_window.request_stop()
             if errors:
                 self.report.setPlainText("Stop request errors:\n" + "\n".join(errors))
 
         def any_busy(self):
-            return bool(busy_workflows(self.pages))
+            return bool(busy_workflows(self.pages)) or self.camera_window.busy
 
         def refresh(self):
             try:
@@ -189,6 +202,9 @@ def create_window(workspace):
                 if answer != QMessageBox.StandardButton.Yes:
                     event.ignore()
                     return
+            if not self.camera_window.close():
+                event.ignore()
+                return
             if not close_workflows(self.pages):
                 event.ignore()
                 return

@@ -1,5 +1,9 @@
 # Unified native candidate: mapping, spectroscopy and annealing
 
+Current camera controls are independent: see [Camera preview](camera-preview.md).
+Camera-only Start is explicitly available; experiment execution remains gated.
+Earlier embedded-camera/gated-camera descriptions below are historical context.
+
 ## Starting evidence and scope
 
 Base: 6f547acffd34935bf1953115d2a440bdd261d9a2, nine-path operator-binding commit,

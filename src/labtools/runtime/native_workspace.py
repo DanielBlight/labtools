@@ -84,7 +84,7 @@ class NativeWorkspace:
         extras = tuple(config.configuration_id + ":" + name for name in ("anneal-shutter", "rotation-stage", "anneal-camera"))
         if set(extras) & set(config.resources):
             raise ValueError("Anneal logical resource labels collide with existing resources")
-        config = replace(config, resources=config.resources + extras, anneal_resources=shared + extras)
+        config = replace(config, resources=config.resources + extras, anneal_resources=shared + extras[:2], camera_resources=(extras[2],))
         config.validate()
         self.plan = replace(report.plan, reservation_config=config)
         self._preflight = replace(report, plan=self.plan)
@@ -115,6 +115,7 @@ class NativeWorkspace:
         self._require_open()
         settings = deepcopy(self.plan.hardware_settings)
         preset = self.plan.spectrum_request.settings.preset
+        camera_reserved = any(state.owner == "Camera preview" for state in self._ownership.status().resources)
         mapping = asdict(self.plan.map_config)
         mapping["output_root"] = str(mapping["output_root"])
         return {
@@ -124,11 +125,20 @@ class NativeWorkspace:
             "workspace_kind": "native-candidate",
             "operator_workflows_bound": True,
             "workflows": ["Intensity map", "Spectrum", "Annealing"],
+            "hardware_opened": None if camera_reserved else False,
+            "environment_probed": None if camera_reserved else False,
+            "experiment_hardware_opened": False,
+            "camera_preview": {"explicit_start_available": True, "auto_connect": False,
+                               "reservation_active": camera_reserved,
+                               "connection_state": "inspect camera window; reservation is not a device readback",
+                               "selection": "first available UC480; identity read only after Start",
+                               "resources": list(self.plan.reservation_config.camera_resources),
+                               "experiment_execution_enabled": False},
             "anneal": {"configuration_origin": "existing anneal defaults plus shared source wiring/envelope",
                        "local_profile": self.drafts.local_profile.profile_id if self.drafts.local_profile else None,
                        "profile_error": self.drafts.profile_error,
                        "sc10_port": self.drafts.anneal_base.sc10_port,
-                       "physical_shutter_stage_camera": "not probed; not interchangeable with spectroscopy TTL shutter",
+                       "physical_shutter_stage_camera": "not probed by anneal; camera identity/state is shown in separate preview; not interchangeable with spectroscopy TTL shutter",
                        "execution_enabled": False},
             "preferences": {"path": str(self.drafts.store.path), "messages": list(self.drafts.store.messages)},
             "operator_drafts": "validated per-user preferences; source files and standalone QSettings unchanged",
@@ -173,6 +183,10 @@ class NativeWorkspace:
         self._require_open()
         settings = self.workflows.spectrum_settings(settings)
         return await self.spectrum_service.capture_dark(settings, **kwargs)
+
+    def reserve_camera(self):
+        self._require_open()
+        return self._ownership.reserve("Camera preview")
 
     def acquire_anneal(self, config=None, **kwargs):
         self._require_open()
