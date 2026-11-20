@@ -177,3 +177,21 @@ Add observations, output locations, device serial numbers, driver versions and r
 - Reconnection after cleanup succeeded: Yes
 - Issues observed: None
 - Powered Annealing acceptance: PASS
+
+## RC2 profile freeze
+
+- Date: 2026-11-20 19:01:01 +00:00
+- Candidate commit: `428498c4d05b3e9bacf57809af362dd1c9046d3b`
+- Installed profile: `C:\ProgramData\Labtools\instrument.json`
+- Profile ID: `working-lab-20261120-lab-pc`
+- Profile approved: `True`
+- Profile SHA-256: `6C84299417A132B829CB0FE257443CB3AD22C6C0017B0408AEA745F1D22D17C7`
+- Previous rollback tag: `v0.2.0-rc.1`
+- Camera acceptance: PASS
+- HORIBA Spectrum acceptance: PASS
+- ITC4000 shutdown-limit acceptance: PASS
+- Intensity-map orchestration: PASS
+- IDQ nonzero count-input acceptance: PENDING
+- Laser Annealing dry-run acceptance: PASS
+- Laser Annealing cancellation acceptance: PASS
+- Minimal powered Laser Annealing acceptance: PASS
