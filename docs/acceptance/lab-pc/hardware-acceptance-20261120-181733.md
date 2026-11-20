@@ -195,3 +195,23 @@ Add observations, output locations, device serial numbers, driver versions and r
 - Laser Annealing dry-run acceptance: PASS
 - Laser Annealing cancellation acceptance: PASS
 - Minimal powered Laser Annealing acceptance: PASS
+
+## HORIBA Alignment GUI hardware finding
+
+- Date: 2026-11-20 19:10:02 +00:00
+- Branch: `main`
+- Commit: `3329ff7172d3fc1496ffbe3863b21fc6134d7e07`
+- Configuration ID: `working-lab-20261119-source-defaults`
+- Alignment spectra acquired: Yes
+- Observed lifecycle: a new HORIBA connection was opened for every spectrum
+- Expected lifecycle: one connection per Start/Stop alignment session
+- Hardware acceptance: FAIL
+- Impact: excessive initialization latency and unsuitable continuous-alignment performance
+- Required correction:
+  - connect once when alignment starts;
+  - configure once unless settings change;
+  - acquire repeated frames through the same worker-owned session;
+  - disconnect once after Stop or window-close cleanup;
+  - preserve single-client ownership and faulted-worker behavior;
+  - never reuse a connection from a different asyncio event loop.
+- Previous standalone GUI remains archived for later comparison.
