@@ -115,3 +115,7 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 ## Release validation
 
 - [Release validation](release-validation.md): clean-tree quality, build and isolated-wheel smoke procedure.
+
+## Archived implementations
+
+- [Archived HORIBA alignment GUI v2](history/horiba-alignment-v2-archive.md): preserved working standalone GUI and future shared-worker integration target.
