@@ -10,6 +10,8 @@
 
 ## Current project status
 
+- [Documentation status](document-status.md): authority, evidence and archival classification.
+
 - [Current state](current-state.md): authoritative capability boundary, validated baseline and immediate milestone.
 - [Release plan](release-plan.md): authoritative route through release engineering, hardware acceptance, deployment and approval.
 - [Repository hygiene](repository-hygiene.md): tracked-file and generated-artefact policy.

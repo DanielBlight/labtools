@@ -1,0 +1,25 @@
+# Normalise source and documentation while preserving Windows PowerShell scripts.
+* text=auto
+
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.npz binary
+*.npy binary
+*.h5 binary
+*.hdf5 binary
+*.tif binary
+*.tiff binary
+*.docx binary
+*.pdf binary
