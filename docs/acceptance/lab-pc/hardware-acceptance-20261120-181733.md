@@ -149,8 +149,8 @@ Add observations, output locations, device serial numbers, driver versions and r
 - Mirror returned to configured home: Yes
 - Rotation stage: No failure observed during the completed dry run
 - Second dry run started successfully: Yes
-- Stop-after-current-point tested: Not yet confirmed
-- Cancellation closed shutter: Not yet confirmed
-- Cancellation returned mirror home: Not yet confirmed
+- Stop-after-current-point tested: Yes
+- Cancellation closed shutter: Yes
+- Cancellation returned mirror home: Yes
 - Issues observed: None during the completed one-position dry run
 - Powered annealing tested: No
