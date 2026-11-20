@@ -109,3 +109,7 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 ## Release notes
 
 - [0.2.0-rc.1 release notes](releases/0.2.0-rc.1.md): first controlled-pilot candidate boundary.
+
+## Release validation
+
+- [Release validation](release-validation.md): clean-tree quality, build and isolated-wheel smoke procedure.

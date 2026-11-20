@@ -59,7 +59,7 @@ shutter-open time is 43,200 seconds (12 hours).
 
 ## Known release gaps
 
-- no continuous-integration workflow is yet authoritative
+- Windows CI is defined; the first authoritative hosted run remains to be recorded
 - no formal wheel-based release candidate has been fresh-installed and rehearsed
 - connected tests are not yet comprehensively classified with hardware/subsystem markers
 - licence and third-party notice decisions remain outstanding
@@ -71,7 +71,7 @@ shutter-open time is 43,200 seconds (12 hours).
 
 Complete release engineering before further broad GUI work:
 
-1. add Windows CI for Ruff, non-hardware pytest and package build
+1. record the first successful hosted Windows CI run
 2. add versioned changelog and candidate release notes
 3. establish licence and third-party notices
 4. build and install `0.2.0-rc.1` in a fresh environment

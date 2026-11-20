@@ -46,6 +46,7 @@ where = ["src"]
 extend-exclude = ["vendor", ".labtools-migrations"]
 
 [tool.pytest.ini_options]
+faulthandler_timeout = 120
 markers = [
     "hardware: tests requiring connected laboratory hardware",
 ]
