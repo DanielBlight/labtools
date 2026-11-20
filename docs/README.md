@@ -87,3 +87,9 @@ Strict schema-version-1 JSON recipes now cover the implemented spectrum, dark, a
 ## Measurement recipe dispatch
 
 A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 recipe kinds and requires explicit confirmation before real execution; see [checkpoint](measurements-dispatch-checkpoint.md).
+
+## Current release plan
+
+- [Release plan](release-plan.md): authoritative route from the current development
+  branch through repository cleanup, CI, packaging, connected-hardware acceptance,
+  lab-PC deployment, rollback rehearsal, and controlled pilot approval.
