@@ -18,6 +18,8 @@
 
 ## Maintaining the software
 
+- [Dependency boundaries](dependency-boundaries.md): base runtime and optional research environments.
+
 Start with [AI handover](ai-handover.md). The canonical documents are
 [architecture](architecture.md), [development conventions](development-conventions.md)
 and [refactor roadmap / wrapper matrix](refactor-roadmap.md). Historical batch notes

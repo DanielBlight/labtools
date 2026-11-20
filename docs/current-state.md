@@ -63,7 +63,7 @@ shutter-open time is 43,200 seconds (12 hours).
 - no formal wheel-based release candidate has been fresh-installed and rehearsed
 - connected tests are not yet comprehensively classified with hardware/subsystem markers
 - licence and third-party notice decisions remain outstanding
-- optional runtime dependencies remain bundled in the main dependency set
+- optional analysis, notebook and Napari dependencies are separated; instrument extras remain future work
 - physical instrument acceptance and lab-PC rollback evidence remain incomplete
 - historical documentation still needs gradual classification or archival
 

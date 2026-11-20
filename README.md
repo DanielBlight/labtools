@@ -13,13 +13,21 @@ GUI now uses the service and requires a maintainer-supplied configuration identi
 Use Python 3.12 or newer and the project's existing uv environment:
 
 ```powershell
-uv sync --dev
+uv sync --group dev
 uv run labtools --help
 ```
 
-Dependency requirements and vendor-driver requirements are unchanged by the
-cleanup. `uv sync` refreshes installed console entry points; review any resulting
-`uv.lock` changes. Do not remove native drivers or DLL configuration.
+Optional research environments are installed explicitly:
+
+```powershell
+uv sync --extra analysis
+uv sync --extra notebooks
+uv sync --extra napari
+```
+
+The base environment contains the operator runtime. Analysis, notebook and Napari
+environments are optional; vendor drivers and DLL configuration remain external
+requirements. `uv sync` refreshes console entry points and the selected extras.
 
 ## Start a tool
 
