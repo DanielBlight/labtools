@@ -8,6 +8,12 @@
 - [Spectroscopy reference](hardware/spectroscopy.md): detector presets, dark subtraction,
   shutter wiring, diagnostic scripts, USB behaviour and laser guidance.
 
+## Current project status
+
+- [Current state](current-state.md): authoritative capability boundary, validated baseline and immediate milestone.
+- [Release plan](release-plan.md): authoritative route through release engineering, hardware acceptance, deployment and approval.
+- [Repository hygiene](repository-hygiene.md): tracked-file and generated-artefact policy.
+
 ## Maintaining the software
 
 Start with [AI handover](ai-handover.md). The canonical documents are

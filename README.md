@@ -63,6 +63,8 @@ is required for the existing annealing workflow. See the operator guide.
 
 ## Documentation
 
+- [Current project state](docs/current-state.md)
+
 - [Documentation index](docs/README.md)
 - [Commands and compatibility](docs/commands.md)
 - [Operator workspace and profile policy](docs/operator-workspace.md)
