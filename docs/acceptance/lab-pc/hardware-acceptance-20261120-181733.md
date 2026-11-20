@@ -154,3 +154,26 @@ Add observations, output locations, device serial numbers, driver versions and r
 - Cancellation returned mirror home: Yes
 - Issues observed: None during the completed one-position dry run
 - Powered annealing tested: No
+
+## Minimal powered Laser Annealing acceptance
+
+- Date: 2026-11-20 18:57:06 +00:00
+- Branch: `lab-pc/0.2.0-rc1-validation`
+- Commit: `8d28f3b326c42b08a21f69f5ac4716ca88b51ece`
+- Profile ID: `working-lab-20261120-lab-pc`
+- Positions: `1`
+- Passes: `1`
+- ITC4000 current: `0.040 A or below`
+- ITC4000 output enabled as intended: Yes
+- SC10 opened only for the requested dwell: Yes
+- SC10 closed after acquisition: Yes
+- ITC4000 output switched OFF successfully: Yes
+- Physical LD-output indicator confirmed OFF: Yes
+- No `0.049 A` shutdown request: Yes
+- No `-222 Data out of range` error: Yes
+- Mirror returned home: Yes
+- Rotation stage returned or was disabled: Yes
+- Output and log created: Yes
+- Reconnection after cleanup succeeded: Yes
+- Issues observed: None
+- Powered Annealing acceptance: PASS
