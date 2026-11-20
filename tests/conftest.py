@@ -77,3 +77,12 @@ def pytest_ignore_collect(collection_path, config):
     ):
         return True
     return None
+
+@pytest.fixture(scope="session", autouse=True)
+def qt_application():
+    """Keep one QApplication wrapper alive for the entire pytest session."""
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    yield app
+    app.processEvents()
