@@ -117,3 +117,19 @@ Add observations, output locations, device serial numbers, driver versions and r
 - Output OFF completed without exception: Yes
 - Physical LD-output indicator confirmed OFF: Yes
 - Reconnection after shutdown succeeded: Yes
+
+## HORIBA Spectrum GUI acceptance
+
+- Date: 2026-11-20 18:41:44 +00:00
+- Branch: `lab-pc/0.2.0-rc1-validation`
+- Commit: `f7e86d19ccbfff69b9850b8575e879f6f2204fcc`
+- Configuration ID: `working-lab-20261119-source-defaults`
+- Configuration source: `examples/workspace/working-lab/candidate.json`
+- Spectrum GUI launched successfully: Yes
+- Connected HORIBA hardware successfully: Yes
+- Spectrum acquisition completed: Yes
+- Output saved successfully:
+- Dark correction tested:
+- Stop and restart tested:
+- Clean close and reconnect tested:
+- Issues observed: None during this test
