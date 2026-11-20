@@ -46,3 +46,9 @@ scratch/.ruff_cache/
 labtools_project_*.txt
 labtools_source_*.txt
 .labtools-refactor-backups/
+
+# Local updater and review artefacts
+*.before_*
+*_review.txt
+labtools_full_project-*.txt
+camera_gui_context.txt

@@ -93,3 +93,7 @@ A Qt-free single-recipe dispatcher now covers the four implemented schema-v1 rec
 - [Release plan](release-plan.md): authoritative route from the current development
   branch through repository cleanup, CI, packaging, connected-hardware acceptance,
   lab-PC deployment, rollback rehearsal, and controlled pilot approval.
+
+## Repository maintenance
+
+- [Repository hygiene](repository-hygiene.md): tracked-file and generated-artefact policy.

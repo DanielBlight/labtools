@@ -44,7 +44,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.ruff]
-extend-exclude = ["vendor"]
+extend-exclude = ["vendor", ".labtools-migrations"]
 
 [tool.pytest.ini_options]
 markers = [
