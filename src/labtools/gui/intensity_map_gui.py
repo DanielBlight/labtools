@@ -51,12 +51,10 @@ from labtools.gui.operator_ui import ResponsiveSplitter
 from labtools.runtime.lazy_devices import LazyITC4000 as ITC4000
 from labtools.visualisation.intensity_map import update_map_axes
 
-MAX_LASER_CURRENT_A = 0.100
-
+MAX_LASER_CURRENT_A = 0.040
 DEFAULT_LASER_CURRENT_A = 0.080
 
-LASER_THRESHOLD_CURRENT_A = 0.049
-
+LASER_THRESHOLD_CURRENT_A = 0.040
 DEFAULT_OUTPUT_ROOT = Path("C:/LabData/IntensityMaps")
 
 

@@ -101,3 +101,19 @@
 ## Additional notes
 
 Add observations, output locations, device serial numbers, driver versions and recovery actions here.
+
+## ITC4000 shutdown-current correction
+
+- Status: PASS
+- Controller VISA resource: `USB0::0x1313::0x804A::M00739898::INSTR`
+- Controller maximum current: `0.040 A`
+- Previous shutdown threshold: `0.049 A`
+- Previous failure: `-222, Data out of range`
+- GUI threshold current after correction: `0.040 A`
+- GUI maximum current after correction: `0.040 A`
+- Shutdown target is clamped to `min(threshold_current, max_current)`.
+- Connection succeeded: Yes
+- LD output enabled under approved conditions: Yes
+- Output OFF completed without exception: Yes
+- Physical LD-output indicator confirmed OFF: Yes
+- Reconnection after shutdown succeeded: Yes
