@@ -1,6 +1,6 @@
 [project]
 name = "lab-tools"
-version = "0.1.0"
+version = "0.2.0rc1"
 description = "Laboratory instrument control, acquisition, analysis and offline simulation"
 readme = "README.md"
 requires-python = ">=3.12"
