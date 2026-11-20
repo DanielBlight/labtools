@@ -215,3 +215,21 @@ Add observations, output locations, device serial numbers, driver versions and r
   - preserve single-client ownership and faulted-worker behavior;
   - never reuse a connection from a different asyncio event loop.
 - Previous standalone GUI remains archived for later comparison.
+
+## HORIBA Alignment follow-up
+
+- Date: 2026-11-20 19:35:01 +00:00
+- Lab-PC baseline commit: `54ce3563385734f49be567e27530562a14c64014`
+- Current Alignment hardware behavior: opens a new HORIBA connection for every spectrum
+- Previous old-main behavior: one connection per Start/Stop alignment session
+- Hardware acceptance: FAIL, persistent-session regression
+- First repair attempt: rolled back after focused lifecycle tests failed
+- Focused repair result: `6 failed, 21 passed, 2 teardown errors`
+- Release baseline remains unchanged and usable for discrete Spectrum acquisition
+- Required development-PC work:
+  - persistent worker-owned HORIBA backend context;
+  - explicit one-frame request and GUI acknowledgement;
+  - no free-running frame producer;
+  - cooperative Stop after current capture;
+  - exactly one disconnect after cleanup;
+  - preserve configuration identity, exposure floors, ownership refusal and fault handling.
