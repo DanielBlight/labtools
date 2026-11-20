@@ -181,7 +181,7 @@ class ITC4000:
                 "The controller still reports the laser-diode output as ON."
             )
 
-        self.set_current(self.threshold_current)
+        self.set_current(min(self.threshold_current, self.max_current))
 
     # ------------------------------------------------------------------
     # TEC output

@@ -31,7 +31,7 @@ from labtools.devices.horiba_spectrometer import HoribaSpectrometer
 # -----------------------------------------------------------------------------
 PRESET = "syncerity"
 TEST_WAVELENGTH_NM = 690.0
-EXPOSURE_TIME_S = 0.05
+EXPOSURE_TIME_S = 0.1
 GAIN = 2
 SPEED = 0
 NUMBER_OF_PAIRS = 3
@@ -112,8 +112,8 @@ async def acquire_shutter_test() -> ShutterTestResult:
                 "closed then open"
             )
 
-            closed_x, closed_y = await spec.acquire_frame(open_shutter=False)
-            open_x, open_y = await spec.acquire_frame(open_shutter=True)
+            closed_x, closed_y = await spec.get_dark_spectrum(n_frames=1, mode="single")
+            open_x, open_y = await spec.get_spectrum(n_frames=1, mode="single")
 
             closed_x = np.asarray(closed_x, dtype=float)
             closed_y = np.asarray(closed_y, dtype=float)

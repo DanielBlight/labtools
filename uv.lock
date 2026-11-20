@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -1362,6 +1362,7 @@ dependencies = [
     { name = "pyserial" },
     { name = "pyvisa" },
     { name = "pyvisa-py" },
+    { name = "pyzmq" },
     { name = "tifffile" },
     { name = "xarray" },
 ]
@@ -1408,6 +1409,7 @@ requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pyvisa", specifier = ">=1.16.2" },
     { name = "pyvisa-py", specifier = ">=0.8.1" },
+    { name = "pyzmq", specifier = ">=27.1.0" },
     { name = "scipy", marker = "extra == 'analysis'", specifier = ">=1.18.0" },
     { name = "tifffile", specifier = ">=2026.7.14" },
     { name = "xarray", specifier = ">=2026.7.0" },
