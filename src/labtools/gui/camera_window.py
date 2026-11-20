@@ -8,17 +8,20 @@ from threading import Event
 
 import numpy as np
 from PyQt6.QtCore import QObject, QRect, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QImage, QImageReader, QPainter
+from PyQt6.QtGui import QFont, QImage, QImageReader, QPainter
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -149,12 +152,57 @@ class CameraWindow(QDialog):
         self._last_packet = None
         self._last_arrival = 0.
         layout = QVBoxLayout(self)
-        note = QLabel("First available UC480 camera; identity is reported only after Start. "
-                      "Capture dark requires blocked illumination; this window never moves a shutter or laser.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        controls = QHBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 8)
+        layout.setSpacing(8)
+        self.source_layout = QHBoxLayout()
+        self.source_layout.setSpacing(8)
+        layout.addLayout(self.source_layout)
+        self.source_notice_layout = QVBoxLayout()
+        layout.addLayout(self.source_notice_layout)
+
+        actions = QHBoxLayout()
+        self.start_button = QPushButton("Start camera")
+        self.start_button.setObjectName("primaryButton")
+        self.start_button.setMinimumSize(170, 34)
+        self.stop_button = QPushButton("Stop camera")
+        self.stop_button.setMinimumSize(170, 34)
+        self.stop_button.setEnabled(False)
+        self.start_button.clicked.connect(self.start)
+        self.stop_button.clicked.connect(self.request_stop)
+        actions.addWidget(self.start_button)
+        actions.addWidget(self.stop_button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.overlay_layout = QVBoxLayout()
+        self.overlay_layout.setSpacing(6)
+        layout.addLayout(self.overlay_layout)
+        self.surface = ImageSurface()
+
+        preview = QHBoxLayout()
+        preview.setSpacing(6)
+        preview.addWidget(self.surface, 1)
+        self.settings_toggle = QToolButton()
+        self.settings_toggle.setCheckable(True)
+        self.settings_toggle.setChecked(True)
+        self.settings_toggle.setFixedWidth(28)
+        self.settings_toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        preview.addWidget(self.settings_toggle)
+
+        self.settings_panel = QFrame()
+        self.settings_panel.setMinimumWidth(270)
+        self.settings_panel.setMaximumWidth(310)
+        settings = QVBoxLayout(self.settings_panel)
+        settings.setContentsMargins(10, 4, 10, 4)
+        settings.setSpacing(8)
+        heading_font = QFont(self.font())
+        heading_font.setPointSize(max(self.font().pointSize() + 1, 10))
+        heading_font.setWeight(QFont.Weight.DemiBold)
+        heading = QLabel("Camera settings")
+        heading.setFont(heading_font)
+        settings.addWidget(heading)
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.exposure_ms = QDoubleSpinBox()
         self.exposure_ms.setRange(.01, 10000)
         self.exposure_ms.setDecimals(3)
@@ -176,37 +224,33 @@ class CameraWindow(QDialog):
         form.addRow("Master gain", self.gain)
         form.addRow("Display refresh (ms)", self.display_ms)
         form.addRow("16-bit preview white level", self.white_level)
-        controls.addLayout(form)
-        buttons = QVBoxLayout()
-        self.start_button = QPushButton("Start camera")
-        self.stop_button = QPushButton("Stop camera")
-        self.stop_button.setEnabled(False)
-        self.start_button.clicked.connect(self.start)
-        self.stop_button.clicked.connect(self.request_stop)
-        buttons.addWidget(self.start_button)
-        buttons.addWidget(self.stop_button)
-        controls.addLayout(buttons)
-        layout.addLayout(controls)
-        darks = QHBoxLayout()
+        settings.addLayout(form)
+        dark_heading = QLabel("Dark correction")
+        dark_heading.setFont(heading_font)
+        settings.addWidget(dark_heading)
         self.capture_button = QPushButton("Capture dark")
         self.capture_button.setEnabled(False)
         self.load_button = QPushButton("Load dark image")
         self.save_dark_button = QPushButton("Save dark (.npz)")
         self.clear_button = QPushButton("Clear dark")
         self.subtract = QCheckBox("Subtract dark")
-        for button in (self.capture_button, self.load_button, self.save_dark_button, self.clear_button, self.subtract):
-            darks.addWidget(button)
+        for button in (self.capture_button, self.load_button, self.save_dark_button, self.clear_button):
+            settings.addWidget(button)
+        settings.addWidget(self.subtract)
         self.capture_button.clicked.connect(self.capture_dark)
         self.load_button.clicked.connect(self.load_dark)
         self.save_dark_button.clicked.connect(self.save_dark)
         self.clear_button.clicked.connect(self.clear_dark)
         self.subtract.toggled.connect(self.processor.enable)
-        layout.addLayout(darks)
         self.dark_status = QLabel("No dark image; subtraction off")
         self.dark_status.setWordWrap(True)
-        layout.addWidget(self.dark_status)
-        self.surface = ImageSurface()
-        layout.addWidget(self.surface, 1)
+        settings.addWidget(self.dark_status)
+        settings.addStretch(1)
+        preview.addWidget(self.settings_panel)
+        layout.addLayout(preview, 1)
+        self.settings_toggle.toggled.connect(self._set_settings_visible)
+        self._set_settings_visible(True)
+
         self.status = QLabel("Camera: NOT PROBED")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -219,6 +263,31 @@ class CameraWindow(QDialog):
         self.gain.valueChanged.connect(self.update_targets)
         self.display_ms.valueChanged.connect(self.update_interval)
         self._connected_ok = False
+
+    def _set_settings_visible(self, visible):
+        currently_visible = self.settings_panel.isVisible()
+        if visible == currently_visible and hasattr(self, "_settings_width"):
+            return
+        if currently_visible and not visible:
+            self._settings_width = max(self.settings_panel.width(), self.settings_panel.sizeHint().width()) + 6
+            self._preview_size = self.surface.size()
+            self.surface.setFixedSize(self._preview_size)
+            self.settings_panel.hide()
+            self.resize(max(self.minimumWidth(), self.width() - self._settings_width), self.height())
+        elif visible and not currently_visible:
+            width = getattr(self, "_settings_width", self.settings_panel.sizeHint().width() + 6)
+            self.resize(self.width() + width, self.height())
+            self.settings_panel.show()
+            self.surface.setMinimumSize(240, 180)
+            self.surface.setMaximumSize(16777215, 16777215)
+        else:
+            self.settings_panel.setVisible(visible)
+        self.settings_toggle.setArrowType(
+            Qt.ArrowType.RightArrow if visible else Qt.ArrowType.LeftArrow
+        )
+        label = "Hide camera settings" if visible else "Show camera settings"
+        self.settings_toggle.setToolTip(label)
+        self.settings_toggle.setAccessibleName(label)
 
     @property
     def busy(self):

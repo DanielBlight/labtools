@@ -414,21 +414,96 @@ def anneal_view(panel):
     layout = new_page(panel, 'Annealing')
     scroll, form_layout = scroll_content()
     layout.addWidget(scroll, 1)
-    # No status pane or bar: controls reflow into one/two columns.
-    cards = ControlGrid()
-    form_layout.addWidget(cards)
-    add_card(cards, 'Scan', [
-        ('X start (V)', panel.x_start), ('X end (V)', panel.x_stop), ('X points', panel.x_points),
-        ('Y start (V)', panel.y_start), ('Y end (V)', panel.y_stop), ('Y points', panel.y_points),
-        ('Passes', panel.passes), ('Point dwell', panel.dwell), ('Mirror settle', panel.settle), (None, panel.serpentine)])
-    add_card(cards, 'Shutter', [('Port', panel.sc10_port), (None, panel.test_sc10), (None, panel.shutter_state)])
-    add_card(cards, 'Power stage', [('Anneal coordinate', panel.anneal_stage_coordinate),
-        (None, panel.return_stage), ('Return coordinate', panel.return_stage_coordinate),
-        (None, panel.test_stage), (None, panel.move_to_anneal_stage)])
+
+    grid_widget = QWidget()
+    grid = QGridLayout(grid_widget)
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setHorizontalSpacing(12)
+    grid.setVerticalSpacing(12)
+    form_layout.addWidget(grid_widget)
+
+    scan_fields = two_column_fields([
+        ('X start (V)', panel.x_start), ('Y start (V)', panel.y_start),
+        ('X end (V)', panel.x_stop), ('Y end (V)', panel.y_stop),
+        ('X points', panel.x_points), ('Y points', panel.y_points),
+        ('Passes', panel.passes), ('Point dwell', panel.dwell),
+        ('Mirror settle', panel.settle), ('', QWidget()),
+    ])
+    scan_card = add_card(grid, 'Scan', [
+        (None, scan_fields),
+        (None, panel.serpentine),
+    ])
+
+    right_stack = QWidget()
+    right_layout = QVBoxLayout(right_stack)
+    right_layout.setContentsMargins(0, 0, 0, 0)
+    right_layout.setSpacing(12)
+    shutter_card = add_card(right_layout, 'Shutter', [
+        ('Port', panel.sc10_port),
+        (None, panel.test_sc10),
+        (None, panel.shutter_state),
+    ])
+    right_layout.addStretch(1)
+    power_card = add_card(right_layout, 'Power stage', [
+        ('Anneal coordinate', panel.anneal_stage_coordinate),
+        (None, panel.return_stage),
+        ('Return coordinate', panel.return_stage_coordinate),
+        (None, panel.test_stage),
+        (None, panel.move_to_anneal_stage),
+    ])
+
     browse = QPushButton('Browse')
     browse.clicked.connect(panel._browse_output)
-    add_card(cards, 'Output', [('Maximum open time', panel.max_open), ('Folder', panel.output_root),
-        (None, browse), (None, panel.save_log)])
+
+    # A single spanning container prevents QFormLayout from assigning a narrow
+    # label column to the path editor. The editor and Browse therefore receive
+    # exactly the same horizontal geometry at every window width.
+    output_card, output_form = card('Output')
+    output_content = QWidget()
+    output_layout = QVBoxLayout(output_content)
+    output_layout.setContentsMargins(0, 0, 0, 0)
+    output_layout.setSpacing(6)
+    output_layout.addWidget(QLabel('Folder'))
+
+    panel.output_root.setMinimumWidth(0)
+    panel.output_root.setMaximumWidth(16777215)
+    panel.output_root.setMinimumHeight(24)
+    panel.output_root.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
+    )
+    panel.output_root.setVisible(True)
+    output_layout.addWidget(panel.output_root)
+
+    browse.setMinimumWidth(0)
+    browse.setMaximumWidth(16777215)
+    browse.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
+    )
+    output_layout.addWidget(browse)
+
+    panel.save_log.setVisible(True)
+    output_layout.addWidget(panel.save_log)
+    output_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+    output_form.setFieldGrowthPolicy(
+        QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+    )
+    output_form.addRow(output_content)
+    grid.addWidget(output_card, 1, 0)
+
+    grid.addWidget(scan_card, 0, 0)
+    grid.addWidget(right_stack, 0, 1)
+    grid.setColumnStretch(0, 1)
+    grid.setColumnStretch(1, 1)
+    grid.setRowStretch(0, 0)
+    grid.setRowStretch(1, 0)
+    scan_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+    right_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    shutter_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+    power_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+    output_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
     form_layout.addStretch(1)
     actions(layout, panel, [panel.start_button, panel.stop_button])
     panel.progress.hide()  # Existing worker still updates its retained progress object.
@@ -774,6 +849,83 @@ def finish_compact(window):
         output_form.addRow('', spectrum.output_browse_button)
         output_form.addRow('', spectrum.save_csv)
         output_form.addRow('', spectrum.save_png)
+    # Annealing folder/spacing refinement V2.
+    anneal = window.pages['Annealing']
+
+    # Apply after generic widget normalization so the folder cannot collapse to
+    # its text size under QFormLayout.FieldsStayAtSizeHint.
+    anneal.output_root.setMinimumWidth(0)
+    anneal.output_root.setMaximumWidth(16777215)
+    anneal.output_root.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
+    )
+
+    shutter_form = next(
+        (
+            form
+            for form in anneal.findChildren(QFormLayout)
+            if form.indexOf(anneal.sc10_port) >= 0
+        ),
+        None,
+    )
+    power_form = next(
+        (
+            form
+            for form in anneal.findChildren(QFormLayout)
+            if form.indexOf(anneal.return_stage_coordinate) >= 0
+        ),
+        None,
+    )
+    # The right stack already contains a flexible spacer between Shutter and
+    # Power stage. Increasing the card-internal spacing consumes that spacer,
+    # so Power stage remains bottom-aligned with Scan.
+    if shutter_form is not None:
+        shutter_form.setVerticalSpacing(8)
+    if power_form is not None:
+        power_form.setVerticalSpacing(8)
+    # Prominent header Camera action V2.
+    # The header button is created in native_workspace.py as a local widget, so
+    # locate it by its unique visible text instead of assuming window.camera_button.
+    camera_button = next(
+        (
+            button
+            for button in window.findChildren(QPushButton)
+            if button.text() == 'Camera'
+        ),
+        None,
+    )
+    if camera_button is not None:
+        camera_button.setObjectName('cameraAction')
+        camera_button.setMinimumWidth(88)
+        camera_button.setMinimumHeight(30)
+        camera_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        camera_button.setToolTip('Open the camera preview and alignment tools')
+        camera_button.setStyleSheet(
+            "QPushButton#cameraAction {"
+            " background: #16796f; color: white; border: 1px solid #11665e;"
+            " border-radius: 4px; padding: 5px 14px; font-weight: 600; }"
+            "QPushButton#cameraAction:hover { background: #116e65; }"
+            "QPushButton#cameraAction:pressed { background: #0d5d56; }"
+            "QPushButton#cameraAction:disabled {"
+            " background: #c4d3d1; color: #6b777b; border-color: #aebdbc; }"
+        )
+    # Match Stop all dimensions to Camera.
+    stop_all_button = next(
+        (
+            button
+            for button in window.findChildren(QPushButton)
+            if button.text() == 'Stop all'
+        ),
+        None,
+    )
+    if stop_all_button is not None:
+        stop_all_button.setMinimumWidth(88)
+        stop_all_button.setMinimumHeight(30)
+        stop_all_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
     for page in window.pages.values():
         page.statusBar().setSizeGripEnabled(False)
     # Stage movement is an operational action, not buried in a scrolling card.
@@ -798,6 +950,11 @@ def finish_compact(window):
     anneal.move_to_anneal_stage.show()
     row.addStretch(1)
     root.insertLayout(1, row)
+    anneal.anneal_stage_coordinate.setMinimumWidth(200)
+    anneal.anneal_stage_coordinate.setMaximumWidth(200)
+    anneal.anneal_stage_coordinate.setMinimumHeight(28)
+    anneal.move_to_anneal_stage.setMinimumWidth(190)
+    anneal.move_to_anneal_stage.setMinimumHeight(28)
     # Compact the Laser tab into task rows instead of five full-width buttons.
     laser = window.laser_panel
     laser_layout = laser.layout()

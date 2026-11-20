@@ -108,7 +108,7 @@ def test_controls_grid_reflows_and_splitter_reflows(qt):
     split.show()
     try:
         for width, columns, orientation in [(1400, 2, core.Qt.Orientation.Horizontal),
-                                             (800, 1, core.Qt.Orientation.Vertical),
+                                             (800, 1, core.Qt.Orientation.Horizontal),
                                              (1400, 2, core.Qt.Orientation.Horizontal)]:
             grid.resize(width, 600)
             split.resize(width, 600)

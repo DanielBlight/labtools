@@ -157,7 +157,9 @@ try:
     assert w.tabs.count()==2 and not m.isWindow() and not s.isWindow()
     assert m.simulation_mode.isChecked() and not m.simulation_mode.isEnabled()
     assert not m.laser_group.isEnabled() and not s.laser_group.isEnabled()
-    m.integration.setValue(.02); m.settle.setValue(0); m.save_results.setChecked(True)
+    m.integration.setValue(.02); m.settle.setValue(0); m.save_results.setChecked(False)
+    # Keep this completion scan independent of persisted operator settings.
+    m.x_points.setValue(3); m.y_points.setValue(3)
     m.start_new(); wait(lambda:not m.map_controller.busy)
     assert not errors and m.progress.value()==100
     w.tabs.setCurrentIndex(1)

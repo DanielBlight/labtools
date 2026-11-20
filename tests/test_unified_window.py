@@ -52,7 +52,7 @@ def test_three_workflow_window_roundtrip_and_anneal_cleanup(tmp_path, monkeypatc
         try:
             window.show()
             app.processEvents()
-            assert window.tabs.count() == 4
+            assert window.tabs.count() == 5
             mapping, spectrum, anneal = (window.pages[name] for name in ("Intensity map", "Spectrum", "Annealing"))
             mapping.x_points.setValue(13)
             spectrum.exposure_box.setValue(.7)
