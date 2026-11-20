@@ -133,3 +133,24 @@ Add observations, output locations, device serial numbers, driver versions and r
 - Stop and restart tested:
 - Clean close and reconnect tested:
 - Issues observed: None during this test
+
+## Laser Annealing profile and dry-run acceptance
+
+- Date: 2026-11-20 18:55:37 +00:00
+- Branch: `lab-pc/0.2.0-rc1-validation`
+- Commit: `ffc1dac8c9a4d428eaf8d26571ce3702809ed443`
+- Installed profile: `C:\ProgramData\Labtools\instrument.json`
+- Profile ID: `working-lab-20261120-lab-pc`
+- Approved profile loaded by GUI: Yes
+- ITC4000 LD output remained physically OFF: Yes
+- Initial SC10 state was closed: Yes
+- One-position unpowered dry run completed: Yes
+- Shutter closed after completion: Yes
+- Mirror returned to configured home: Yes
+- Rotation stage: No failure observed during the completed dry run
+- Second dry run started successfully: Yes
+- Stop-after-current-point tested: Not yet confirmed
+- Cancellation closed shutter: Not yet confirmed
+- Cancellation returned mirror home: Not yet confirmed
+- Issues observed: None during the completed one-position dry run
+- Powered annealing tested: No
