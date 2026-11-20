@@ -65,3 +65,60 @@ The accompanying patch is for review or manual application, not required by the
 installer. Close running GUIs before applying. Commit or otherwise back up local
 work first. A larger rewrite of laser control, a shared device manager, and native
 call timeouts are deliberately outside this batch.
+
+## Unified working-lab instrument profile
+
+### Status
+
+Deferred until after the current hardware-acceptance cycle and release-candidate
+freeze.
+
+The current configuration remains intentionally separated:
+
+- Annealing hardware limits and approval are stored in the strict flat
+  `InstrumentProfile`.
+- HORIBA configuration identity is stored in the working-lab spectrum and
+  candidate configuration, with `LABTOOLS_SPECTRUM_CONFIGURATION_ID` used by
+  standalone tools.
+- The ITC4000 lab limit of `0.040 A` is currently enforced by the corrected
+  GUI and device-wrapper path.
+- Connected-hardware evidence is recorded separately in the lab-PC acceptance
+  documentation.
+
+Do not add spectrometer or ITC4000 properties ad hoc to the existing
+`InstrumentProfile`. Its loader requires an exact field set, so an informal
+schema extension would break deployed profiles.
+
+### Recommended post-release migration
+
+Introduce a versioned top-level working-lab profile containing dedicated
+subsystem sections or referenced profiles for:
+
+- Annealing:
+  - SC10 resource and startup state
+  - mirror DIO, voltage limits and home position
+  - rotation-stage limits and return policy
+  - point and shutter-open limits
+- ITC4000:
+  - VISA resource
+  - maximum current of `0.040 A` for the current lab controller
+  - shutdown or standby current policy
+- HORIBA spectroscopy:
+  - reviewed configuration identity
+  - Syncerity serial `926`
+  - Symphony/Synapse serial `26070`
+  - detector presets, grating selection and exit-mirror routing
+
+The migration should:
+
+1. Remove the hard-coded lab-specific `0.040 A` value from the GUI.
+2. Remove the routine deployment requirement for
+   `LABTOOLS_SPECTRUM_CONFIGURATION_ID`.
+3. Validate hardware identity and hard limits before controls are enabled.
+4. Retain environment-variable overrides for development and diagnostics.
+5. Support migration from the current flat Annealing profile.
+6. Preserve backward compatibility during at least one release transition.
+7. Include strict schema, migration, hardware-identity and refusal-path tests.
+
+This work should begin only after the current connected-hardware evidence is
+complete and the next release candidate has been frozen.
