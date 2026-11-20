@@ -226,7 +226,7 @@ class LaserAnnealWindow(QMainWindow):
         control_layout.addWidget(output_group)
         self.max_open = QDoubleSpinBox()
         self.max_open.setRange(1.0, 86400.0)
-        self.max_open.setValue(900.0)
+        self.max_open.setValue(43200.0)
         self.max_open.setSuffix(" s")
         output_form.addRow("Maximum open time", self.max_open)
         self.output_root = QLineEdit("C:/LabData/LaserAnneal")

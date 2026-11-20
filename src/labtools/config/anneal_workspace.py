@@ -31,7 +31,7 @@ class AnnealRecipe:
     anneal_rotation_coordinate: float = 35000.0
     return_rotation_coordinate: float = 90000.0
     return_rotation_stage: bool = True
-    maximum_open_time_s: float = 900.0
+    maximum_open_time_s: float = 43200.0
     save_run_log: bool = True
     output_root: str = ""
 
@@ -51,7 +51,7 @@ class InstrumentProfile:
     rotation_stage_timeout_s: float = 60.0
     rotation_min_coordinate: float = 35000.0
     rotation_max_coordinate: float = 90000.0
-    maximum_open_time_s: float = 900.0
+    maximum_open_time_s: float = 43200.0
     maximum_total_points: int = 1000000
     require_return_stage: bool = True
 

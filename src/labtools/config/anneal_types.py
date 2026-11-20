@@ -33,7 +33,7 @@ class LaserAnnealConfig:
     rotation_stage_timeout_s: float = 60.0
     output_root: Path = Path("C:/LabData/LaserAnneal")
     save_run_log: bool = True
-    maximum_open_time_s: float = 900.0
+    maximum_open_time_s: float = 43200.0
     gui_update_interval_s: float = 0.05
 
     def validate(self) -> None:

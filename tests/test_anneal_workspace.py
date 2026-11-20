@@ -39,7 +39,7 @@ def test_round_trip(tmp_path):
         {"x_points": 0},
         {"x_start_v": float("nan")},
         {"x_stop_v": 10.1},
-        {"maximum_open_time_s": 901.0},
+        {"maximum_open_time_s": 43201.0},
         {"return_rotation_stage": False},
         {"anneal_rotation_coordinate": 1.0},
         {"output_root": "relative"},
