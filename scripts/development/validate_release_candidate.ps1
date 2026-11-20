@@ -11,22 +11,30 @@ Set-Location -LiteralPath $repo
 
 $python = ".\.venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $python)) {
-    throw "Missing .venv. Recreate it with: uv sync --frozen --group dev"
+    throw "Missing .venv. Recreate it with: uv sync --frozen --group dev --link-mode copy"
 }
+
 if (git status --porcelain) {
     throw "Release validation requires a clean working tree."
 }
 
 Write-Host "[1/6] Verifying locked environment"
-uv sync --frozen --group dev
+uv sync --frozen --group dev --link-mode copy
+if ($LASTEXITCODE -ne 0) {
+    throw "uv sync failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "[2/6] Running Ruff"
 & $python -m ruff check src tests
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+    throw "Ruff failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "[3/6] Compiling package"
 & $python -m compileall -q src
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+    throw "compileall failed with exit code $LASTEXITCODE"
+}
 
 if (-not $SkipTests) {
     Write-Host "[4/6] Running non-hardware tests"
@@ -36,11 +44,23 @@ if (-not $SkipTests) {
         $env:QT_QPA_PLATFORM = "offscreen"
         $env:MPLBACKEND = "Agg"
         & $python -m pytest -q -ra -m "not hardware"
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if ($LASTEXITCODE -ne 0) {
+            throw "pytest failed with exit code $LASTEXITCODE"
+        }
     }
     finally {
-        if ($null -eq $oldQt) { Remove-Item Env:\QT_QPA_PLATFORM -ErrorAction SilentlyContinue } else { $env:QT_QPA_PLATFORM = $oldQt }
-        if ($null -eq $oldMpl) { Remove-Item Env:\MPLBACKEND -ErrorAction SilentlyContinue } else { $env:MPLBACKEND = $oldMpl }
+        if ($null -eq $oldQt) {
+            Remove-Item Env:\QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:QT_QPA_PLATFORM = $oldQt
+        }
+        if ($null -eq $oldMpl) {
+            Remove-Item Env:\MPLBACKEND -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:MPLBACKEND = $oldMpl
+        }
     }
 }
 else {
@@ -48,11 +68,18 @@ else {
 }
 
 Write-Host "[5/6] Building distributions"
-if (-not $KeepDist) { Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue }
+if (-not $KeepDist) {
+    Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+}
 uv build
+if ($LASTEXITCODE -ne 0) {
+    throw "uv build failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "[6/6] Smoke-testing wheel metadata in an isolated environment"
 & ".\scripts\development\smoke_test_wheel.ps1"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+    throw "Wheel smoke test failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Release-candidate validation passed." -ForegroundColor Green
