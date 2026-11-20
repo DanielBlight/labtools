@@ -297,12 +297,25 @@ def map_view(panel):
     panel._sync_second_channel_visibility()
     browse = QPushButton('Browse')
     browse.clicked.connect(panel._choose_output)
+    browse_row = QWidget()
+    browse_row.setFixedWidth(270)
+    browse_row_layout = QHBoxLayout(browse_row)
+    browse_row_layout.setContentsMargins(0, 0, 0, 0)
+    browse_row_layout.setSpacing(0)
+    browse.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    browse_row_layout.addWidget(browse)
+    browse.setMinimumWidth(270)
+    browse.setMaximumWidth(270)
+    browse.setSizePolicy(
+        QSizePolicy.Policy.Fixed,
+        QSizePolicy.Policy.Fixed,
+    )
+    browse.setMinimumWidth(270)
+    browse.setMaximumWidth(270)
+    browse.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     panel.output_root.setMinimumWidth(280)
     panel.output_root.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    output_card = add_card(
-        form_layout, 'Output',
-        [('Folder', panel.output_root), (None, browse), (None, panel.save_results)],
-    )
+    output_card = add_card(form_layout, 'Output', [('Folder', panel.output_root), ('', browse_row), ('', panel.save_results)])
     output_card.setMaximumWidth(338)
     for widget in (browse, panel.save_results):
         widget.setMinimumWidth(0)
@@ -564,6 +577,203 @@ def finish_compact(window):
     mapping.output_root.setMaximumWidth(270)
     mapping.output_root.setSizePolicy(
         QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    spectrum = window.pages['Spectrum']
+
+    # Acquisition: preserve the working two-column arrangement.
+    acquisition_form = next(
+        (form for form in spectrum.findChildren(QFormLayout)
+         if form.indexOf(spectrum.preset_combo) >= 0),
+        None,
+    )
+    if acquisition_form is not None:
+        acquisition_controls = (
+            spectrum.preset_combo,
+            spectrum.start_wl,
+            spectrum.end_wl,
+            spectrum.exposure_box,
+            spectrum.frames_box,
+            spectrum.mode_combo,
+        )
+        for control in acquisition_controls:
+            taken = acquisition_form.takeRow(control)
+            if taken.labelItem is not None and taken.labelItem.widget() is not None:
+                taken.labelItem.widget().deleteLater()
+        acquisition_grid = two_column_fields([
+            ('Detector', spectrum.preset_combo),
+            ('Start wavelength (nm)', spectrum.start_wl),
+            ('End wavelength (nm)', spectrum.end_wl),
+            ('Exposure', spectrum.exposure_box),
+            ('Frames', spectrum.frames_box),
+            ('Combine', spectrum.mode_combo),
+        ])
+        for control in acquisition_controls:
+            control.setMinimumWidth(156)
+            control.setMaximumWidth(156)
+            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        acquisition_form.addRow(acquisition_grid)
+
+    # Detector settings: one shared right edge despite the wider label column.
+    detector_form = next(
+        (form for form in spectrum.findChildren(QFormLayout)
+         if form.indexOf(spectrum.gain_combo) >= 0),
+        None,
+    )
+    if detector_form is not None:
+        detector_controls = (
+            spectrum.gain_combo,
+            spectrum.speed_combo,
+            spectrum.overlap_box,
+            spectrum.slit_width_box,
+        )
+        detector_labels = ('Gain', 'Readout', 'Stitch overlap', 'Entrance slit')
+        for control in detector_controls:
+            taken = detector_form.takeRow(control)
+            if taken.labelItem is not None and taken.labelItem.widget() is not None:
+                taken.labelItem.widget().deleteLater()
+        detector_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+        detector_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        detector_form.setHorizontalSpacing(8)
+        detector_form.setVerticalSpacing(4)
+        for label, control in zip(detector_labels, detector_controls, strict=True):
+            control.setMinimumWidth(244)
+            control.setMaximumWidth(244)
+            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            detector_form.addRow(label, control)
+
+    # Dark correction has a narrower label column, so 274 px reaches the same
+    # card-edge endpoint as the 244 px Detector-settings fields.
+    dark_form = next(
+        (form for form in spectrum.findChildren(QFormLayout)
+         if form.indexOf(spectrum.background_mode) >= 0),
+        None,
+    )
+    if dark_form is not None:
+        dark_controls = (spectrum.background_mode, spectrum.background_timing)
+        dark_labels = ('Source', 'Timing')
+        for control in dark_controls:
+            taken = dark_form.takeRow(control)
+            if taken.labelItem is not None and taken.labelItem.widget() is not None:
+                taken.labelItem.widget().deleteLater()
+        dark_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+        dark_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        dark_form.setHorizontalSpacing(8)
+        dark_form.setVerticalSpacing(4)
+        for label, control in zip(dark_labels, dark_controls, strict=True):
+            control.setMinimumWidth(274)
+            control.setMaximumWidth(274)
+            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            dark_form.addRow(label, control)
+
+    # Output mirrors Intensity map: Folder and Browse share a 270 px field
+    # column; save options start in that same column.
+    output_form = next(
+        (form for form in spectrum.findChildren(QFormLayout)
+         if form.indexOf(spectrum.output_directory) >= 0),
+        None,
+    )
+    if output_form is not None:
+        output_controls = (
+            spectrum.output_directory,
+            spectrum.output_browse_button,
+            spectrum.save_csv,
+            spectrum.save_png,
+        )
+        for control in output_controls:
+            taken = output_form.takeRow(control)
+            if taken.labelItem is not None and taken.labelItem.widget() is not None:
+                taken.labelItem.widget().deleteLater()
+        output_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        output_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        output_form.setVerticalSpacing(4)
+        for control in (spectrum.output_directory, spectrum.output_browse_button):
+            control.setMinimumWidth(270)
+            control.setMaximumWidth(270)
+            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        output_form.addRow('Folder', spectrum.output_directory)
+        output_form.addRow('', spectrum.output_browse_button)
+        output_form.addRow('', spectrum.save_csv)
+        output_form.addRow('', spectrum.save_png)
+
+    spectrum.acquire_button.setText('Acquire')
+    for button in (spectrum.connect_button, spectrum.acquire_button, spectrum.stop_button):
+        button.setMinimumWidth(0)
+        button.setMaximumWidth(16777215)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    # Spectrum order/output refinement V2.
+    # This runs after the existing Acquisition and Detector layout code and does
+    # not replace either section.
+    dark_form = next(
+        (
+            form
+            for form in spectrum.findChildren(QFormLayout)
+            if form.indexOf(spectrum.background_mode) >= 0
+        ),
+        None,
+    )
+    if dark_form is not None:
+        dark_controls = (
+            spectrum.background_mode,
+            spectrum.background_timing,
+            spectrum.capture_dark_button,
+            spectrum.load_dark_button,
+            spectrum.clear_dark_button,
+            spectrum.background_status,
+        )
+        for control in dark_controls:
+            taken = dark_form.takeRow(control)
+            if taken.labelItem is not None and taken.labelItem.widget() is not None:
+                taken.labelItem.widget().deleteLater()
+        dark_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+        dark_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        dark_form.setHorizontalSpacing(8)
+        dark_form.setVerticalSpacing(4)
+        for label, control in (
+            ('Source', spectrum.background_mode),
+            ('Timing', spectrum.background_timing),
+        ):
+            control.setMinimumWidth(274)
+            control.setMaximumWidth(274)
+            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            dark_form.addRow(label, control)
+        for control in (
+            spectrum.capture_dark_button,
+            spectrum.load_dark_button,
+            spectrum.clear_dark_button,
+            spectrum.background_status,
+        ):
+            dark_form.addRow(control)
+
+    output_form = next(
+        (
+            form
+            for form in spectrum.findChildren(QFormLayout)
+            if form.indexOf(spectrum.output_directory) >= 0
+        ),
+        None,
+    )
+    if output_form is not None:
+        output_controls = (
+            spectrum.output_directory,
+            spectrum.output_browse_button,
+            spectrum.save_csv,
+            spectrum.save_png,
+        )
+        for control in output_controls:
+            taken = output_form.takeRow(control)
+            if taken.labelItem is not None and taken.labelItem.widget() is not None:
+                taken.labelItem.widget().deleteLater()
+        output_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+        output_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        output_form.setHorizontalSpacing(8)
+        output_form.setVerticalSpacing(4)
+        for control in (spectrum.output_directory, spectrum.output_browse_button):
+            control.setMinimumWidth(270)
+            control.setMaximumWidth(270)
+            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        output_form.addRow('Folder', spectrum.output_directory)
+        output_form.addRow('', spectrum.output_browse_button)
+        output_form.addRow('', spectrum.save_csv)
+        output_form.addRow('', spectrum.save_png)
     for page in window.pages.values():
         page.statusBar().setSizeGripEnabled(False)
     # Stage movement is an operational action, not buried in a scrolling card.
