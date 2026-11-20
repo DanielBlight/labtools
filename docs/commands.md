@@ -53,7 +53,7 @@ perform physical checks; follow the operator guide before using it.
 
 ## Existing commands retained
 
-- `uv run python main.py`: spectrum GUI, as before.
+- `uv run labtools gui spectrum`: canonical spectrum GUI command.
 - `uv run labtools-anneal`: same as `labtools gui anneal`.
 - `uv run labtools-intensity-map`: same as `labtools gui intensity-map`.
 - `uv run python -m labtools.gui.spectrum_gui_horiba`: unchanged module entry point.

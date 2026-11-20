@@ -38,8 +38,6 @@ vendor/Horiba/python-sdk
 
 *.bak
 *.pyc
-*.pyo
-__pycache__/
 scratch/.ruff_cache/
 
 # Local source exports and guarded refactor backups
@@ -52,3 +50,6 @@ labtools_source_*.txt
 *_review.txt
 labtools_full_project-*.txt
 camera_gui_context.txt
+
+# Operator-generated measurement output
+data/intensity_maps/

@@ -41,7 +41,7 @@ The old `operator_cli`, `gui.background`, `config.recipe_ui` and
 `simulation.map_backend` modules remain as small public compatibility exports.
 Use the new module locations for new code. Internal/private helpers and
 monkeypatching globals through compatibility modules are not guaranteed APIs.
-The old main.py still launches the spectrum GUI. No old launch command is removed.
+The legacy root `main.py` launcher was removed after the canonical `uv run labtools gui spectrum` command was established.
 
 ## Scope boundary
 

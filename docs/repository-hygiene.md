@@ -13,10 +13,8 @@
 
 - `.labtools-migrations/` is retained as migration/audit evidence. A later archival
   decision may move it to `docs/history/` or a separate evidence repository.
-- `main.py` is retained temporarily as a legacy spectrum-launch compatibility shim.
-  Remove it only after confirming that no external shortcut or operator procedure uses it.
-- Existing files under `data/` are retained until each is classified as either a test
-  fixture or generated operator output.
+- The legacy root `main.py` spectrum launcher has been removed; use `uv run labtools gui spectrum`.
+- Audited operator-generated intensity-map output was removed from `data/`; future measurement output is ignored.
 - Vendored IDQ and Cryostation material is retained pending licence and provenance review.
 
 ## Release rule
