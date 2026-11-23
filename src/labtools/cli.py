@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("manifest", type=Path)
     launch = candidate.add_parser("launch", help="Open source-backed workspace; native execution disabled unless explicitly selected")
     launch.add_argument("manifest", type=Path)
+    launch.add_argument("--hardware", action="store_true", help="Enable all implemented real hardware workflows; outputs remain explicit operator actions")
     launch.add_argument("--hardware-spectrum", action="store_true", help="Enable real HORIBA spectrum/alignment only; no connection until operator action")
     launch.add_argument("--simulate", action="store_true", help="Explicit synthetic map/spectrum/anneal/camera; no hardware")
     launch.add_argument("--simulation-realtime", action="store_true", help="Honour synthetic map/anneal dwell timing")
@@ -81,8 +82,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             try:
                 if not args.simulate and (args.simulation_realtime or args.simulation_output is not None):
                     parser.error("--simulation-realtime/--simulation-output require --simulate")
-                if args.simulate and args.hardware_spectrum:
-                    parser.error("--simulate and --hardware-spectrum are mutually exclusive")
+                if sum((args.simulate, args.hardware_spectrum, args.hardware)) > 1:
+                    parser.error("--simulate, --hardware-spectrum and --hardware are mutually exclusive")
                 if args.simulate:
                     from labtools.simulation.operator_session import (
                         SimulatedOperatorSession,
@@ -90,6 +91,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
                     session = SimulatedOperatorSession(args.manifest, anneal_profile=args.anneal_profile,
                                                        output_root=args.simulation_output, realtime=args.simulation_realtime)
+                elif args.hardware:
+                    from labtools.runtime.hardware_workspace import HardwareWorkspace
+
+                    session = HardwareWorkspace(args.manifest, anneal_profile=args.anneal_profile)
                 elif args.hardware_spectrum:
                     from labtools.runtime.hardware_spectrum_workspace import (
                         HardwareSpectrumWorkspace,

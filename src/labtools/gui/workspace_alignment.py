@@ -34,6 +34,14 @@ class WorkspaceAlignmentPanel(HoribaAlignmentWindow):
         self.gain_combo.setCurrentIndex(self.gain_combo.findData(settings.gain))
         self.speed_combo.setCurrentIndex(self.speed_combo.findData(settings.speed))
         self.centre_box.setValue((settings.start_nm + settings.end_nm) / 2)
+        if workspace.drafts.alignment:
+            from labtools.gui.workspace_hub import apply_alignment
+            from labtools.runtime.workspace_settings import validate_alignment
+
+            try:
+                apply_alignment(self, validate_alignment(workspace, workspace.drafts.alignment))
+            except (ValueError, TypeError, KeyError) as error:
+                workspace.drafts.store.messages.append("Alignment preferences ignored: " + str(error))
 
     def _install_view(self):
         layout = new_page(self, "Alignment")

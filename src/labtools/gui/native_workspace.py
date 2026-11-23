@@ -40,6 +40,7 @@ def create_window(workspace):
 
     simulated = bool(getattr(workspace, "simulation_only", False))
     hardware_spectrum = bool(getattr(workspace, "hardware_spectrum_enabled", False))
+    all_hardware = bool(getattr(workspace, "all_hardware_enabled", False))
     runtime = None
     if simulated or hardware_spectrum:
         from labtools.runtime.operator_spectrum import ensure_operator_spectrum
@@ -60,6 +61,7 @@ def create_window(workspace):
             self._close_retry.setInterval(50)
             self._close_retry.timeout.connect(self._retry_close)
             self.setWindowTitle("Labtools Workspace - SIMULATION ONLY" if simulated
+                                else "Labtools Workspace - real hardware" if all_hardware
                                 else "Labtools Workspace - real HORIBA" if hardware_spectrum
                                 else "Labtools native workspace - execution disabled")
             self.setStyleSheet(STYLE)
@@ -78,7 +80,7 @@ def create_window(workspace):
             app_title.setObjectName("appTitle")
             header.addWidget(app_title)
             header.addStretch(1)
-            self.mode_badge = QLabel("Simulation" if simulated else "Real HORIBA" if hardware_spectrum else "Native execution disabled")
+            self.mode_badge = QLabel("Simulation" if simulated else "Real hardware" if all_hardware else "Real HORIBA" if hardware_spectrum else "Native execution disabled")
             self.mode_badge.setObjectName("modeBadge")
             header.addWidget(self.mode_badge)
             self.camera_button = QPushButton("Camera")
@@ -107,7 +109,7 @@ def create_window(workspace):
             summary.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
             summary.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
             summary.addRow('Configuration', self.configuration_label)
-            summary.addRow("Mode", QLabel("Simulation" if simulated else "Real HORIBA spectrum/alignment" if hardware_spectrum else "Native execution disabled"))
+            summary.addRow("Mode", QLabel("Simulation" if simulated else "All real hardware" if all_hardware else "Real HORIBA spectrum/alignment" if hardware_spectrum else "Native execution disabled"))
             self.overview_status = QLabel("Ready")
             self.overview_status.setWordWrap(True)
             summary.addRow("Status", self.overview_status)
@@ -149,6 +151,13 @@ def create_window(workspace):
 
                     spectrum_panel = HardwareSpectrumPanel
                 anneal_panel = SimulatedAnnealPanel if simulated else NativeAnnealPanel
+                if all_hardware:
+                    from labtools.gui.hardware_panels import (
+                        HardwareAnnealPanel,
+                        HardwareMapPanel,
+                    )
+
+                    map_panel, anneal_panel = HardwareMapPanel, HardwareAnnealPanel
                 self.pages["Intensity map"] = map_panel(workspace=workspace)
                 self.pages["Spectrum"] = spectrum_panel(workspace=workspace)
                 self.pages["Annealing"] = anneal_panel(workspace=workspace, camera_window=self.camera_window)
@@ -185,7 +194,12 @@ def create_window(workspace):
             install_studio(self, workspace)
             if "Alignment" in self.pages:
                 protect_parameter_wheels(self.pages["Alignment"])
-            if hardware_spectrum:
+            from labtools.gui.workspace_hub import install_hub
+
+            install_hub(self, workspace)
+            if all_hardware:
+                self.overview_status.setText("Ready - real hardware; connections and outputs require explicit actions")
+            elif hardware_spectrum:
                 self.overview_status.setText("Ready - real HORIBA. Map, Annealing and laser remain disabled.")
 
         def open_camera(self):
@@ -220,6 +234,15 @@ def create_window(workspace):
 
         def save_preferences(self):
             drafts = {"display": self.display_preferences()}
+            if "Alignment" in self.pages:
+                from labtools.gui.workspace_hub import alignment_draft
+                from labtools.runtime.workspace_settings import ALIGNMENT_FIELDS
+
+                try:
+                    settings = alignment_draft(self)
+                    drafts["alignment"] = {key: getattr(settings, key) for key in ALIGNMENT_FIELDS}
+                except (ValueError, TypeError, KeyError) as error:
+                    workspace.drafts.store.messages.append("Alignment settings not saved: " + str(error))
             for name, key, method in (("Intensity map", "map", "_config"), ("Spectrum", "spectrum", "_snapshot_settings"),
                                       ("Annealing", "anneal", "_build_config")):
                 try:
@@ -239,6 +262,8 @@ def create_window(workspace):
 
         def stop_all(self):
             errors = stop_workflows(self.pages)
+            if all_hardware and (self.laser_panel.model.connected or self.laser_panel.busy):
+                self.laser_panel.command("off")
             if self.camera_window.busy:
                 self.camera_window.request_stop()
             if errors:
@@ -248,7 +273,11 @@ def create_window(workspace):
                 self.report.setPlainText("Stop request errors:\n" + "\n".join(errors))
 
         def any_busy(self):
-            return bool(busy_workflows(self.pages)) or self.camera_window.busy
+            hub = getattr(self, "workspace_hub", None)
+            laser = getattr(self, "laser_panel", None)
+            return (bool(busy_workflows(self.pages)) or self.camera_window.busy
+                    or bool(hub is not None and hub.busy)
+                    or bool(all_hardware and laser is not None and laser.busy))
 
         def refresh(self):
             try:
@@ -261,7 +290,7 @@ def create_window(workspace):
                 for page in self.pages.values():
                     page.setEnabled(False)
             else:
-                self.overview_status.setText("Ready" if simulated else "Ready - real HORIBA; other native workflows disabled" if hardware_spectrum else "Native execution disabled")
+                self.overview_status.setText("Ready" if simulated else "Ready - real hardware" if all_hardware else "Ready - real HORIBA; other native workflows disabled" if hardware_spectrum else "Native execution disabled")
                 self.report.setPlainText(json.dumps(data, indent=2))
 
         def preview(self):
@@ -300,6 +329,8 @@ def create_window(workspace):
                 self.close()
 
         def closeEvent(self, event):
+            if all_hardware:
+                self.laser_panel.request_shutdown()
             if self.any_busy():
                 if "Alignment" in self.pages:
                     self.pages["Alignment"]._workspace_closing = True
@@ -325,12 +356,20 @@ def create_window(workspace):
                 if answer != QMessageBox.StandardButton.Yes:
                     event.ignore()
                     return
+            if all_hardware and self.laser_panel.model.connected:
+                self.overview_status.setText("Laser disconnect failed; inspect error and retry Disconnect before closing")
+                event.ignore()
+                return
             if not self.camera_window.close():
                 event.ignore()
                 return
             if not close_workflows(self.pages):
                 event.ignore()
                 return
+            if hasattr(self, "workspace_hub"):
+                self.workspace_hub.shutdown()
+            if all_hardware:
+                self.laser_panel.close()
             workspace.close()
             super().closeEvent(event)
 

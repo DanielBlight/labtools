@@ -1,5 +1,15 @@
 # Native workspace launch, execution disabled
 
+## Explicit all-hardware mode, 2026-11-23
+
+`--hardware` now enables the implemented real map, Spectrum/Alignment, Annealing,
+laser and camera-selection paths. It is mutually exclusive with `--simulate` and
+`--hardware-spectrum`. The default launch is still disabled. No connection or
+output activation occurs merely by opening the workspace. See
+[workspace operation](workspace-hardware.md). Historical gate descriptions below
+refer to the default or the earlier HORIBA-only mode.
+
+
 ## Current launch modes, 2026-11-23
 
 The disabled launch documented below remains the default. Two explicit modes exist:

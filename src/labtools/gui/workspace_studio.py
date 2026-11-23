@@ -589,10 +589,16 @@ def install_studio(window, workspace):
     window.laser_indicator.setToolTip('Laser state is independent of the annealing shutter and power stage.')
     header = window.centralWidget().layout().itemAt(0).layout()
     header.insertWidget(2, window.laser_indicator)
-    window.laser_panel = LaserPanel(simulated, window.laser_indicator, window)
+    if getattr(workspace, "all_hardware_enabled", False):
+        from labtools.gui.hardware_laser_panel import HardwareLaserPanel
+
+        window.laser_panel = HardwareLaserPanel(workspace, window.laser_indicator, window)
+    else:
+        window.laser_panel = LaserPanel(simulated, window.laser_indicator, window)
     window.tabs.addTab(window.laser_panel, 'Laser')
-    window.stop_all_button.clicked.connect(lambda: window.laser_panel.command('off')
-        if window.laser_panel.model.connected else None)
+    if not getattr(workspace, "all_hardware_enabled", False):
+        window.stop_all_button.clicked.connect(lambda: window.laser_panel.command('off')
+            if window.laser_panel.model.connected else None)
     # Do not put a QWidget-only laser panel into pages: the legacy workflow
     # lifecycle helpers require their existing map/spectrum/anneal interfaces.
     window._studio_legacy_roots = [p._studio_legacy for p in (mapping, spectrum, anneal)]

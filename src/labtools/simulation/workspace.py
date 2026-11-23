@@ -21,7 +21,8 @@ def busy_workflows(pages):
         elif name == "Alignment":
             active = page._job is not None
         elif name == "Annealing":
-            active = page._thread is not None or page._camera_thread is not None
+            active = (page._thread is not None or page._camera_thread is not None
+                      or getattr(page, "_aux_future", None) is not None)
         else:
             raise ValueError(f"Unknown workspace workflow: {name}")
         if active:

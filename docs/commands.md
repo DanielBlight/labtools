@@ -1,5 +1,21 @@
 # Commands and compatibility
 
+## Unified all-hardware mode, 2026-11-23
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path ".\src").Path
+Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+uv run --no-sync python -m labtools workspace launch examples/workspace/working-lab/candidate.json --hardware
+```
+
+This enables the implemented real device workflows, not automatic output activation.
+Annealing uses the existing reviewed local profile (`LABTOOLS_INSTRUMENT_PROFILE`,
+otherwise `%PROGRAMDATA%\Labtools\instrument.json`), or an explicit
+`--anneal-profile` path. Missing/invalid profile leaves Annealing disabled. The
+strict flat profile is not created or migrated. The existing `--simulate` and
+`--hardware-spectrum` modes remain. See [operation](workspace-hardware.md).
+
+
 ## Unified alignment and real HORIBA, 2026-11-23
 
 From the repository root, after applying and validating the implementation:

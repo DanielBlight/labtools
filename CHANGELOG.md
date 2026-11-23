@@ -7,6 +7,19 @@ under active development.
 
 ## [Unreleased]
 
+### Added (workspace hardware, 2026-11-23)
+
+- Workspace configuration/status hub with source/mode/profile summary, device status,
+  explicit test shortcuts, source-bound settings import/export, alignment startup
+  preferences and idle-only configuration switching.
+- Explicit all-hardware mode for existing real map, Spectrum/Alignment, Annealing,
+  laser and camera paths; opening/connecting never implicitly enables laser output.
+- Asynchronous single-owner ITC4000 controls preserving the 0.040 A working-lab limit,
+  laser OFF on Stop all and disconnect-aware deferred close with retryable failures.
+- Worker-bound SC10/stage diagnostics and profile-validated Annealing, retaining the
+  existing acquisition/cleanup algorithm and strict flat instrument profile.
+- Focused runtime and actual Qt tests plus operation/acceptance documentation.
+
 ### Added (unified alignment, 2026-11-23)
 
 - Unified Alignment tab matching the existing operator controls/plot layout.

@@ -1,5 +1,15 @@
 # Documentation status and authority
 
+## Current all-hardware references, 2026-11-23
+
+- [Workspace hub and all-hardware operation](workspace-hardware.md): current launch,
+  settings semantics, profile requirements and connected acceptance.
+- [Implementation evidence](workspace-hardware-implementation-20261123.md): actual
+  tests, baseline, limits and next bounded continuation.
+- Older HORIBA-only gate statements remain accurate for `--hardware-spectrum`, not
+  for the new explicit `--hardware` mode. Historical acceptance records are unchanged.
+
+
 ## Unified alignment references, 2026-11-23
 
 - [Unified alignment operation](unified-alignment.md): current launch modes, scope,

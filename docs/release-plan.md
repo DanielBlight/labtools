@@ -1,5 +1,19 @@
 # LabTools release plan
 
+## All-hardware integration checkpoint, 2026-11-23
+
+The requested native-workflow binding batch is implemented behind explicit `--hardware`.
+The old default gate and HORIBA-only mode remain. Workspace settings/configuration
+management and per-device status are implemented without hardware-profile migration.
+
+Next required evidence is Windows targeted validation, simulation/settings rehearsal,
+then connected lab-PC checks of each enabled device/workflow, mutual exclusion,
+Stop all, active close and failed-cleanup reporting. Test laser connection/readback
+separately from Output ON, and shutter/stage diagnostics separately from an anneal.
+Use [operation and acceptance](workspace-hardware.md); do not infer acceptance from
+source enablement, previous standalone records or Linux fake-device tests.
+
+
 ## Unified HORIBA implementation checkpoint, 2026-11-23
 
 Alignment is now embedded in the unified workspace, with one shared spectrum worker,

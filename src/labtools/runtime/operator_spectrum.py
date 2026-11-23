@@ -68,6 +68,9 @@ class OperatorSpectrumRuntime:
 
     def require_lease(self):
         self.workspace._require_open()
+        check = getattr(self.workspace, "hardware_ready", None)
+        if check is not None:
+            check()
         self.workspace.plan.verify_sources()
         ownership = self.workspace._ownership
         states = {item.name: item for item in ownership.status().resources}

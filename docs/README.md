@@ -1,5 +1,11 @@
 # Documentation index
 
+## Workspace hub and all-hardware testing
+
+- [Operation, configuration/settings and lab-PC testing](workspace-hardware.md)
+- [Implementation and validation evidence](workspace-hardware-implementation-20261123.md)
+
+
 ## Unified alignment
 
 - [Operation, launch modes and hardware acceptance](unified-alignment.md)

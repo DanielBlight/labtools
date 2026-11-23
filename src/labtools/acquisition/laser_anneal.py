@@ -258,9 +258,10 @@ def run_laser_anneal(
     stop_event: Event | None = None,
     progress_callback: ProgressCallback | None = None,
     status_callback: StatusCallback | None = None,
+    instrument_profile=None,
 ) -> LaserAnnealResult:
     """Select anneal power, run the scan, then optionally return the stage."""
-    validate_run_config(config)
+    validate_run_config(config, instrument_profile) if instrument_profile is not None else validate_run_config(config)
     config.validate()
     def status(message: str) -> None:
         if status_callback is None:

@@ -1,5 +1,30 @@
 # LabTools current state
 
+## Workspace hub and all-hardware testing mode, 2026-11-23
+
+The new explicit `workspace launch ... --hardware` mode binds real map (LabJack,
+mirrors, SPAD gate, IDQ), Spectrum/Alignment, Annealing (SC10/stage/mirrors), laser
+(ITC4000) and the existing explicit camera selector. Opening the GUI does not connect
+or enable outputs. `--hardware-spectrum`, `--simulate` and the disabled default
+remain distinct, mutually exclusive launch modes. See [operation](workspace-hardware.md).
+
+Workspace is now a configuration/status hub: source/mode/profile summary, per-device
+last-observed status, explicit connection-test shortcuts, portable workflow settings
+load/save, startup preferences including alignment, and idle-only configuration
+switching. It does not edit hardware profiles, widen limits or activate outputs.
+
+All-hardware mode preserves the existing real-laser 0.040 A working-lab policy, not
+the synthetic panel's 0.080 A default. Annealing requires the existing valid local
+flat profile and source/local limit intersection. Missing profile disables Annealing
+rather than silently using source defaults. Stop all includes laser OFF; close waits
+for worker cleanup and laser disconnect. A failed disconnect retains its handle/lease
+and leaves the GUI available for explicit retry.
+
+This supersedes earlier statements that map/Annealing/laser remain gated in every
+real mode. They remain gated in the old HORIBA-only mode. No new connected all-hardware
+acceptance or release approval is claimed. See [implementation evidence](workspace-hardware-implementation-20261123.md).
+
+
 ## Unified alignment implementation, 2026-11-23
 
 The unified workspace now embeds an Alignment tab beside Spectrum in explicit

@@ -1,5 +1,14 @@
 # Unified alignment and real HORIBA operation
 
+## All-hardware workspace extension, 2026-11-23
+
+The shared Spectrum/Alignment worker is unchanged in the new explicit `--hardware`
+mode, which additionally binds map, Annealing and laser. The `--hardware-spectrum`
+mode below still leaves those workflows gated. Workspace now supports portable
+workflow settings and startup alignment preferences; alignment is no longer only
+per-window. See [workspace operation](workspace-hardware.md) for the current matrix.
+
+
 Status: current implementation/operation contract, 2026-11-23. Connected unified-GUI
 acceptance is pending. The previous standalone hardware result is not relabelled.
 

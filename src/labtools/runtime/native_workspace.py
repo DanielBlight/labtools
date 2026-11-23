@@ -85,6 +85,9 @@ class NativeWorkspace:
         if set(extras) & set(config.resources):
             raise ValueError("Anneal logical resource labels collide with existing resources")
         config = replace(config, resources=config.resources + extras, anneal_resources=shared + extras[:2], camera_resources=(extras[2],))
+        if getattr(self, "all_hardware_enabled", False):
+            laser_resource = config.configuration_id + ":laser-controller"
+            config = replace(config, resources=config.resources + (laser_resource,), laser_resources=(laser_resource,))
         config.validate()
         self.plan = replace(report.plan, reservation_config=config)
         self._preflight = replace(report, plan=self.plan)

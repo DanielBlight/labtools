@@ -237,7 +237,7 @@ def _resolved_values(recipe, profile):
 
 
 def build_config(recipe, profile=None):
-    from labtools.acquisition.laser_anneal import LaserAnnealConfig
+    from labtools.config.anneal_types import LaserAnnealConfig
 
     return LaserAnnealConfig(**_resolved_values(recipe, profile or load_profile()))
 
@@ -248,8 +248,8 @@ def resolve_gui_config(config):
     )
 
 
-def validate_run_config(config):
-    profile = load_profile()
+def validate_run_config(config, profile=None):
+    profile = validate_profile(profile) if profile is not None else load_profile()
     expected = _resolved_values(recipe_from_config(config), profile)
     for key, value in expected.items():
         if getattr(config, key) != value:

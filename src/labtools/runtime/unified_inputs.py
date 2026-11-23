@@ -139,7 +139,12 @@ class UnifiedDrafts:
                        "anneal": self.anneal_base}
         self.fields = {"map": MAP_FIELDS, "spectrum": SPECTRUM_FIELDS, "anneal": ANNEAL_FIELDS}
         self.display = {}
+        self.alignment = {}
         for name, saved in self.store.read().items():
+            if name == "alignment":
+                if isinstance(saved, dict):
+                    self.alignment = saved
+                continue
             if name == "display":
                 try:
                     self.display = validate_display(saved)
@@ -166,6 +171,19 @@ class UnifiedDrafts:
 
     def save(self, **drafts):
         payload = {}
+        from labtools.runtime.workspace_settings import (
+            ALIGNMENT_FIELDS,
+            validate_alignment,
+        )
+
+        alignment = drafts.pop("alignment", self.alignment)
+        if alignment:
+            try:
+                value = validate_alignment(self.workspace, alignment)
+                self.alignment = {key: getattr(value, key) for key in ALIGNMENT_FIELDS}
+                payload["alignment"] = self.alignment
+            except (ValueError, TypeError, KeyError) as error:
+                self.store.messages.append("Alignment preferences ignored: " + str(error))
         display = drafts.pop("display", self.display)
         self.display = validate_display(display)
         payload["display"] = self.display
