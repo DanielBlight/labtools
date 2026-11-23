@@ -1,5 +1,15 @@
 # Documentation index
 
+## Latest source review
+
+- [2026-11-22 source audit](source-audit-2026-11-22.md): findings, repair, validation
+  limits and prioritized cleanup.
+- [Documentation inventory](documentation-inventory-2026-11-22.md): classification
+  of the supplied Markdown documents.
+- [Persistent alignment contract](horiba-alignment.md): current behaviour and
+  future unified-GUI integration boundary.
+
+
 ## Operating the software
 
 - [Commands](commands.md): current commands, aliases and real/synthetic distinction.
@@ -20,10 +30,10 @@
 
 - [Dependency boundaries](dependency-boundaries.md): base runtime and optional research environments.
 
-Start with [AI handover](ai-handover.md). The canonical documents are
-[architecture](architecture.md), [development conventions](development-conventions.md)
-and [refactor roadmap / wrapper matrix](refactor-roadmap.md). Historical batch notes
-below retain technical context, not competing current task lists.
+Start with [current state](current-state.md), [release plan](release-plan.md) and
+[documentation authority](document-status.md). Architecture and development conventions
+remain technical references. The AI handover and refactor roadmap retain historical
+context and do not supersede current release scope or task order.
 
 
 - [Architecture](architecture.md): current implementation, target design and architectural decisions.

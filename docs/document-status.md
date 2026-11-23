@@ -1,5 +1,28 @@
 # Documentation status and authority
 
+## Authority clarification, 2026-11-22
+
+Status: current documentation policy. The release plan owns release gates; current
+state owns the capability/evidence summary; candidate notes describe a particular
+candidate. Architecture, commands and deployment references own their technical
+subjects, not release approval. A newer date alone does not grant authority.
+
+`ai-handover.md`, `release-readiness.md`, `refactor-roadmap.md` and old "next task"
+paragraphs are historical where they conflict with the current release plan.
+`architecture.md` contains historical checkpoints as well as implementation notes;
+its dated task scheduling is not the active backlog.
+
+- [2026-11-22 source audit](source-audit-2026-11-22.md): evidence-only findings and
+  explicit dispositions, not release approval.
+- [Documentation inventory](documentation-inventory-2026-11-22.md): static coverage
+  and classification of every supplied project Markdown document.
+- [Persistent alignment](horiba-alignment.md): current operational/API contract.
+- [Unified instrument-profile proposal](next-recommendations.md#unified-working-lab-instrument-profile):
+  planned work retained as an explicit exception to that file's historical preamble.
+- Lab-PC acceptance files: append-only evidence on their named commits. A PASS for
+  one operation does not complete a whole subsystem's release matrix.
+
+
 ## Purpose
 
 LabTools contains extensive design, audit, checkpoint and migration records. Those

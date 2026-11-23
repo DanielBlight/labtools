@@ -1,5 +1,14 @@
 # Next recommendations: cleanup and GUI boundaries
 
+## Classification clarification, 2026-11-22
+
+Most batch notes below are historical. The section
+[Unified working-lab instrument profile](#unified-working-lab-instrument-profile)
+is a retained, active **proposal**, not implemented configuration. It is explicitly
+linked from current state and the release plan. Its deferred status is unchanged.
+Other historical next-task suggestions do not override the current release plan.
+
+
 > Historical checkpoint record. Some status and installer references below are superseded.
 > Use [current architecture](architecture.md), [handover](ai-handover.md) and
 > [roadmap](refactor-roadmap.md) for implemented status and the next task.

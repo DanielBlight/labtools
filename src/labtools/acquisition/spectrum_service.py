@@ -156,6 +156,49 @@ class SpectrumService:
         if cancel_requested is not None and cancel_requested():
             raise asyncio.CancelledError("Spectrum operation cancelled")
 
+    async def run_alignment(
+        self,
+        settings,
+        *,
+        publish_frame,
+        cancel_requested: Callable[[], bool],
+    ) -> None:
+        """Hold one backend and resource lease until Stop and teardown complete.
+
+        ``publish_frame`` runs on the worker thread and must not touch Qt. Settings
+        are frozen for this run. Cancellation never interrupts a native SDK call.
+        """
+        from labtools.acquisition.alignment_spectrum import AlignmentResult
+
+        settings.validate()
+        if self._alignment_backend_factory is None:
+            raise RuntimeError("Alignment is unavailable for this service")
+        self._cancel(cancel_requested)
+        async with self._alignment_backend_factory(settings) as backend:
+            while True:
+                self._cancel(cancel_requested)
+                wavelength, corrected, raw = await backend.capture(settings.subtract_dark)
+                self._cancel(cancel_requested)
+                publish_frame(AlignmentResult(
+                    settings, wavelength, corrected, raw,
+                    backend.actual_centre_nm, settings.subtract_dark,
+                ))
+                if settings.backend == "simulation":
+                    # A zero-delay synthetic capture otherwise spins flat out on
+                    # the worker thread and competes with Qt for Python execution.
+                    # Pace only the continuous display, not real SDK acquisition
+                    # or the scripted single-frame API. Check Stop in short waits.
+                    loop = asyncio.get_running_loop()
+                    deadline = loop.time() + settings.exposure_s
+                    while True:
+                        self._cancel(cancel_requested)
+                        remaining = deadline - loop.time()
+                        if remaining <= 0:
+                            break
+                        await asyncio.sleep(min(0.05, remaining))
+                else:
+                    await asyncio.sleep(0)
+
     async def acquire_alignment(
         self,
         settings,

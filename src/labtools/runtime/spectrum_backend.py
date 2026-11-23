@@ -112,7 +112,7 @@ def create_spectrum_service(*, backend: str) -> SpectrumService:
 
 @asynccontextmanager
 async def open_real_alignment(settings, *, spectrometer_factory=None):
-    """One single-centre frame using the detector preset's normal exposure floor."""
+    """One owned single-centre session; callers may capture repeated frames."""
     settings.validate()
     if settings.backend != "real":
         raise ValueError("Real alignment adapter refuses simulation settings")
@@ -120,9 +120,12 @@ async def open_real_alignment(settings, *, spectrometer_factory=None):
         from labtools.devices.horiba_spectrometer import HoribaSpectrometer
 
         spectrometer_factory = HoribaSpectrometer
-    spec = spectrometer_factory(preset=settings.preset)
+    if not _REAL_RANGE_OWNERSHIP.acquire(blocking=False):
+        raise RuntimeError("HORIBA backend is already owned by another operation")
+    spec = None
     primary = None
     try:
+        spec = spectrometer_factory(preset=settings.preset)
         await spec.connect()
         await spec.configure(
             gain=settings.gain,
@@ -166,8 +169,11 @@ async def open_real_alignment(settings, *, spectrometer_factory=None):
         raise
     finally:
         try:
-            await spec.disconnect()
+            if spec is not None:
+                await spec.disconnect()
         except BaseException as cleanup:
             if primary is None:
                 raise
             _retain_disconnect_failure(primary, cleanup)
+        finally:
+            _REAL_RANGE_OWNERSHIP.release()

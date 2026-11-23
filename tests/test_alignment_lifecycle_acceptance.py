@@ -51,6 +51,9 @@ class BlockedBackend:
                 async def capture(self, subtract_dark):
                     parent.entered.set()
                     await parent.wait(parent.release)
+                    # Released fake captures must still wait like an async device;
+                    # otherwise continuous real-mode tests spin against Qt.
+                    await asyncio.sleep(0.001)
                     if subtract_dark:
                         parent.record("dark")
                         if parent.failure == "dark":
@@ -148,3 +151,24 @@ def test_failure_cleanup_finishes_before_fault_is_published(failure):
                 pass
         worker.close()
     assert not worker.is_alive()
+
+
+def test_released_fake_capture_yields_to_other_tasks():
+    async def run():
+        backend = BlockedBackend()
+        backend.unblock()
+        async with backend.open(AlignmentSettings("test")) as adapter:
+            ran = []
+
+            async def other_task():
+                ran.append(True)
+
+            task = asyncio.create_task(other_task())
+            try:
+                await adapter.capture(False)
+                assert ran, "Released fake capture must yield to other tasks"
+            finally:
+                await task
+        assert backend.cleaned.is_set()
+
+    asyncio.run(run())

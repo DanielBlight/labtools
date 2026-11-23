@@ -41,7 +41,7 @@ from labtools.runtime.spectrum_worker import (
 
 
 class HoribaAlignmentWindow(QMainWindow):
-    """Own repeated submissions, never a HORIBA/backend/asyncio object."""
+    """Display one continuous worker job, never own a native or asyncio object."""
 
     def __init__(
         self,
@@ -195,6 +195,7 @@ class HoribaAlignmentWindow(QMainWindow):
         self._running = True
         self._close_pending = False
         self._sequence = 0
+        self._latest = None
         self.setup_group.setEnabled(False)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -205,7 +206,7 @@ class HoribaAlignmentWindow(QMainWindow):
         if not self._running:
             return
         try:
-            self._job = self._worker.acquire_alignment(
+            self._job = self._worker.start_alignment(
                 settings, owner="spectrum-alignment"
             )
             self.status_label.setText("Acquiring alignment spectrum...")
@@ -219,50 +220,62 @@ class HoribaAlignmentWindow(QMainWindow):
     @pyqtSlot()
     def _poll_job(self):
         job = self._job
-        if job is None or not job.done():
+        if job is None:
+            return
+        latest = job.take_latest()
+        if latest is not None and self._running:
+            self._sequence, result = latest
+            self._display_frame(result)
+        if not job.done():
             return
         self._job = None
         try:
-            result = job.result()
+            job.result()
         except asyncio.CancelledError:
-            self._finish("Stopped")
+            if self._worker.status().state == "faulted":
+                self._report_job_failure()
+            else:
+                self._finish("Stopped")
         except SpectrumWorkerFaultedError:
             self._finish("Spectrum worker faulted; application teardown is required")
         except BaseException:  # noqa: BLE001 - GUI reports worker job failures
-            details = traceback.format_exc()
-            message = "Alignment failed"
-            if self._worker.status().state == "faulted":
-                message += "; application teardown is required"
-            self._finish(message)
-            if self._close_pending:
-                return
-            box = QMessageBox(self)
-            box.setWindowTitle("Alignment failed")
-            box.setIcon(QMessageBox.Icon.Critical)
-            box.setText(details.strip().splitlines()[-1])
-            box.setDetailedText(details)
-            box.exec()
+            self._report_job_failure()
         else:
-            self._sequence += 1
-            self._latest = result
-            self.line.set_data(result.wavelength_nm, result.intensity)
-            if self.autoscale.isChecked() or self._sequence == 1:
-                self.axes.relim()
-                self.axes.autoscale_view()
-            identity = "dark-subtracted" if result.dark_subtracted else "raw"
-            self.axes.set_ylabel(f"Intensity ({identity} counts)")
-            self.axes.set_title(
-                f"{result.settings.preset.title()} | centre {result.actual_centre_nm:.3f} nm"
-            )
-            self.metrics.setText(
-                f"Frame {self._sequence} | peak {np.max(result.intensity):.6g} counts | "
-                f"sum {np.sum(result.intensity):.6g} counts"
-            )
-            self.canvas.draw_idle()
-            if self._running:
-                self._submit(result.settings)
-            else:
-                self._finish("Stopped")
+            self._finish("Stopped")
+
+    def _display_frame(self, result):
+        first_frame = self._latest is None
+        self._latest = result
+        self.line.set_data(result.wavelength_nm, result.intensity)
+        if self.autoscale.isChecked() or first_frame:
+            self.axes.relim()
+            self.axes.autoscale_view()
+        identity = "dark-subtracted" if result.dark_subtracted else "raw"
+        self.axes.set_ylabel(f"Intensity ({identity} counts)")
+        self.axes.set_title(
+            f"{result.settings.preset.title()} | centre {result.actual_centre_nm:.3f} nm"
+        )
+        self.metrics.setText(
+            f"Frame {self._sequence} | peak {np.max(result.intensity):.6g} counts | "
+            f"sum {np.sum(result.intensity):.6g} counts"
+        )
+        self.canvas.draw_idle()
+
+    def _report_job_failure(self):
+        """Report operation or cancellation cleanup failure without hiding faults."""
+        details = traceback.format_exc()
+        message = "Alignment failed"
+        if self._worker.status().state == "faulted":
+            message += "; application teardown is required"
+        self._finish(message)
+        if self._close_pending:
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle("Alignment failed")
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setText(details.strip().splitlines()[-1])
+        box.setDetailedText(details)
+        box.exec()
 
     def stop_alignment(self):
         if not self._running:
