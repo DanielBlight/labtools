@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
 from dataclasses import dataclass
-from threading import Event, RLock, Thread, get_ident
+from threading import Event, Lock, RLock, Thread, get_ident
 from typing import Any
 
 from labtools.acquisition.spectrum_service import SpectrumService
@@ -47,6 +47,35 @@ class SpectrumJob:
 
     def done(self) -> bool:
         return self._future.done()
+
+
+class AlignmentStreamJob(SpectrumJob):
+    """One operation with a bounded latest-frame mailbox, independent of Qt."""
+
+    def __init__(self, job: SpectrumJob, mailbox) -> None:
+        super().__init__(job._future, job._cancel_event)
+        self._mailbox = mailbox
+
+    def take_latest(self):
+        """Consume (sequence, immutable frame), or None. Safe on the UI thread."""
+        return self._mailbox.take_latest()
+
+
+class _AlignmentMailbox:
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._sequence = 0
+        self._latest = None
+
+    def publish(self, frame) -> None:
+        with self._lock:
+            self._sequence += 1
+            self._latest = (self._sequence, frame)
+
+    def take_latest(self):
+        with self._lock:
+            latest, self._latest = self._latest, None
+            return latest
 
 
 class SpectrumWorker:
@@ -230,6 +259,19 @@ class SpectrumWorker:
                 cancel_requested=cancelled,
             ),
         )
+
+    def start_alignment(self, settings, *, owner="spectrum-alignment") -> AlignmentStreamJob:
+        """Reserve the shared worker for a complete continuous alignment run."""
+        self._validate_request(settings)
+        mailbox = _AlignmentMailbox()
+        job = self._submit(
+            owner,
+            "alignment-stream",
+            lambda cancelled: self._service.run_alignment(
+                settings, publish_frame=mailbox.publish, cancel_requested=cancelled
+            ),
+        )
+        return AlignmentStreamJob(job, mailbox)
 
     def acquire_alignment(self, settings, *, owner="spectrum-alignment") -> SpectrumJob:
         self._validate_request(settings)

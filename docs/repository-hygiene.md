@@ -1,5 +1,15 @@
 # Repository hygiene
 
+## Unresolved retention decision
+
+Status: current policy with one known conflict. This page says migration history is
+retained pending a decision; `operator-workspace.md` says migration backups should
+stay out of Git. The supplied export has no `.labtools-migrations/` files, but is not
+a complete Git object database. Do not delete recovery/evidence material based on
+this export. Resolve tracked-history versus local-backup retention explicitly before
+closing Gate 0. See the [audit](source-audit-2026-11-22.md).
+
+
 ## Active policy
 
 - Project export tooling lives in `scripts/development/`.

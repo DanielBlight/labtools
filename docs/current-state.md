@@ -1,12 +1,39 @@
 # LabTools current state
 
+## Source review update, 2026-11-22
+
+Status: current capability register. See [source audit](source-audit-2026-11-22.md)
+for evidence, limitations and the cleanup register.
+
+Continuous alignment now has a service-level persistent session and a bounded,
+Qt-free worker frame mailbox. The standalone window consumes this stream. It is
+not yet integrated into the unified workspace. Existing one-frame scripted APIs
+remain one-shot. Windows Qt and connected-HORIBA acceptance of this repair remain
+outstanding; do not treat the earlier alignment FAIL as closed.
+
+The [lab-PC record](acceptance/lab-pc/hardware-acceptance-20261120-181733.md)
+contains initial camera and HORIBA spectrum passes, ITC4000 shutdown-limit evidence,
+map orchestration, Annealing dry-run/cancellation and a minimal powered pass. These
+are bounded observations on recorded earlier commits, not blanket release approval.
+IDQ nonzero count-input evidence remains pending. Alignment failed its connection
+lifecycle check. Packaging, rollback and candidate-wide evidence still need closure.
+
+The [versioned instrument-profile migration](next-recommendations.md#unified-working-lab-instrument-profile)
+remains planned, not implemented. Do not extend the strict flat Annealing profile
+ad hoc while integrating alignment.
+
+
 ## Status
 
 LabTools is in late development and release-candidate preparation for a controlled
-internal laboratory pilot. The current intended candidate is `0.2.0-rc.1`; the
-installed project version remains `0.1.0` until release engineering is complete.
+internal laboratory pilot. The source package version is `0.2.0rc1` in `pyproject.toml`
+(displayed as `0.2.0-rc.1` in release notes). The lab record also uses the label
+"RC2 profile freeze"; this is not a package-version increment or a new release.
+The uploaded baseline is `54ce3563385734f49be567e27530562a14c64014` on
+`fix/alignment-persistent-session-v2`. This document does not establish what is
+installed on any PC today.
 
-The latest validated offline baseline is:
+The previously recorded Windows offline baseline is (not a fresh result for this repair):
 
 - Python 3.12 on Windows
 - 1,206 non-hardware tests passed
@@ -72,7 +99,7 @@ shutter-open time is 43,200 seconds (12 hours).
 Complete release engineering before further broad GUI work:
 
 1. record the first successful hosted Windows CI run
-2. add versioned changelog and candidate release notes
+2. maintain the existing changelog and candidate release notes
 3. establish licence and third-party notices
 4. build and install `0.2.0-rc.1` in a fresh environment
 5. complete the connected-hardware acceptance matrix

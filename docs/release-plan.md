@@ -1,5 +1,42 @@
 # LabTools release plan
 
+## Gate status reconciliation, 2026-11-22
+
+Status: current release-gate authority. Detailed [audit](source-audit-2026-11-22.md).
+The required-work lists below are gate definitions, not claims that every item is
+still absent. Completed source work must not be repeatedly reimplemented.
+
+| Gate | Present in the supplied source | Still required or unverified |
+|---|---|---|
+| 0 hygiene | Export tools consolidated; legacy root launcher and cited generated outputs absent; clean status reported in manifest | Migration-retention policy conflict; final candidate clean-tree check |
+| 1 engineering | Windows CI definition, `0.2.0rc1` metadata, changelog, candidate notes, validation/build scripts | Hosted CI evidence, locked full-suite pass, built artefacts, fresh functional install; licence/notices decisions |
+| 2 dependencies | `analysis`, `notebooks`, `napari` extras separated | Instrument/GUI optionality remains a deliberate packaging decision |
+| 3 hardware | Bounded lab-PC evidence exists for camera, spectrum, ITC4000 and Annealing | Complete per-workflow matrix on the frozen candidate; alignment retest; IDQ nonzero counts |
+| 4 operator | Earlier dry-run, cancellation and minimal powered observations | Complete packaged-candidate rehearsal; do not extrapolate full fault/power-loss coverage |
+| 5 deployment | Deployment and rollback runbooks/scripts exist | Actual side-by-side installation and rollback evidence |
+| 6 decision | Candidate release notes exist | Explicit supported/excluded scope and approval record |
+
+The source version remains `0.2.0rc1`. "RC2 profile freeze" in the lab record is
+an evidence label, not a released `0.2.0rc2` package. The 1,206-test baseline below
+is historical Windows evidence, not this repair's result. The audit found 44 Ruff
+findings with the available non-locked Ruff version, identical before and after this
+repair; the locked Windows gate must resolve or explain them, not assume green.
+
+The hardware matrix below lists required evidence, not a denial that partial passes
+exist. Read it alongside the [lab-PC record](acceptance/lab-pc/hardware-acceptance-20261120-181733.md).
+No row is promoted to full acceptance by this documentation update.
+
+Alignment is an explicit repair gate: one connect/configure/move per Start, repeated
+frames on the same thread/loop, busy refusal until Stop/close teardown, one disconnect,
+and repeat Start without reboot. The implementation is now present; Windows Qt and
+connected-device acceptance remain pending. Unified-GUI integration is the next
+bounded feature task after this lifecycle is accepted, not a broad controller rewrite.
+
+The [unified profile proposal](next-recommendations.md#unified-working-lab-instrument-profile)
+remains deferred until the current acceptance/freeze cycle completes. Alignment must
+reuse reviewed configuration identity and existing detector limits in the meantime.
+
+
 ## Purpose
 
 This document defines the bounded route from the current development branch to the first controlled internal LabTools release. It is the authoritative forward-looking release plan. Historical audits, migration records, lifecycle checkpoints, and older readiness documents remain evidence records but do not supersede this plan.
@@ -114,7 +151,7 @@ The configured maximum shutter-open time is 43,200 seconds, or 12 hours. This so
 
 ```powershell
 uv sync --frozen --group dev
-uv run ruff check src tests scripts examples
+uv run ruff check --fix src tests scripts examples
 uv run pytest -q -ra -m "not hardware"
 uv build
 ```
@@ -279,7 +316,8 @@ Do not perform a broad GUI or controller rewrite immediately before hardware acc
 
 ## Documentation consolidation
 
-Maintain three authoritative documents:
+Maintain three release-decision documents (technical subject authorities remain
+listed in `document-status.md`):
 
 - `docs/current-state.md`
 - `docs/release-plan.md`
@@ -287,7 +325,10 @@ Maintain three authoritative documents:
 
 Move older audits, superseded plans, and completed checkpoints under `docs/history/`, or label every document as current, superseded, planned, or evidence-only.
 
-## Implementation order
+## Original milestone sequence
+
+The sequence below is retained for orientation. Its estimates are historical planning
+assumptions, not a new delivery commitment. Use the gate status above for remaining work.
 
 ### Milestone 1: clean candidate source
 

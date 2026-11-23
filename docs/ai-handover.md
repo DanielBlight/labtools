@@ -1,5 +1,22 @@
 # Development handover: HORIBA lifecycle W2 and open Qt gate
 
+## Current entry point, 2026-11-22
+
+Status: historical handover with this current routing note. Read
+[current state](current-state.md), [release plan](release-plan.md) and
+[documentation authority](document-status.md) before the dated records below.
+The older HORIBA-only R1 scope, "single current register" claims and next-wrapper
+instructions below are historical, not the current release decision.
+
+The current bounded repair is [persistent alignment](horiba-alignment.md).
+[Audit findings](source-audit-2026-11-22.md) distinguish code defects, missing evidence
+and optional cleanup. The old working GUI is identified by the
+[archive record](history/horiba-alignment-v2-archive.md); its source is not in this
+text export. Do not claim to have compared its implementation without retrieving it.
+The [unified profile proposal](next-recommendations.md#unified-working-lab-instrument-profile)
+is planned and must not be lost under that document's historical preamble.
+
+
 ## Expanded R1 requirements and supplied local evidence (2026-11-05)
 
 The maintainer requires laser control, IDQ, mapping and annealing; the HORIBA-only

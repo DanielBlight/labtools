@@ -1,5 +1,23 @@
 # Current architecture
 
+## Reading this mixed current/history record, 2026-11-22
+
+Status: technical reference with historical checkpoints. Release scope and task order
+are governed by [current state](current-state.md) and [release plan](release-plan.md).
+The 2026-11-05 "next independent checkpoint" and older scheduling instructions below
+are historical, not instructions to restart completed wrapper work.
+
+Continuous alignment now uses `SpectrumService.run_alignment` inside one
+`SpectrumWorker.start_alignment` job. A bounded latest-frame mailbox transports
+immutable results to the UI; the backend stays on its owning thread/asyncio loop.
+The one-shot `acquire_alignment` APIs remain available for scripted frames.
+Both real spectrum adapters share a process-local ownership guard; this is not a
+cross-process lock and does not cover arbitrary direct-wrapper clients.
+The current unified spectrum panel still uses its existing range-window lifecycle;
+this repair does not pretend that all GUIs already share a SpectrumWorker.
+See [integration contract](horiba-alignment.md#unified-gui-integration-contract).
+
+
 ## Scheduling decision: ID900 histogram work deferred (2026-11-05)
 
 The maintainer reports that the device is an **IDQ ID900 Time Controller**, but

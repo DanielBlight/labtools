@@ -7,12 +7,42 @@ under active development.
 
 ## [Unreleased]
 
+### Fixed (alignment GUI follow-up, 2026-11-23)
+
+- Pace simulated continuous alignment without changing real acquisition timing or
+  one-shot APIs; check Stop during short pacing waits.
+- Always stop and close the injected worker when the repeat/stop/close GUI test
+  fails, avoiding a live stream during pytest traceback reporting.
+- Add four Qt-free pacing regressions. Windows GUI acceptance remains pending;
+  see `docs/source-audit-2026-11-23-alignment-followup.md`.
+
+
+### Fixed
+
+- Continuous HORIBA alignment now holds one worker-owned backend session per
+  Start/Stop run instead of opening a connection for every displayed spectrum.
+- Alignment and range adapters share the existing process-local HORIBA ownership
+  guard, including separate worker/service instances using these adapters.
+
+### Changed
+
+- Added a Qt-free latest-frame mailbox and continuous worker API for later unified
+  GUI integration; retained the scripted single-frame API and detector minima.
+- Reconciled current-state, release-gate and documentation-authority descriptions;
+  retained historical hardware records without promoting them to full acceptance.
+
+### Validation
+
+- See `docs/source-audit-2026-11-22.md` for the exact non-Qt test scope, lint baseline
+  comparison and missing Windows Qt/hardware evidence. No new release is declared.
+
 ### Planned
 
 - Connected-hardware acceptance against the release matrix.
 - Fresh Windows wheel installation and lab-PC rollback rehearsal.
 - Licence and third-party notice decisions.
-- Optional dependency separation for notebooks, GUI and instrument SDKs.
+- Remaining optional dependency separation for GUI and instrument SDKs; analysis,
+  notebooks and Napari extras are already present.
 
 ## [0.2.0-rc.1] - 2026-11-20
 

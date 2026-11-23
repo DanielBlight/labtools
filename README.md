@@ -4,7 +4,9 @@ Python tools for laboratory instrument control, acquisition, processing and
 experimental diagnostics. Workflows include HORIBA spectra, scanning-mirror
 intensity maps, laser annealing and an explicitly synthetic intensity-map backend.
 
-Maintainers and coding models: start with [the repository handover](docs/ai-handover.md).
+Maintainers and coding models: start with [current state](docs/current-state.md) and
+[documentation authority](docs/document-status.md). The [handover](docs/ai-handover.md)
+retains historical engineering evidence.
 A headless synthetic spectrum-service example is also available. The ordinary spectrum
 GUI now uses the service and requires a maintainer-supplied configuration identifier.
 
@@ -51,9 +53,11 @@ uv run labtools simulate intensity-map --gui
 uv run python -m pytest -q
 ```
 
-Only the intensity-map mirror, gate and counter have synthetic implementations.
-There is no camera, annealing, spectrometer, shutter, rotation-stage or laser
-simulation. Synthetic data is not calibration or a physical measurement.
+Explicit offline modes include intensity-map simulation, spectrum/alignment simulation,
+synthetic camera preview and simulated workspace workflows. These are workflow-specific
+backends, not complete emulators of every physical instrument. Synthetic data is not
+calibration or a physical measurement. See [current state](docs/current-state.md) and
+[commands](docs/commands.md) for the supported boundaries.
 The normal intensity-map GUI defaults to real mode; use the explicit simulation
 command above for an offline GUI. Tests exclude the known hardware modules
 before import unless `--run-hardware` is explicitly supplied.

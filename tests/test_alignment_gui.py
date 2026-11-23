@@ -46,22 +46,32 @@ def test_injected_worker_repeat_stop_and_close(monkeypatch):
         backend="simulation",
         options_provider=options,
     )
-    assert worker.status().state == "unopened"
-    assert w.exposure_box.minimum() == pytest.approx(0.065)
-    w.preset_combo.setCurrentText("symphony")
-    assert w.exposure_box.minimum() == pytest.approx(0.1)
-    w.show()
-    w.start_alignment()
-    spin(app, lambda: w._sequence >= 2)
-    w.stop_alignment()
-    spin(app, lambda: not w._running and w._job is None)
-    assert worker.status().state == "available" and worker.is_alive()
-    w.start_alignment()
-    spin(app, lambda: w._sequence >= 1)
-    assert not w.close()
-    spin(app, lambda: not w.isVisible())
-    assert worker.is_alive()  # injected/application-owned
-    worker.close()
+    try:
+        assert worker.status().state == "unopened"
+        assert w.exposure_box.minimum() == pytest.approx(0.065)
+        w.preset_combo.setCurrentText("symphony")
+        assert w.exposure_box.minimum() == pytest.approx(0.1)
+        w.show()
+        w.start_alignment()
+        spin(app, lambda: w._sequence >= 2)
+        w.stop_alignment()
+        spin(app, lambda: not w._running and w._job is None)
+        assert worker.status().state == "available" and worker.is_alive()
+        w.start_alignment()
+        spin(app, lambda: w._sequence >= 1)
+        assert not w.close()
+        spin(app, lambda: not w.isVisible())
+        assert worker.is_alive()  # injected/application-owned
+        worker.close()
+
+    finally:
+        # A failed assertion must not leave the continuous worker running while
+        # pytest formats its traceback or starts another Qt test.
+        w.stop_alignment()
+        spin(app, lambda: w._job is None)
+        w.close()
+        worker.close()
+        app.processEvents()
 
 
 def test_default_simulated_window_needs_no_vendor_import(monkeypatch):

@@ -138,6 +138,9 @@ def test_fault_disables_restart_only_after_cleanup(app, window, failure):
     widget.dark_checkbox.setChecked(True)
     widget.start_alignment()
     backend.release.set()
+    if failure == "disconnect":
+        spin(app, lambda: widget._sequence >= 1)
+        widget.stop_alignment()
     spin(app, backend.cleaning.is_set)
     assert worker.status().state == "busy"
     assert not widget.start_button.isEnabled()
@@ -244,3 +247,19 @@ def test_settings_snapshot_and_result_identity_stay_on_correct_boundary(
     np.testing.assert_array_equal(widget.line.get_ydata(), widget._latest.intensity)
     np.testing.assert_array_equal(widget._latest.raw_intensity, [5.0])
     assert all(event[1] != gui_thread for event in backend.events)
+
+
+def test_multiple_displayed_frames_keep_one_backend_until_stop(app, window):
+    widget, worker, backend, _ = window
+    widget.start_alignment()
+    backend.release.set()
+    spin(app, lambda: widget._sequence >= 5)
+    assert len(backend.requests) == 1
+    assert worker.status().state == "busy"
+    assert not backend.cleaning.is_set()
+    widget.stop_alignment()
+    spin(app, backend.cleaning.is_set)
+    assert worker.status().state == "busy"
+    backend.release_cleanup.set()
+    spin(app, lambda: widget._job is None)
+    assert worker.status().state == "available"
