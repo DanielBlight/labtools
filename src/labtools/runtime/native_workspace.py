@@ -199,6 +199,9 @@ class NativeWorkspace:
 
     def close(self):
         if not self._closed:
+            runtime = getattr(self, "_operator_spectrum", None)
+            if runtime is not None:
+                runtime.close()
             self._ownership.close()
             self._closed = True
 

@@ -7,6 +7,17 @@ under active development.
 
 ## [Unreleased]
 
+### Added (unified alignment, 2026-11-23)
+
+- Unified Alignment tab matching the existing operator controls/plot layout.
+- One application-owned spectrum worker shared by range and continuous alignment,
+  retaining workspace ownership through capture, cancellation and disconnect.
+- Explicit `--hardware-spectrum` launch for real HORIBA Spectrum/Alignment only;
+  the default native candidate and other native workflow gates remain disabled.
+- Alignment-aware Stop all and automatic parent-window close after worker cleanup.
+- Runtime and actual offscreen Qt regression coverage, source identity checks and
+  documented Windows/connected-device acceptance steps. No hardware pass is inferred.
+
 ### Fixed (alignment GUI follow-up, 2026-11-23)
 
 - Pace simulated continuous alignment without changing real acquisition timing or

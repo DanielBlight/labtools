@@ -1,4 +1,4 @@
-"""Read-only native workspace window. Never loads simulation panels or devices."""
+"""Source-backed workspace: disabled default, explicit simulation or real HORIBA."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 
 def create_window(workspace):
     # Qt and operator panels remain lazy: headless launch never loads them.
-    from PyQt6.QtCore import Qt
+    from PyQt6.QtCore import Qt, QTimer
     from PyQt6.QtWidgets import (
         QFormLayout,
         QHBoxLayout,
@@ -39,6 +39,12 @@ def create_window(workspace):
     )
 
     simulated = bool(getattr(workspace, "simulation_only", False))
+    hardware_spectrum = bool(getattr(workspace, "hardware_spectrum_enabled", False))
+    runtime = None
+    if simulated or hardware_spectrum:
+        from labtools.runtime.operator_spectrum import ensure_operator_spectrum
+
+        runtime = ensure_operator_spectrum(workspace)
     if simulated:
         from labtools.gui.simulated_workflow_panels import (
             SimulatedAnnealPanel,
@@ -49,7 +55,12 @@ def create_window(workspace):
     class NativeWindow(QMainWindow):
         def __init__(self):
             super().__init__()
+            self._close_after_cleanup = False
+            self._close_retry = QTimer(self)
+            self._close_retry.setInterval(50)
+            self._close_retry.timeout.connect(self._retry_close)
             self.setWindowTitle("Labtools Workspace - SIMULATION ONLY" if simulated
+                                else "Labtools Workspace - real HORIBA" if hardware_spectrum
                                 else "Labtools native workspace - execution disabled")
             self.setStyleSheet(STYLE)
             fit_initial_window(self)
@@ -67,7 +78,7 @@ def create_window(workspace):
             app_title.setObjectName("appTitle")
             header.addWidget(app_title)
             header.addStretch(1)
-            self.mode_badge = QLabel("Simulation" if simulated else "Native execution disabled")
+            self.mode_badge = QLabel("Simulation" if simulated else "Real HORIBA" if hardware_spectrum else "Native execution disabled")
             self.mode_badge.setObjectName("modeBadge")
             header.addWidget(self.mode_badge)
             self.camera_button = QPushButton("Camera")
@@ -96,7 +107,7 @@ def create_window(workspace):
             summary.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
             summary.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
             summary.addRow('Configuration', self.configuration_label)
-            summary.addRow("Mode", QLabel("Simulation" if simulated else "Native execution disabled"))
+            summary.addRow("Mode", QLabel("Simulation" if simulated else "Real HORIBA spectrum/alignment" if hardware_spectrum else "Native execution disabled"))
             self.overview_status = QLabel("Ready")
             self.overview_status.setWordWrap(True)
             summary.addRow("Status", self.overview_status)
@@ -131,15 +142,30 @@ def create_window(workspace):
             try:
                 map_panel = SimulatedMapPanel if simulated else NativeMapPanel
                 spectrum_panel = SimulatedSpectrumPanel if simulated else NativeSpectrumPanel
+                if hardware_spectrum:
+                    from labtools.gui.hardware_spectrum_panel import (
+                        HardwareSpectrumPanel,
+                    )
+
+                    spectrum_panel = HardwareSpectrumPanel
                 anneal_panel = SimulatedAnnealPanel if simulated else NativeAnnealPanel
                 self.pages["Intensity map"] = map_panel(workspace=workspace)
                 self.pages["Spectrum"] = spectrum_panel(workspace=workspace)
                 self.pages["Annealing"] = anneal_panel(workspace=workspace, camera_window=self.camera_window)
+                if runtime is not None:
+                    from labtools.gui.workspace_alignment import WorkspaceAlignmentPanel
+
+                    self.pages["Alignment"] = WorkspaceAlignmentPanel(workspace=workspace, runtime=runtime)
                 for name, page in self.pages.items():
                     page.setParent(self.tabs)
                     page.setWindowFlags(Qt.WindowType.Widget)
-                    polish_panel(page, simulated=simulated)
+                    if name != "Alignment":
+                        polish_panel(page, simulated=simulated)
                     self.tabs.addTab(page, name)
+                if "Alignment" in self.pages:
+                    alignment = self.pages["Alignment"]
+                    self.tabs.removeTab(self.tabs.indexOf(alignment))
+                    self.tabs.insertTab(3, alignment, "Alignment")
             except BaseException:
                 for page in self.pages.values():
                     page.close()
@@ -157,6 +183,10 @@ def create_window(workspace):
             self.refresh()
             from labtools.gui.workspace_studio import install_studio
             install_studio(self, workspace)
+            if "Alignment" in self.pages:
+                protect_parameter_wheels(self.pages["Alignment"])
+            if hardware_spectrum:
+                self.overview_status.setText("Ready - real HORIBA. Map, Annealing and laser remain disabled.")
 
         def open_camera(self):
             self.camera_window.show()
@@ -231,7 +261,7 @@ def create_window(workspace):
                 for page in self.pages.values():
                     page.setEnabled(False)
             else:
-                self.overview_status.setText("Ready" if simulated else "Native execution disabled")
+                self.overview_status.setText("Ready" if simulated else "Ready - real HORIBA; other native workflows disabled" if hardware_spectrum else "Native execution disabled")
                 self.report.setPlainText(json.dumps(data, indent=2))
 
         def preview(self):
@@ -261,18 +291,31 @@ def create_window(workspace):
                     {"source_status": workspace.describe(), "operator_draft": data}, indent=2,
                 ))
             except (OSError, ValueError, TypeError, RuntimeError) as error:
-                self.report.setPlainText("Draft invalid; execution remains disabled.\n" + str(error))
+                self.report.setPlainText("Draft invalid; no operation started.\n" + str(error))
             self.tabs.setCurrentIndex(0)
+
+        def _retry_close(self):
+            if self._close_after_cleanup and not self.any_busy():
+                self._close_retry.stop()
+                self.close()
 
         def closeEvent(self, event):
             if self.any_busy():
+                if "Alignment" in self.pages:
+                    self.pages["Alignment"]._workspace_closing = True
                 self.stop_all()
-                self.overview_status.setText("Stopping; close again after cleanup")
+                self._close_after_cleanup = True
+                self._close_retry.start()
+                self.overview_status.setText("Stopping; window will close after cleanup")
                 self.tabs.setCurrentIndex(0)
                 self.details_toggle.setChecked(True)
-                self.report.setPlainText("Stop requested; wait for worker cleanup and close again.")
+                self.report.setPlainText("Stop requested; window will close after worker cleanup.")
                 event.ignore()
                 return
+            self._close_retry.stop()
+            self._close_after_cleanup = False
+            if "Alignment" in self.pages:
+                self.pages["Alignment"]._workspace_closing = False
             if not self.save_preferences():
                 from PyQt6.QtWidgets import QMessageBox
 

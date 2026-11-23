@@ -1,5 +1,16 @@
 # Native workspace launch, execution disabled
 
+## Current launch modes, 2026-11-23
+
+The disabled launch documented below remains the default. Two explicit modes exist:
+`--simulate` (native-free whole-workspace simulation) and `--hardware-spectrum`
+(real HORIBA Spectrum/Alignment only, no connection until operator action). The
+flags cannot be combined. Native map, Annealing and laser execution remain disabled
+in the latter mode. See [unified alignment](unified-alignment.md) for exact commands.
+The older "no executable route" statements below describe the default candidate,
+not the new explicitly selected HORIBA-only route.
+
+
 Current operator tabs and draft validation: see [Native operator workflows](native-operator-workflows.md).
 This launch-only checkpoint below is retained as historical context; the current window
 reuses the existing map/spectrum panels while all hardware actions remain gated.

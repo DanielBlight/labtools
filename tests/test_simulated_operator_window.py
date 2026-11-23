@@ -54,7 +54,7 @@ def test_simulated_workspace_all_workflows_and_camera(tmp_path, monkeypatch):
             window.show()
             app.processEvents()
             assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == [
-                "Workspace", "Intensity map", "Spectrum", "Annealing", "Laser",
+                "Workspace", "Intensity map", "Spectrum", "Alignment", "Annealing", "Laser",
             ]
             assert "SIMULATION" in window.windowTitle()
             assert mapping.simulation_mode.isChecked() and not mapping.simulation_mode.isEnabled()

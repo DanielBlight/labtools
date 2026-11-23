@@ -1,5 +1,24 @@
 # LabTools release plan
 
+## Unified HORIBA implementation checkpoint, 2026-11-23
+
+Alignment is now embedded in the unified workspace, with one shared spectrum worker,
+lease retention through cleanup, Stop all and automatic deferred close. An explicit
+`--hardware-spectrum` route enables only Spectrum and Alignment. The old default
+native gate and the separate map/Annealing/laser gates remain intact.
+
+This closes the source integration task, not the connected unified-GUI acceptance
+gate. The committed standalone record passes its bounded Start/Stop/restart check;
+dark subtraction and active close were not tested there. Next required evidence:
+Windows targeted tests, simulation visual rehearsal, then connected unified alignment,
+range/alignment exclusion, Stop all, restart, dark on/off and close while active.
+Use [operation and acceptance instructions](unified-alignment.md).
+
+No profile migration, package-version bump, native map/Annealing enablement or release
+approval is included. Historical gate descriptions below remain requirements; use
+current-state for implemented capability and the new evidence note for actual tests.
+
+
 ## Gate status reconciliation, 2026-11-22
 
 Status: current release-gate authority. Detailed [audit](source-audit-2026-11-22.md).

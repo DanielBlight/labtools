@@ -1,5 +1,31 @@
 # LabTools current state
 
+## Unified alignment implementation, 2026-11-23
+
+The unified workspace now embeds an Alignment tab beside Spectrum in explicit
+simulation and real-HORIBA modes. Both panels share one application-owned
+`SpectrumWorker`; the existing workspace Spectrum reservation is held through
+operation and cleanup. Stop all includes alignment, and parent close waits for
+cleanup before automatically closing the worker/window.
+
+The new explicit `workspace launch ... --hardware-spectrum` route enables real
+HORIBA Spectrum and Alignment only. It does not enable native map, Annealing or
+laser execution. Camera source selection remains independent. The default launch
+without flags remains disabled; `--simulate` stays native-free. See
+[unified alignment operation](unified-alignment.md) and
+[implementation evidence](unified-alignment-implementation-20261123.md).
+
+The committed [standalone hardware record](acceptance/lab-pc/horiba-alignment-persistent-session-20261123-113622.md)
+passes Start/multiple frames/Stop/restart on tested source `714405a2cdee2667db2d4a0fcf3261b93cc98627`.
+It explicitly leaves dark-subtracted acquisition and active-close untested. This
+record supersedes the older reconnect failure only for its observed standalone
+lifecycle; it does not establish unified-GUI hardware acceptance. No new connected
+hardware result is claimed by this implementation.
+
+The dated 2026-11-22 notes below describe the preceding repair. Where those notes
+say alignment is not yet embedded, this section is the current state.
+
+
 ## Source review update, 2026-11-22
 
 Status: current capability register. See [source audit](source-audit-2026-11-22.md)

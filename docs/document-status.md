@@ -1,5 +1,16 @@
 # Documentation status and authority
 
+## Unified alignment references, 2026-11-23
+
+- [Unified alignment operation](unified-alignment.md): current launch modes, scope,
+  ownership contract and connected acceptance procedure.
+- [Implementation evidence](unified-alignment-implementation-20261123.md): actual
+  tests, environment limitations, change scope and next bounded continuation.
+- The 2026-11-23 sections in current-state/release-plan supersede older statements
+  that unified alignment is not yet embedded. Historical audit and hardware records
+  remain unchanged; no standalone result is relabelled as unified acceptance.
+
+
 ## Authority clarification, 2026-11-22
 
 Status: current documentation policy. The release plan owns release gates; current

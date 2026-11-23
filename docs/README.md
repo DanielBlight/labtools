@@ -1,5 +1,11 @@
 # Documentation index
 
+## Unified alignment
+
+- [Operation, launch modes and hardware acceptance](unified-alignment.md)
+- [Implementation scope and validation evidence](unified-alignment-implementation-20261123.md)
+
+
 ## Latest source review
 
 - [2026-11-22 source audit](source-audit-2026-11-22.md): findings, repair, validation

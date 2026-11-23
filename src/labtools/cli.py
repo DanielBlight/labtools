@@ -44,12 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="Required for real execution; never inferred or prompted",
             )
-    workspace = sub.add_parser("workspace", help="Native-candidate preflight and disabled workspace launch; no hardware")
+    workspace = sub.add_parser("workspace", help="Source-backed workspace preflight and explicit operator launch modes")
     candidate = workspace.add_subparsers(dest="workspace_action", required=True)
     preflight = candidate.add_parser("preflight", help="Report missing native inputs; execution stays disabled")
     preflight.add_argument("manifest", type=Path)
-    launch = candidate.add_parser("launch", help="Open native workspace with execution disabled; no hardware")
+    launch = candidate.add_parser("launch", help="Open source-backed workspace; native execution disabled unless explicitly selected")
     launch.add_argument("manifest", type=Path)
+    launch.add_argument("--hardware-spectrum", action="store_true", help="Enable real HORIBA spectrum/alignment only; no connection until operator action")
     launch.add_argument("--simulate", action="store_true", help="Explicit synthetic map/spectrum/anneal/camera; no hardware")
     launch.add_argument("--simulation-realtime", action="store_true", help="Honour synthetic map/anneal dwell timing")
     launch.add_argument("--simulation-output", type=Path, help="Initial synthetic output root; separate from native preferences")
@@ -80,6 +81,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             try:
                 if not args.simulate and (args.simulation_realtime or args.simulation_output is not None):
                     parser.error("--simulation-realtime/--simulation-output require --simulate")
+                if args.simulate and args.hardware_spectrum:
+                    parser.error("--simulate and --hardware-spectrum are mutually exclusive")
                 if args.simulate:
                     from labtools.simulation.operator_session import (
                         SimulatedOperatorSession,
@@ -87,6 +90,12 @@ def main(argv: Sequence[str] | None = None) -> None:
 
                     session = SimulatedOperatorSession(args.manifest, anneal_profile=args.anneal_profile,
                                                        output_root=args.simulation_output, realtime=args.simulation_realtime)
+                elif args.hardware_spectrum:
+                    from labtools.runtime.hardware_spectrum_workspace import (
+                        HardwareSpectrumWorkspace,
+                    )
+
+                    session = HardwareSpectrumWorkspace(args.manifest, anneal_profile=args.anneal_profile)
                 else:
                     session = NativeWorkspace(args.manifest, anneal_profile=args.anneal_profile)
                 with session as workspace:

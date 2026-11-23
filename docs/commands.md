@@ -1,5 +1,27 @@
 # Commands and compatibility
 
+## Unified alignment and real HORIBA, 2026-11-23
+
+From the repository root, after applying and validating the implementation:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path ".\src").Path
+Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+uv run --no-sync python -m labtools workspace launch examples/workspace/working-lab/candidate.json --simulate --simulation-realtime
+```
+
+On the lab PC, use the same source-backed manifest with the reviewed optical setup:
+
+```powershell
+uv run --no-sync python -m labtools workspace launch examples/workspace/working-lab/candidate.json --hardware-spectrum
+```
+
+The latter enables real Spectrum and Alignment only; native map, Annealing and laser
+remain disabled. It is not a simulation fallback or blanket hardware enable flag.
+No `LABTOOLS_SPECTRUM_CONFIGURATION_ID` is required: identity comes from the manifest.
+See [operation/acceptance](unified-alignment.md).
+
+
 Run these from the project folder after `uv sync --dev`. The `labtools` console
 script and `python -m labtools` call the same command-line implementation.
 

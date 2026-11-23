@@ -1,5 +1,15 @@
 # HORIBA alignment
 
+## Unified workspace integration, 2026-11-23
+
+The accepted standalone stream is now embedded in the unified Alignment tab, using
+one application-owned worker shared with the range panel and the existing Spectrum
+workspace lease. Stop all and automatic deferred close include alignment cleanup.
+Use [unified alignment](unified-alignment.md) for launch/acceptance instructions.
+The earlier integration checklist below is retained as the design contract, not
+an outstanding instruction to reimplement the same backend.
+
+
 Status: current operational/API contract, updated 2026-11-22. The implementation
 is repaired in source; Windows Qt and connected-device acceptance remain pending.
 
@@ -50,9 +60,10 @@ against the same hardware concurrently.
 
 ## Unified GUI integration contract
 
-The unified workspace is not modified to embed alignment in this repair. Its current
-`OwnedSpectrumPanel` wraps `HoribaRangeWindow`; it is not already an injected-worker
-alignment client. The next integration must:
+The original standalone repair did not embed alignment. The 2026-11-23 integration
+now uses `OwnedSpectrumPanel`/`HoribaRangeWindow` with a worker-backed service bridge,
+and a workspace alignment panel injected with that same worker. The implemented
+integration follows this contract:
 
 1. Compose one application-owned spectrum worker/runtime for spectrum and alignment,
    or explicitly bridge the existing workspace ownership controller. Do not create
