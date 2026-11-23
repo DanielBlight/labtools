@@ -7,6 +7,20 @@ under active development.
 
 ## [Unreleased]
 
+### Added (retained output, 2026-11-23)
+
+- Optional hyperspectral output and unified Save results actions for retained
+  spectrum/map/cube/Annealing runs and complete baseline-first sequences.
+- Unique numeric NPZ/JSON data-provenance exports without hardware reacquisition.
+- No-run-file intensity maps when unified saving is off; existing standalone
+  checkpoint semantics and automatic output formats remain unchanged.
+
+### Changed (retained output, 2026-11-23)
+
+- Full-area sequence spectrum/intensity plots and two-panel hyperspectral results.
+- Compact Annealing Instruments section with Output below it outside the scroll area.
+- Concise sequence summary rather than raw result dictionaries.
+
 ### Changed (workflow UX, 2026-11-23)
 
 - Combined dose modes with shared Annealing controls under one visible tab.

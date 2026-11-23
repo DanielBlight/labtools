@@ -83,10 +83,15 @@ class TaskPanel(QWidget):
         self.start_button.setObjectName("primaryButton")
         self.stop_button = QPushButton("Stop")
         self.stop_button.setEnabled(False)
+        self.save_result_button = QPushButton("Save results…")
+        self.save_result_button.setEnabled(False)
+        self.save_result_button.setToolTip("Save the retained run without reacquisition. Save before a replacement run or closing the application.")
+        self.save_result_button.clicked.connect(self.save_retained)
         buttons = QHBoxLayout()
         buttons.addWidget(self.start_button)
         buttons.addWidget(self.stop_button)
         self.left.addLayout(buttons)
+        self.left.addWidget(self.save_result_button)
         self.status = QLabel("Ready")
         self.status.setWordWrap(True)
         self.left.addWidget(self.status)
@@ -120,6 +125,7 @@ class TaskPanel(QWidget):
             return
         self.stop_event = Event()
         self.last_result = None
+        self.save_result_button.setEnabled(False)
         try:
             if owners:
                 self.batch = Batch(self.workspace._ownership, owners)
@@ -168,6 +174,7 @@ class TaskPanel(QWidget):
         except asyncio.CancelledError:
             self.status.setText("Cancelled after cleanup")
         except Exception as error:  # noqa: BLE001 - terminal GUI worker boundary
+            self.last_result = getattr(error, "retained_run", getattr(error, "partial_result", None))
             self.status.setText("Failed: " + str(error))
             self.log.appendPlainText(repr(error))
         finally:
@@ -180,10 +187,27 @@ class TaskPanel(QWidget):
             self.timer.stop()
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
+            self.save_result_button.setEnabled(self.last_result is not None)
+
+    def save_retained(self):
+        if self.busy or self.last_result is None:
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Save retained experiment results")
+        if folder:
+            try:
+                from labtools.runtime.retained_results import export_retained
+
+                target = export_retained(folder, self.last_result, label=type(self).__name__, settings=getattr(self, "run_settings", None))
+                self.status.setText("Saved retained run: " + str(target))
+            except (OSError, ValueError, TypeError) as error:
+                self.status.setText("Save failed; run remains retained: " + str(error))
 
     def completed(self, result):
         self.status.setText("Stopped" if self.stop_event.is_set() else "Completed")
-        self.log.appendPlainText(str(result)[:4000])
+        if isinstance(result, dict):
+            self.log.appendPlainText(f"Status: {result.get('status', 'completed')} | Completed steps: {len(result.get('steps', []))} | Completed points: {result.get('completed_points', '-')}")
+        else:
+            self.log.appendPlainText("Acquisition completed; results retained in memory.")
 
     def closeEvent(self, event):
         if self.busy:
@@ -242,9 +266,10 @@ class AnnealProgramPanel(TaskPanel):
     def start(self):
         try:
             program = self.snapshot()
+            self.run_settings = program
             def run():
                 with self.batch.borrow("Annealing"):
-                    return run_program(self.workspace, program, stop=self.stop_event, report=self.report)
+                    return run_program(self.workspace, program, stop=self.stop_event, report=self.report, save_output=program.base.save_run_log)
             self.launch(run, ("Annealing",))
         except (ValueError, RuntimeError) as error:
             self.status.setText(str(error))
@@ -275,12 +300,19 @@ class MeasurementView:
         self.canvas.mpl_connect("button_press_event", self.select_pixel)
 
     def render_measurement(self, kind, value):
-        self.map_axes.clear()
-        self.spectrum_axes.clear()
+        self.figure.clear()
+        if kind == "spectrum":
+            self.spectrum_axes = self.figure.add_subplot(111)
+            self.map_axes = self.spectrum_axes
+        elif kind == "map":
+            self.map_axes = self.figure.add_subplot(111)
+            self.spectrum_axes = self.map_axes
+        else:
+            self.map_axes, self.spectrum_axes = self.figure.subplots(1, 2)
         if kind == "spectrum":
             self.spectrum_axes.plot(value.wavelength_nm, value.intensity)
             self.spectrum_axes.set_title("Latest spectrum")
-            self.map_axes.set_visible(False)
+            self.spectrum_axes.set_visible(True)
         else:
             self.map_axes.set_visible(True)
             if kind == "cube-live":
@@ -299,9 +331,10 @@ class MeasurementView:
             else:
                 image = np.where(value.completed_mask, value.summed_count_rate_cps, np.nan)
                 self._cube_result = None
-            self.map_axes.imshow(image, origin="lower", aspect="auto")
+            self.map_axes.imshow(image, origin="lower", aspect="equal" if kind == "map" else "auto")
             self.map_axes.set(xlabel="X pixel", ylabel="Y pixel", title="Latest map / cube")
-        self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity")
+        if kind != "map":
+            self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity")
         self.canvas.draw_idle()
 
     def show_pixel(self, y, x):
@@ -340,7 +373,11 @@ class CubePanel(MeasurementView, TaskPanel):
         self.output = QLineEdit(str(Path.home() / "Labtools" / "Hyperspectral"))
         self.browse_button = QPushButton("Browse output")
         self.browse_button.clicked.connect(self.browse)
-        output_card(self.controls, self.output, self.browse_button)
+        self.save_output = QCheckBox("Save results to disk")
+        self.save_output.setChecked(True)
+        output_card(self.controls, self.output, self.browse_button, self.save_output)
+        self.save_output.toggled.connect(self.output.setEnabled)
+        self.save_output.toggled.connect(self.browse_button.setEnabled)
         note = QLabel("Independent spatial grid. Detector/range/exposure come from Spectrum. Completed pixels and the latest spectrum update during acquisition.")
         note.setWordWrap(True)
         self.controls.addWidget(note)
@@ -366,11 +403,13 @@ class CubePanel(MeasurementView, TaskPanel):
     def start(self):
         try:
             config = self.snapshot()
-            if not self.output.text().strip():
-                raise ValueError("Choose a cube output folder")
+            save = self.save_output.isChecked()
+            if save and not self.output.text().strip():
+                raise ValueError("Choose a cube output folder or disable saving")
+            self.run_settings = config
             def run():
                 with self.batch.borrow("Spectrum"), self.batch.borrow("Intensity map"):
-                    path = unique_directory(self.output_path, "cube") / "cube.npz"
+                    path = unique_directory(self.output_path, "cube") / "cube.npz" if save else None
                     return run_cube(self.workspace, config, stop=self.stop_event, output_path=path,
                         display=self.publish, progress=lambda p: self.report(f"Cube: {p.completed_points}/{p.total_points} pixels"))
             self.output_path = Path(self.output.text())
@@ -419,6 +458,7 @@ class SequencePanel(MeasurementView, TaskPanel):
             measurement = self.measurement.currentText()
             request = self.cube_panel.snapshot() if measurement == "Hyperspectral" else self.pages["Spectrum"]._snapshot_settings() if measurement == "Spectrum" else self.pages["Intensity map"]._config()
             cycles, save = self.cycles.value(), self.save_output.isChecked()
+            self.run_settings = {"program": program, "measurement": measurement, "request": request, "cycles": cycles}
             output = Path(self.output.text()) if self.output.text().strip() else None
             self.launch(lambda: run_sequence(self.workspace, program, measurement, request, cycles=cycles,
                 output_root=output, save_output=save, stop=self.stop_event, report=self.report, display=self.publish))
@@ -488,6 +528,9 @@ def install_experiment_tabs(window, workspace):
         window.pages[name] = page
         window.tabs.insertTab(window.tabs.indexOf(window.laser_panel), page, name)
     restore_experiment_preferences(window, workspace.drafts.display)
+    from labtools.gui.retained_run_controls import install_retained_controls
+
+    install_retained_controls(window)
 
 
 def experiment_preferences(window):
@@ -499,7 +542,7 @@ def experiment_preferences(window):
             "cube_x_start": cube.x_start.value(), "cube_x_stop": cube.x_stop.value(),
             "cube_y_start": cube.y_start.value(), "cube_y_stop": cube.y_stop.value(),
             "cube_x_points": cube.x_points.value(), "cube_y_points": cube.y_points.value(), "cube_settle": cube.settle.value(),
-            "cube_dark": cube.dark.currentText(), "cube_output": cube.output.text(),
+            "cube_dark": cube.dark.currentText(), "cube_output": cube.output.text(), "cube_save_output": cube.save_output.isChecked(),
             "sequence_measurement": sequence.measurement.currentText(), "sequence_cycles": sequence.cycles.value(),
             "sequence_save_output": sequence.save_output.isChecked(),
             "sequence_output": sequence.output.text()}
@@ -519,6 +562,8 @@ def restore_experiment_preferences(window, data):
                         ("cube_x_points", cube.x_points), ("cube_y_points", cube.y_points), ("cube_settle", cube.settle)):
         if key in data:
             widget.setValue(data[key])
+    if "cube_save_output" in data:
+        cube.save_output.setChecked(data["cube_save_output"])
     if "sequence_save_output" in data:
         sequence.save_output.setChecked(data["sequence_save_output"])
     for key, widget in (("cube_output", cube.output), ("sequence_output", sequence.output)):

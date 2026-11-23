@@ -1,5 +1,14 @@
 # Documentation index
 
+## Optional output and retained-run export, 2026-11-23
+
+Unified experiments now support optional automatic output and Save results afterward,
+including full baseline-first sequence retention. Sequence spectrum/map views use
+one plotting area; cubes retain two. Annealing has Instruments above visible Output
+on the right. See [operation/evidence](retained-output-20261123.md). New Windows and
+connected acceptance remains pending; prior baseline acceptance is unchanged.
+
+
 ## Consolidated workflow update, 2026-11-23
 
 Current operation: one Annealing tab, independent live hyperspectral grid, Alignment

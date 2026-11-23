@@ -37,9 +37,9 @@ def run_program(workspace, program, *, stop=None, report=lambda text: None, outp
             workspace.drafts.validate("anneal", point)
     folder = (output or unique_directory(program.base.output_root, "anneal-program")) if save_output else None
     record = {"configuration_id": workspace.plan.configuration_id, "mode": program.mode, "spacing": program.spacing,
-              "status": "running", "completed_points": 0, "points": [asdict(p) for p in points]}
+              "status": "running", "completed_points": 0, "points": [asdict(p) for p in points], "point_results": []}
     if folder is not None:
-        write_json(folder / "program.json", record)
+        write_json(folder / "program.json", {k: v for k, v in record.items() if k != "point_results"})
     try:
         for i, point in enumerate(points):
             if stop.is_set():
@@ -50,6 +50,7 @@ def run_program(workspace, program, *, stop=None, report=lambda text: None, outp
             # Each dose uses the accepted full shutter/stage/cleanup lifecycle.
             result = workspace.acquire_anneal(replace(point, output_root=folder / f"point-{i+1:05d}" if folder else point.output_root,
                                                       save_run_log=point.save_run_log and save_output), stop_event=stop)
+            record["point_results"].append({"point_index": i, "settings": point, "result": result})
             if result.stopped:
                 stop.set()
                 break
@@ -57,14 +58,15 @@ def run_program(workspace, program, *, stop=None, report=lambda text: None, outp
                 raise RuntimeError("Annealing did not complete; refusing the next point/measurement")
             record["completed_points"] += 1
             if folder is not None:
-                write_json(folder / "program.json", record)
+                write_json(folder / "program.json", {k: v for k, v in record.items() if k != "point_results"})
         record["status"] = "cancelled" if stop.is_set() else "completed"
     except BaseException as error:
         record.update(status="failed", error=repr(error))
+        error.retained_run = record
         raise
     finally:
         if folder is not None:
-            write_json(folder / "program.json", record)
+            write_json(folder / "program.json", {k: v for k, v in record.items() if k != "point_results"})
     return record
 
 
@@ -210,10 +212,10 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
     folder = None
     record = {"configuration_id": workspace.plan.configuration_id, "measurement": measurement, "status": "running",
               "steps": [], "cycles": cycles, "baseline_measurement": True, "save_output": save_output,
-              "anneal_program": asdict(program), "measurement_request": asdict(request)}
+              "anneal_program": asdict(program), "measurement_request": asdict(request), "retained_steps": []}
     def persist():
         if folder is not None:
-            write_json(folder / "sequence.json", record)
+            write_json(folder / "sequence.json", {k: v for k, v in record.items() if k != "retained_steps"})
     try:
         if save_output:
             folder = unique_directory(output_root, "sequence")
@@ -256,6 +258,7 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
                     result = run_cube(workspace, request, stop=stop, output_path=step / "cube.npz" if step else None, display=display)
                 if display is not None:
                     display("cube", result)
+            record["retained_steps"].append({"cycle": cycle, "phase": phase, "role": role, "result": result})
             record["steps"].append({"cycle": cycle, "phase": phase, "role": role, "output": str(step) if step else None,
                                     "status": "cancelled" if stop.is_set() else "completed"})
             persist()
@@ -264,6 +267,7 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
         record["status"] = "cancelled"
     except BaseException as error:
         record.update(status="failed", error=repr(error))
+        error.retained_run = record
         raise
     finally:
         try:

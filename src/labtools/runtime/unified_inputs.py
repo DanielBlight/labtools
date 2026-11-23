@@ -209,7 +209,7 @@ DISPLAY_TYPES = {"map_log": bool, "map_manual_limits": bool, "map_min": float, "
                  "cube_dark": str, "cube_output": str, "sequence_measurement": str,
                  "sequence_cycles": int, "sequence_anneals": int, "sequence_measurements": int, "sequence_output": str, "sequence_save_output": bool,
                  "cube_x_start": float, "cube_x_stop": float, "cube_y_start": float, "cube_y_stop": float,
-                 "cube_x_points": int, "cube_y_points": int, "cube_settle": float}
+                 "cube_x_points": int, "cube_y_points": int, "cube_settle": float, "cube_save_output": bool}
 
 
 def validate_display(data):
