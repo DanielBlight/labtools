@@ -1,5 +1,31 @@
 # LabTools current state
 
+## Consolidated workflow update, 2026-11-23
+
+Current operation: one Annealing tab, independent live hyperspectral grid, Alignment
+popup from Spectrum, and optional-output sequences with one baseline measurement
+then one anneal/measurement pair per cycle. The old phase-count controls and separate
+Anneal programs/Alignment tabs are superseded. See
+[operation and evidence](workflow-ux-baseline-20261123.md). New Windows/connected
+acceptance remains pending; prior baseline records are unchanged.
+
+
+## Connected baseline accepted; experiment workflows added, 2026-11-23
+
+The user reports the unified all-hardware GUI worked well on the lab PC, with camera
+control clipping and a narrow-window map Y-axis clipping issue. Supplied clean HEAD
+is 2dd0661; the supplied Windows targeted validation reports 630 passed in 74.58 s.
+See [acceptance scope](unified-gui-lab-acceptance-20261123.md). This is not a fabricated
+per-device checklist or a pass for new functionality.
+
+The next source batch adds Anneal programs (single point and linear/log dwell arrays),
+Hyperspectral and Sequences tabs, source-bound settings, exclusive multi-step leases,
+cooperative Stop/close, saved plans/results and the two layout corrections. It retains
+the existing flat profile/limits and does not automatically enable laser output.
+See [operation](experiment-workflows.md) and [implementation evidence](experiment-workflows-implementation-20261123.md).
+Windows/connected acceptance of these NEW features remains pending.
+
+
 ## Workspace hub and all-hardware testing mode, 2026-11-23
 
 The new explicit `workspace launch ... --hardware` mode binds real map (LabJack,

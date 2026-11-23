@@ -73,8 +73,9 @@ class OperatorSpectrumRuntime:
             check()
         self.workspace.plan.verify_sources()
         ownership = self.workspace._ownership
-        states = {item.name: item for item in ownership.status().resources}
-        if any(states[name].owner != "Spectrum" for name in ownership.config.for_workflow("Spectrum")):
+        from labtools.runtime.workflow_batch import has_owner
+
+        if not has_owner(ownership, 'Spectrum'):
             raise PermissionError("Spectrum/alignment requires the workspace Spectrum reservation")
 
     def validate_range(self, settings):

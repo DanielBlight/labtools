@@ -7,6 +7,31 @@ under active development.
 
 ## [Unreleased]
 
+### Changed (workflow UX, 2026-11-23)
+
+- Combined dose modes with shared Annealing controls under one visible tab.
+- Independent hyperspectral spatial grid and live latest-only pixel/spectrum display.
+- Alignment moved to a reopenable modeless popup from Spectrum, retaining shared ownership.
+- Sequences now take one pre-anneal baseline measurement then one anneal/measurement
+  pair per cycle, with optional disk output and latest/live measurement results.
+- Full-width output rows and source-bound persistence for new controls; legacy phase
+  counts accepted but ignored. Existing hardware limits and profile schema unchanged.
+
+### Added (experiment workflows, 2026-11-23)
+
+- Single-point and per-point linear/logarithmic dwell-array programs with dose preview,
+  existing per-point shutter/stage cleanup, source/local validation and saved plans.
+- Unified hyperspectral tab using the shared native spectrum worker, exclusive mirror/
+  spectrum ownership, partial cube archives and selectable pixel spectra.
+- Exclusive anneal-then-measure sequences with independent phase/cycle repeat counts,
+  all three measurement choices, cooperative Stop/close and per-step output journals.
+- Workspace settings persistence for the new controls and qualified baseline lab-PC
+  acceptance recording, including the supplied 630-pass Windows validation.
+
+### Fixed (experiment workflows, 2026-11-23)
+
+- Camera form-field clipping and narrow-window intensity-map Y-axis margin handling.
+
 ### Added (workspace hardware, 2026-11-23)
 
 - Workspace configuration/status hub with source/mode/profile summary, device status,

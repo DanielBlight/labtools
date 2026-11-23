@@ -993,10 +993,17 @@ def finish_compact(window):
     camera.setStyleSheet(STYLE)
     camera.setMinimumSize(700, 520)
     camera.resize(1000, 700)
+    for form in camera.findChildren(QFormLayout):
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+    for control in camera.findChildren(QAbstractSpinBox) + camera.findChildren(QComboBox) + camera.findChildren(QLineEdit):
+        control.setMinimumWidth(0)
+        control.setMaximumWidth(16777215)
+        control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     camera.start_button.setText('Start')
     camera.stop_button.setText('Stop')
     # Camera inherits the window stylesheet. Restrict only known live spin boxes.
     for widget in window.camera_window.findChildren(QAbstractSpinBox):
-        widget.setMinimumWidth(90)
-        widget.setMaximumWidth(150)
+        widget.setMinimumWidth(0)
+        widget.setMaximumWidth(16777215)
     window._studio_compact = True

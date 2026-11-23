@@ -37,9 +37,9 @@ class WorkspaceSpectrumTransport:
             raise ValueError("Transport-contract adapter requires real settings, not simulation")
         if settings.configuration_id != self._ownership.config.configuration_id:
             raise ValueError("Spectrum configuration_id must match the workspace configuration")
-        names = self._ownership.config.for_workflow("Spectrum")
-        states = {resource.name: resource for resource in self._ownership.status().resources}
-        if any(states[name].owner != "Spectrum" for name in names):
+        from labtools.runtime.workflow_batch import has_owner
+
+        if not has_owner(self._ownership, 'Spectrum'):
             raise PermissionError("Spectrum requires the existing workspace reservation")
 
     @asynccontextmanager

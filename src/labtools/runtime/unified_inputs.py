@@ -204,7 +204,12 @@ class UnifiedDrafts:
 DISPLAY_TYPES = {"map_log": bool, "map_manual_limits": bool, "map_min": float, "map_max": float,
                  "spectrum_output": str, "spectrum_csv": bool, "spectrum_png": bool,
                  "camera_exposure_ms": float, "camera_gain": float, "camera_interval_ms": float,
-                 "camera_white_level": float}
+                 "camera_white_level": float,
+                 "program_mode": str, "program_first_s": float, "program_last_s": float, "program_spacing": str,
+                 "cube_dark": str, "cube_output": str, "sequence_measurement": str,
+                 "sequence_cycles": int, "sequence_anneals": int, "sequence_measurements": int, "sequence_output": str, "sequence_save_output": bool,
+                 "cube_x_start": float, "cube_x_stop": float, "cube_y_start": float, "cube_y_stop": float,
+                 "cube_x_points": int, "cube_y_points": int, "cube_settle": float}
 
 
 def validate_display(data):
@@ -222,4 +227,23 @@ def validate_display(data):
     for name, low, high in (("camera_exposure_ms", .01, 10000), ("camera_gain", 1, 100), ("camera_interval_ms", 16, 10000), ("camera_white_level", 1, 65535)):
         if name in data and not low <= data[name] <= high:
             raise ValueError("Camera display preference outside GUI range")
+    for key, options in (("program_mode", {"Single point", "Dwell ramp array", "Uniform array"}),
+                         ("program_spacing", {"Linear", "Logarithmic"}), ("cube_dark", {"none", "per_center", "per_frame"}),
+                         ("sequence_measurement", {"Spectrum", "Intensity map", "Hyperspectral"})):
+        if key in data and data[key] not in options:
+            raise ValueError("Unknown experiment option: " + key)
+    for key in ("program_first_s", "program_last_s"):
+        if key in data and not 0 <= data[key] <= 43200:
+            raise ValueError("Dwell preference outside GUI range")
+    for key in ("sequence_cycles", "sequence_anneals", "sequence_measurements"):
+        if key in data and not 1 <= data[key] <= 10000:
+            raise ValueError("Repeat preference outside GUI range")
+    for key in ("cube_x_points", "cube_y_points"):
+        if key in data and not 1 <= data[key] <= 10000:
+            raise ValueError("Cube point count outside GUI range")
+    for key in ("cube_x_start", "cube_x_stop", "cube_y_start", "cube_y_stop"):
+        if key in data and not -10 <= data[key] <= 10:
+            raise ValueError("Cube coordinate outside GUI range")
+    if "cube_settle" in data and not 0 <= data["cube_settle"] <= 60:
+        raise ValueError("Cube settle outside GUI range")
     return dict(data)

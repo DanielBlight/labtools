@@ -50,9 +50,9 @@ class InjectedSimulationServices:
     def _require_owner(self, workflow):
         if self._ownership is None:
             raise RuntimeError("Bind injected services to workspace ownership before use")
-        required = self._ownership.config.for_workflow(workflow)
-        states = {resource.name: resource for resource in self._ownership.status().resources}
-        if any(states[name].owner != workflow for name in required):
+        from labtools.runtime.workflow_batch import has_owner
+
+        if not has_owner(self._ownership, workflow):
             raise PermissionError(f"{workflow} requires its existing workspace reservation")
 
     def acquire_map(self, config, **kwargs):

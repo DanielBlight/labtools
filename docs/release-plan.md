@@ -1,5 +1,28 @@
 # LabTools release plan
 
+## Consolidated workflow update, 2026-11-23
+
+Current operation: one Annealing tab, independent live hyperspectral grid, Alignment
+popup from Spectrum, and optional-output sequences with one baseline measurement
+then one anneal/measurement pair per cycle. The old phase-count controls and separate
+Anneal programs/Alignment tabs are superseded. See
+[operation and evidence](workflow-ux-baseline-20261123.md). New Windows/connected
+acceptance remains pending; prior baseline records are unchanged.
+
+
+## Experiment workflow checkpoint, 2026-11-23
+
+Record the user-reported all-hardware baseline pass and the supplied 630-pass Windows
+log, with the two layout defects, in unified-gui-lab-acceptance-20261123.md. Do not
+repeat the earlier claim that no unified lab result exists.
+
+Next bounded milestone: apply/validate the new experiment batch on Windows, rehearse
+single/ramped point doses, small cubes and all three two-cycle sequence choices in
+simulation, then commit/push and repeat small connected checks at that exact revision.
+Confirm the camera/narrow-map layout on Windows. Do not migrate profiles, widen
+limits, add new device discovery or infer new hardware acceptance from the old pass.
+
+
 ## All-hardware integration checkpoint, 2026-11-23
 
 The requested native-workflow binding batch is implemented behind explicit `--hardware`.

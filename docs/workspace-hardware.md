@@ -1,5 +1,14 @@
 # Workspace hub and all-hardware operation
 
+## Subsequent baseline acceptance and experiment tabs
+
+The user has now reported the existing all-hardware GUI worked well on the lab PC,
+with two layout issues. See [acceptance](unified-gui-lab-acceptance-20261123.md).
+New single/ramped-dose programs, hyperspectral and sequence tabs are documented in
+[experiment workflows](experiment-workflows.md); they need separate connected checks.
+Historical "pending" statements below refer to the earlier delivery checkpoint.
+
+
 Status: implemented testing route, 2026-11-23. Connected all-hardware acceptance is
 pending; this document is not a hardware pass or release approval.
 

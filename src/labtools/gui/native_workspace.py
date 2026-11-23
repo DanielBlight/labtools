@@ -166,6 +166,10 @@ def create_window(workspace):
 
                     self.pages["Alignment"] = WorkspaceAlignmentPanel(workspace=workspace, runtime=runtime)
                 for name, page in self.pages.items():
+                    if name == "Alignment":
+                        page.setParent(self, Qt.WindowType.Window)
+                        page.hide()
+                        continue
                     page.setParent(self.tabs)
                     page.setWindowFlags(Qt.WindowType.Widget)
                     if name != "Alignment":
@@ -174,7 +178,7 @@ def create_window(workspace):
                 if "Alignment" in self.pages:
                     alignment = self.pages["Alignment"]
                     self.tabs.removeTab(self.tabs.indexOf(alignment))
-                    self.tabs.insertTab(3, alignment, "Alignment")
+                    alignment.setWindowTitle("Labtools Alignment")
             except BaseException:
                 for page in self.pages.values():
                     page.close()
@@ -197,10 +201,27 @@ def create_window(workspace):
             from labtools.gui.workspace_hub import install_hub
 
             install_hub(self, workspace)
+            if "Alignment" in self.pages:
+                self.alignment_window = self.pages["Alignment"]
+                self.alignment_window.setStyleSheet(self.styleSheet())
+                self.alignment_window.resize(1050, 700)
+                self.open_alignment_button = QPushButton("Open alignment")
+                self.open_alignment_button.clicked.connect(self.open_alignment)
+                self.pages["Spectrum"].centralWidget().layout().insertWidget(1, self.open_alignment_button)
+            if simulated or all_hardware:
+                from labtools.gui.experiment_panels import install_experiment_tabs
+
+                install_experiment_tabs(self, workspace)
+                protect_parameter_wheels(self)
             if all_hardware:
                 self.overview_status.setText("Ready - real hardware; connections and outputs require explicit actions")
             elif hardware_spectrum:
                 self.overview_status.setText("Ready - real HORIBA. Map, Annealing and laser remain disabled.")
+
+        def open_alignment(self):
+            self.alignment_window.show()
+            self.alignment_window.raise_()
+            self.alignment_window.activateWindow()
 
         def open_camera(self):
             self.camera_window.show()
@@ -222,9 +243,18 @@ def create_window(workspace):
             if "spectrum_output" in data:
                 spectrum.output_directory.setText(data["spectrum_output"])
 
+            if "Sequences" in self.pages:
+                from labtools.gui.experiment_panels import (
+                    restore_experiment_preferences,
+                )
+
+                restore_experiment_preferences(self, data)
+
         def display_preferences(self):
             mapping, spectrum, anneal = (self.pages[name] for name in ("Intensity map", "Spectrum", "Annealing"))
-            return {"map_log": mapping.log_colour_scale.isChecked(),
+            from labtools.gui.experiment_panels import experiment_preferences
+
+            return {**experiment_preferences(self), "map_log": mapping.log_colour_scale.isChecked(),
                     "map_manual_limits": mapping.custom_colour_limits.isChecked(),
                     "map_min": mapping.colour_min.value(), "map_max": mapping.colour_max.value(),
                     "spectrum_output": spectrum.output_directory.text(), "spectrum_csv": spectrum.save_csv.isChecked(),

@@ -225,6 +225,11 @@ class SpectrumWorker:
             self._active = asyncio.run_coroutine_threadsafe(run(), loop)
         return SpectrumJob(result_future, cancel_event)
 
+    def submit_operation(self, settings, operation, *, owner="spectrum-operation"):
+        """Submit one complete trusted service operation on the owning loop/thread."""
+        self._validate_request(settings)
+        return self._submit(owner, "composed-operation", operation)
+
     def test_connection(self, settings, *, owner="spectrum") -> SpectrumJob:
         self._validate_request(settings)
         return self._submit(

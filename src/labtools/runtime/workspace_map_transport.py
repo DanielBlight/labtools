@@ -30,9 +30,9 @@ class WorkspaceMapTransport:
             raise ValueError("Map transport boundary requires real-contract settings")
         if self._configuration_id != self._ownership.config.configuration_id:
             raise ValueError("Workspace configuration identity changed")
-        states = {resource.name: resource for resource in self._ownership.status().resources}
-        names = self._ownership.config.for_workflow("Intensity map")
-        if any(states[name].owner != "Intensity map" for name in names):
+        from labtools.runtime.workflow_batch import has_owner
+
+        if not has_owner(self._ownership, 'Intensity map'):
             raise PermissionError("Intensity map requires its existing workspace reservation")
 
     def acquire(self, config, **kwargs):

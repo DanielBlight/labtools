@@ -1,5 +1,22 @@
 # Documentation index
 
+## Consolidated workflow update, 2026-11-23
+
+Current operation: one Annealing tab, independent live hyperspectral grid, Alignment
+popup from Spectrum, and optional-output sequences with one baseline measurement
+then one anneal/measurement pair per cycle. The old phase-count controls and separate
+Anneal programs/Alignment tabs are superseded. See
+[operation and evidence](workflow-ux-baseline-20261123.md). New Windows/connected
+acceptance remains pending; prior baseline records are unchanged.
+
+
+## Unified experiment workflows
+
+- [Unified GUI lab acceptance](unified-gui-lab-acceptance-20261123.md)
+- [Anneal programs, hyperspectral maps and sequences](experiment-workflows.md)
+- [Implementation evidence](experiment-workflows-implementation-20261123.md)
+
+
 ## Workspace hub and all-hardware testing
 
 - [Operation, configuration/settings and lab-PC testing](workspace-hardware.md)

@@ -61,7 +61,9 @@ def window(tmp_path, monkeypatch):
 def test_alignment_is_styled_embedded_and_native_launch_is_idle(window):
     _, widget, workspace, rig, _ = window
     alignment = widget.pages["Alignment"]
-    assert widget.tabs.tabText(3) == "Alignment"
+    assert widget.tabs.indexOf(alignment) == -1
+    widget.open_alignment_button.click()
+    assert alignment.isVisible() and alignment.isWindow()
     assert alignment._worker is workspace._operator_spectrum.worker
     assert not alignment._owns_worker
     assert alignment.setup_group.objectName() == "studioCard"

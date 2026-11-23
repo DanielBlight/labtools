@@ -115,6 +115,17 @@ class WorkspaceAlignmentPanel(HoribaAlignmentWindow):
         self.stop_alignment()
 
     def closeEvent(self, event):
+        if not getattr(self, "_workspace_closing", False):
+            if self._job is not None:
+                self._close_pending = True
+                self.stop_alignment()
+                event.ignore()
+                return
+            self._close_pending = False
+            self._closed = False
+            self.hide()
+            event.accept()
+            return
         super().closeEvent(event)
         if event.isAccepted():
             self._release_lease()

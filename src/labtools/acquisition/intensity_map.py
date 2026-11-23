@@ -398,6 +398,7 @@ def acquire_intensity_map(
     config: IntensityMapConfig,
     *,
     resume_directory: str | Path | None = None,
+    memory_only: bool = False,
     progress_callback: ProgressCallback | None = None,
     cancel_requested: CancelCallback | None = None,
     device_provider=None,
@@ -408,6 +409,8 @@ def acquire_intensity_map(
     Injected providers must explicitly validate backend and hardware settings.
     """
     config.validate()
+    if memory_only and resume_directory is not None:
+        raise ValueError("Memory-only maps cannot resume disk checkpoints")
     resumed = resume_directory is not None
     session_started_at = datetime.now(UTC).astimezone().isoformat(timespec="seconds")
 
@@ -430,14 +433,16 @@ def acquire_intensity_map(
         root = Path(config.output_root)
         if config.backend == "simulation":
             root = root / "SIMULATION"
-        if config.backend == "simulation":
+        if memory_only:
+            output_directory = root / "unsaved-map"
+        elif config.backend == "simulation":
             output_directory = root / datetime.now(UTC).strftime(
                 "synthetic_%Y%m%d-%H%M%S-%f"
             )
             output_directory.mkdir(parents=True, exist_ok=False)
         else:
             output_directory = _new_output_directory(root)
-        if config.backend == "simulation":
+        if config.backend == "simulation" and not memory_only:
             (output_directory / "SYNTHETIC_DATA.txt").write_text(
                 "SIMULATION: synthetic development data, not experimental measurements.\n",
                 encoding="utf-8",
@@ -452,43 +457,46 @@ def acquire_intensity_map(
         session_ids = np.full((config.y_points, config.x_points), -1, dtype=np.int32)
         initial_started_at = session_started_at
         resume_sessions = 0
-        _save_checkpoint(
-            output_directory,
-            x_values_v=x_values,
-            y_values_v=y_values,
-            channels=config.channels,
-            counts=counts,
-            count_rates_cps=rates,
-            completed_mask=completed,
-            timestamps_unix_s=timestamps,
-            session_ids=session_ids,
-        )
+        if not memory_only:
+            _save_checkpoint(
+                output_directory,
+                x_values_v=x_values,
+                y_values_v=y_values,
+                channels=config.channels,
+                counts=counts,
+                count_rates_cps=rates,
+                completed_mask=completed,
+                timestamps_unix_s=timestamps,
+                session_ids=session_ids,
+            )
 
-    _write_metadata(
-        output_directory,
-        config,
-        initial_started_at=initial_started_at,
-        session_started_at=session_started_at,
-        resume_sessions=resume_sessions,
-        complete=False,
-    )
+    if not memory_only:
+        _write_metadata(
+            output_directory,
+            config,
+            initial_started_at=initial_started_at,
+            session_started_at=session_started_at,
+            resume_sessions=resume_sessions,
+            complete=False,
+        )
 
     start_monotonic = time.monotonic()
     acquired_this_session = 0
     interrupted = False
 
     def save_current_checkpoint():
-        _save_checkpoint(
-            output_directory,
-            x_values_v=x_values,
-            y_values_v=y_values,
-            channels=config.channels,
-            counts=counts,
-            count_rates_cps=rates,
-            completed_mask=completed,
-            timestamps_unix_s=timestamps,
-            session_ids=session_ids,
-        )
+        if not memory_only:
+            _save_checkpoint(
+                output_directory,
+                x_values_v=x_values,
+                y_values_v=y_values,
+                channels=config.channels,
+                counts=counts,
+                count_rates_cps=rates,
+                completed_mask=completed,
+                timestamps_unix_s=timestamps,
+                session_ids=session_ids,
+            )
 
     try:
         provider = open_map_devices if device_provider is None else device_provider
@@ -545,18 +553,18 @@ def acquire_intensity_map(
                 session_ids[y_index, x_index] = resume_sessions
                 acquired_this_session += 1
 
-                if acquired_this_session % config.checkpoint_every_points == 0:
-                    _save_checkpoint(
-                        output_directory,
-                        x_values_v=x_values,
-                        y_values_v=y_values,
-                        channels=config.channels,
-                        counts=counts,
-                        count_rates_cps=rates,
-                        completed_mask=completed,
-                        timestamps_unix_s=timestamps,
-                        session_ids=session_ids,
-                    )
+                if acquired_this_session % config.checkpoint_every_points == 0 and not memory_only:
+                        _save_checkpoint(
+                            output_directory,
+                            x_values_v=x_values,
+                            y_values_v=y_values,
+                            channels=config.channels,
+                            counts=counts,
+                            count_rates_cps=rates,
+                            completed_mask=completed,
+                            timestamps_unix_s=timestamps,
+                            session_ids=session_ids,
+                        )
 
                 snap = _snapshot(
                     x_values=x_values,
@@ -613,17 +621,18 @@ def acquire_intensity_map(
         complete=complete,
         resumed=resumed,
     )
-    if config.save_results:
+    if config.save_results and not memory_only:
         _save_final_outputs(result, config)
-    _write_metadata(
-        output_directory,
-        config,
-        initial_started_at=initial_started_at,
-        session_started_at=session_started_at,
-        resume_sessions=resume_sessions,
-        complete=complete,
-    )
-    if complete:
+    if not memory_only:
+        _write_metadata(
+            output_directory,
+            config,
+            initial_started_at=initial_started_at,
+            session_started_at=session_started_at,
+            resume_sessions=resume_sessions,
+            complete=complete,
+        )
+    if complete and not memory_only:
         (output_directory / CHECKPOINT_FILENAME).unlink(missing_ok=True)
 
     return result

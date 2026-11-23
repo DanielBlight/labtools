@@ -21,6 +21,10 @@ class WorkspaceOwnership:
         self.session = InstrumentSession({name: _reservation_only for name in self.config.resources})
 
     def reserve(self, owner):
+        from labtools.runtime.workflow_batch import BorrowedLease, borrowed
+
+        if borrowed(self, owner):
+            return BorrowedLease()
         return self.session.reserve(owner, self.config.for_workflow(owner))
 
     def status(self):

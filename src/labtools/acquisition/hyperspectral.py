@@ -25,6 +25,7 @@ from labtools.acquisition.spectrum_service import (
     DarkRecord,
     SpectrumResult,
     SpectrumService,
+    owned_vector,
 )
 from labtools.config.hyperspectral import (
     HYPERSPECTRAL_CONFIG_SCHEMA_VERSION,
@@ -222,6 +223,7 @@ class HyperspectralService:
         dark: DarkRecord | None = None,
         output_path: Path | None = None,
         progress: ProgressCallback | None = None,
+        pixel_callback=None,
         cancel_requested: CancelCallback | None = None,
     ) -> HyperspectralResult:
         if self._closed:
@@ -335,6 +337,8 @@ class HyperspectralService:
                             values = values * modulation
                         cube[iy, ix] = values
                         completed[iy, ix] = True
+                        if pixel_callback is not None:
+                            pixel_callback(iy, ix, owned_vector(wavelength), owned_vector(values))
                         emit("point_completed", int(completed.sum()), iy, ix)
                 status = "complete"
         except asyncio.CancelledError:

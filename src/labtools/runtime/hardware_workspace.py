@@ -68,8 +68,9 @@ class HardwareWorkspace(HardwareSpectrumWorkspace):
     def require_owner(self, owner):
         self._require_open()
         self.hardware_ready()
-        states = {item.name: item for item in self._ownership.status().resources}
-        if any(states[name].owner != owner for name in self._ownership.config.for_workflow(owner)):
+        from labtools.runtime.workflow_batch import has_owner
+
+        if not has_owner(self._ownership, owner):
             raise PermissionError(f"{owner} requires its workspace reservation")
 
     def acquire_map(self, config=None, **kwargs):

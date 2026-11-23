@@ -6,11 +6,15 @@ def repair_plot_geometry(panel):
     figure.set_layout_engine('none')
     width, height = figure.get_size_inches() * figure.dpi
     width, height = max(float(width), 1.0), max(float(height), 1.0)
-    left_px, bottom_px, top_px = 70.0, 55.0, 38.0
+    renderer = panel.canvas.get_renderer()
+    axis = panel.axes if hasattr(panel, "axes") else panel.ax
+    tick_width = max((label.get_window_extent(renderer).width for label in axis.get_yticklabels() if label.get_visible()), default=30.0)
+    label_width = axis.yaxis.label.get_window_extent(renderer).width if axis.yaxis.label.get_visible() else 0.0
+    left_px, bottom_px, top_px = max(78.0, tick_width + label_width + 28.0), 58.0, 38.0
     if hasattr(panel, 'colourbar'):
         right_px, gap_px, bar_px = 105.0, 16.0, 15.0
-        available_w = max(160.0, width - left_px - right_px)
-        available_h = max(160.0, height - bottom_px - top_px)
+        available_w = max(20.0, width - left_px - right_px)
+        available_h = max(20.0, height - bottom_px - top_px)
         x0, x1 = panel.axes.get_xlim()
         y0, y1 = panel.axes.get_ylim()
         data_ratio = abs((x1 - x0) / (y1 - y0)) if y1 != y0 else 1.0
