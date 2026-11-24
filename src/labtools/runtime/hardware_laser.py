@@ -7,6 +7,7 @@ from threading import RLock
 from labtools.runtime.session import ResourceBusyError
 
 # Existing working-lab policy from intensity_map_gui; no simulation 80 mA default.
+MIN_CURRENT_A = 0.0
 MAX_CURRENT_A = 0.040
 THRESHOLD_CURRENT_A = 0.040
 ADDRESS = "USB0::0x1313::0x804A::M00739898::INSTR"
@@ -56,8 +57,8 @@ class HardwareLaser:
     def submit(self, command, current=None):
         if command not in {"connect", "apply", "on", "off", "disconnect"}:
             raise ValueError("Unknown laser command")
-        if command in {"apply", "on"} and (isinstance(current, bool) or current is None or not math.isfinite(float(current)) or not THRESHOLD_CURRENT_A <= float(current) <= MAX_CURRENT_A):
-            raise ValueError("Laser current must respect the existing 0.040 A working-lab policy")
+        if command in {"apply", "on"} and (isinstance(current, bool) or current is None or not math.isfinite(float(current)) or not MIN_CURRENT_A <= float(current) <= MAX_CURRENT_A):
+            raise ValueError("Laser current must be finite and between 0.000 and 0.040 A inclusive")
         with self._lock:
             if self._closed:
                 raise RuntimeError("Laser service is closed")

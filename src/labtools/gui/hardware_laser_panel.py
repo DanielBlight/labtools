@@ -4,7 +4,12 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDoubleSpinBox, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from labtools.gui.workspace_studio import add_card, scroll_content
-from labtools.runtime.hardware_laser import ADDRESS, MAX_CURRENT_A, THRESHOLD_CURRENT_A
+from labtools.runtime.hardware_laser import (
+    ADDRESS,
+    MAX_CURRENT_A,
+    MIN_CURRENT_A,
+    THRESHOLD_CURRENT_A,
+)
 
 
 class HardwareLaserPanel(QWidget):
@@ -23,7 +28,8 @@ class HardwareLaserPanel(QWidget):
         layout.addWidget(scroll, 1)
         self.current = QDoubleSpinBox()
         self.current.setDecimals(3)
-        self.current.setRange(THRESHOLD_CURRENT_A, MAX_CURRENT_A)
+        self.current.setRange(MIN_CURRENT_A, MAX_CURRENT_A)
+        self.current.setSingleStep(0.001)
         self.current.setSuffix(" A")
         self.current.setValue(THRESHOLD_CURRENT_A)
         self.state = QLabel()
