@@ -7,6 +7,14 @@ under active development.
 
 ## [Unreleased]
 
+### Added (mirror positioning, 2026-11-23)
+
+- Source-bound Mirrors popup next to Camera with explicit X/Y/Home commands,
+  shared optical exclusion and Stop/close cleanup; no move on open/close.
+- Spectrum sequence X/Y/settle settings applied before baseline and each later
+  spectrum on the existing spectrum worker, with configured home afterward.
+- Position metadata in sequence journals/retained exports and Workspace settings.
+
 ### Added (retained output, 2026-11-23)
 
 - Optional hyperspectral output and unified Save results actions for retained

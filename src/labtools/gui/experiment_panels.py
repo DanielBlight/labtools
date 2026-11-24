@@ -296,6 +296,12 @@ class MeasurementView:
         self.results.insertWidget(0, NavigationToolbar2QT(self.canvas, self))
         self.results.insertWidget(1, self.canvas, 1)
         self.log.setMaximumHeight(100)
+        self.details_button = QPushButton("Details")
+        self.details_button.setCheckable(True)
+        self.details_button.setToolTip("Show acquisition messages and output paths")
+        self.details_button.toggled.connect(self.log.setVisible)
+        self.left.addWidget(self.details_button)
+        self.log.hide()
         self._cube_result = None
         self.canvas.mpl_connect("button_press_event", self.select_pixel)
 
@@ -430,7 +436,18 @@ class SequencePanel(MeasurementView, TaskPanel):
         self.measurement = QComboBox()
         self.measurement.addItems(["Spectrum", "Intensity map", "Hyperspectral"])
         self.cycles = integer(1)
+        source = workspace.plan.hardware_settings
+        low = max(workspace.plan.map_config.safe_voltage_min_v, source["minimum_mirror_voltage_v"])
+        high = min(workspace.plan.map_config.safe_voltage_max_v, source["maximum_mirror_voltage_v"])
+        self.spectrum_x = number(source["home_x_voltage_v"], low, high, 4)
+        self.spectrum_y = number(source["home_y_voltage_v"], low, high, 4)
+        self.spectrum_settle = number(workspace.plan.map_config.settle_time_s, 0, 60)
+        self.spectrum_position_card = add_card(self.controls, "Spectrum position", [("X (V)", self.spectrum_x),
+            ("Y (V)", self.spectrum_y), ("Mirror settle (s)", self.spectrum_settle)])
+        self.measurement.currentTextChanged.connect(lambda name: self.spectrum_position_card.setVisible(name == "Spectrum"))
         add_card(self.controls, "Repeat plan", [("Measurement", self.measurement), ("Cycles", self.cycles)])
+        self.controls.removeWidget(self.spectrum_position_card)
+        self.controls.insertWidget(1, self.spectrum_position_card)
         self.save_output = QCheckBox("Save results to disk")
         self.save_output.setChecked(True)
         self.output = QLineEdit(str(Path.home() / "Labtools" / "Sequences"))
@@ -458,10 +475,11 @@ class SequencePanel(MeasurementView, TaskPanel):
             measurement = self.measurement.currentText()
             request = self.cube_panel.snapshot() if measurement == "Hyperspectral" else self.pages["Spectrum"]._snapshot_settings() if measurement == "Spectrum" else self.pages["Intensity map"]._config()
             cycles, save = self.cycles.value(), self.save_output.isChecked()
-            self.run_settings = {"program": program, "measurement": measurement, "request": request, "cycles": cycles}
+            position = (self.spectrum_x.value(), self.spectrum_y.value(), self.spectrum_settle.value()) if measurement == "Spectrum" else None
+            self.run_settings = {"program": program, "measurement": measurement, "request": request, "cycles": cycles, "spectrum_position": position}
             output = Path(self.output.text()) if self.output.text().strip() else None
             self.launch(lambda: run_sequence(self.workspace, program, measurement, request, cycles=cycles,
-                output_root=output, save_output=save, stop=self.stop_event, report=self.report, display=self.publish))
+                output_root=output, save_output=save, stop=self.stop_event, report=self.report, display=self.publish, spectrum_position=position))
         except (ValueError, RuntimeError, OSError) as error:
             self.status.setText(str(error))
 
@@ -544,7 +562,8 @@ def experiment_preferences(window):
             "cube_x_points": cube.x_points.value(), "cube_y_points": cube.y_points.value(), "cube_settle": cube.settle.value(),
             "cube_dark": cube.dark.currentText(), "cube_output": cube.output.text(), "cube_save_output": cube.save_output.isChecked(),
             "sequence_measurement": sequence.measurement.currentText(), "sequence_cycles": sequence.cycles.value(),
-            "sequence_save_output": sequence.save_output.isChecked(),
+            "sequence_save_output": sequence.save_output.isChecked(), "sequence_spectrum_x": sequence.spectrum_x.value(),
+            "sequence_spectrum_y": sequence.spectrum_y.value(), "sequence_spectrum_settle": sequence.spectrum_settle.value(),
             "sequence_output": sequence.output.text()}
 
 
@@ -557,7 +576,8 @@ def restore_experiment_preferences(window, data):
         if key in data:
             widget.setCurrentText(data[key])
     for key, widget in (("program_first_s", program.first_dwell), ("program_last_s", program.last_dwell),
-                        ("sequence_cycles", sequence.cycles), ("cube_x_start", cube.x_start), ("cube_x_stop", cube.x_stop),
+                        ("sequence_cycles", sequence.cycles), ("sequence_spectrum_x", sequence.spectrum_x),
+                        ("sequence_spectrum_y", sequence.spectrum_y), ("sequence_spectrum_settle", sequence.spectrum_settle), ("cube_x_start", cube.x_start), ("cube_x_stop", cube.x_stop),
                         ("cube_y_start", cube.y_start), ("cube_y_stop", cube.y_stop),
                         ("cube_x_points", cube.x_points), ("cube_y_points", cube.y_points), ("cube_settle", cube.settle)):
         if key in data:

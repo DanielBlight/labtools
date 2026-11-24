@@ -1,5 +1,14 @@
 # Documentation status and authority
 
+## Mirror positioning checkpoint, 2026-11-23
+
+Mirrors beside Camera opens source-bound manual X/Y positioning. Spectrum sequences
+now have a snapshotted target/settle applied before baseline and every later spectrum,
+with home/cleanup afterward. See [operation/evidence](workspace-mirror-position-20261123.md).
+Prior retained-output GUI acceptance is recorded; new Windows/connected acceptance
+remains pending. No profile/limit/laser-output changes.
+
+
 ## Optional output and retained-run export, 2026-11-23
 
 Unified experiments now support optional automatic output and Save results afterward,

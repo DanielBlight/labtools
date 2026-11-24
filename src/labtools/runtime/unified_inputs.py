@@ -209,7 +209,8 @@ DISPLAY_TYPES = {"map_log": bool, "map_manual_limits": bool, "map_min": float, "
                  "cube_dark": str, "cube_output": str, "sequence_measurement": str,
                  "sequence_cycles": int, "sequence_anneals": int, "sequence_measurements": int, "sequence_output": str, "sequence_save_output": bool,
                  "cube_x_start": float, "cube_x_stop": float, "cube_y_start": float, "cube_y_stop": float,
-                 "cube_x_points": int, "cube_y_points": int, "cube_settle": float, "cube_save_output": bool}
+                 "cube_x_points": int, "cube_y_points": int, "cube_settle": float, "cube_save_output": bool, "sequence_spectrum_x": float, "sequence_spectrum_y": float,
+                 "sequence_spectrum_settle": float}
 
 
 def validate_display(data):
@@ -246,4 +247,9 @@ def validate_display(data):
             raise ValueError("Cube coordinate outside GUI range")
     if "cube_settle" in data and not 0 <= data["cube_settle"] <= 60:
         raise ValueError("Cube settle outside GUI range")
+    for key in ("sequence_spectrum_x", "sequence_spectrum_y"):
+        if key in data and not -10 <= data[key] <= 10:
+            raise ValueError("Sequence spectrum coordinate outside GUI range")
+    if "sequence_spectrum_settle" in data and not 0 <= data["sequence_spectrum_settle"] <= 60:
+        raise ValueError("Sequence spectrum settle outside GUI range")
     return dict(data)

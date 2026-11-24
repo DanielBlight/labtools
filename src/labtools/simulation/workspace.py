@@ -18,7 +18,7 @@ def busy_workflows(pages):
             active = page.map_controller.busy
         elif name == "Spectrum":
             active = page._spectrometer_busy or bool(page._async_tasks)
-        elif name in {"Anneal programs", "Hyperspectral", "Sequences"}:
+        elif name in {"Anneal programs", "Hyperspectral", "Sequences", "Mirror position"}:
             active = page.busy
         elif name == "Alignment":
             active = page._job is not None

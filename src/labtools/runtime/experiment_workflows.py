@@ -186,7 +186,7 @@ def run_cube(workspace, config, *, stop=None, output_path=None, progress=None, d
 
 
 def run_sequence(workspace, program, measurement, request, *, cycles, output_root=None,
-                 save_output=True, stop=None, report=lambda text: None, display=None):
+                 save_output=True, stop=None, report=lambda text: None, display=None, spectrum_position=None):
     """One baseline measurement, then one anneal/measurement pair per cycle."""
     from labtools.runtime.operator_spectrum import ensure_operator_spectrum
 
@@ -194,6 +194,12 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
         raise ValueError("Cycles must be an integer between 1 and 10000")
     if measurement not in {"Spectrum", "Intensity map", "Hyperspectral"}:
         raise ValueError("Unknown sequence measurement")
+    if measurement == "Spectrum" and spectrum_position is not None:
+        from labtools.runtime.workspace_mirror import validate_position
+
+        spectrum_position = validate_position(workspace, *spectrum_position)
+    if measurement != "Spectrum":
+        spectrum_position = None
     points = program.points()
     if not program.base.return_rotation_stage:
         raise ValueError("Sequences require return rotation stage enabled before measurement")
@@ -211,7 +217,7 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
     batch = Batch(workspace._ownership, ("Annealing", "Spectrum", "Intensity map"))
     folder = None
     record = {"configuration_id": workspace.plan.configuration_id, "measurement": measurement, "status": "running",
-              "steps": [], "cycles": cycles, "baseline_measurement": True, "save_output": save_output,
+              "steps": [], "cycles": cycles, "baseline_measurement": True, "save_output": save_output, "spectrum_position": spectrum_position,
               "anneal_program": asdict(program), "measurement_request": asdict(request), "retained_steps": []}
     def persist():
         if folder is not None:
@@ -236,8 +242,15 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
                 if result["status"] != "completed":
                     stop.set()
             elif phase == "Spectrum":
-                with batch.borrow("Spectrum"):
-                    result = asyncio.run(ensure_operator_spectrum(workspace).facade.acquire(request, cancel_requested=stop.is_set))
+                with batch.borrow("Spectrum"), batch.borrow("Intensity map"):
+                    if spectrum_position is not None:
+                        from labtools.runtime.workspace_mirror import (
+                            positioned_spectrum,
+                        )
+
+                        result = positioned_spectrum(workspace, request, spectrum_position, stop=stop)
+                    else:
+                        result = asyncio.run(ensure_operator_spectrum(workspace).facade.acquire(request, cancel_requested=stop.is_set))
                 if step is not None:
                     np.savez_compressed(step / "spectrum.npz", wavelength_nm=result.wavelength_nm, intensity=result.intensity)
                 if display is not None:
@@ -258,7 +271,8 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
                     result = run_cube(workspace, request, stop=stop, output_path=step / "cube.npz" if step else None, display=display)
                 if display is not None:
                     display("cube", result)
-            record["retained_steps"].append({"cycle": cycle, "phase": phase, "role": role, "result": result})
+            record["retained_steps"].append({"cycle": cycle, "phase": phase, "role": role, "result": result,
+                                             "spectrum_position": spectrum_position if phase == "Spectrum" else None})
             record["steps"].append({"cycle": cycle, "phase": phase, "role": role, "output": str(step) if step else None,
                                     "status": "cancelled" if stop.is_set() else "completed"})
             persist()

@@ -212,7 +212,11 @@ def create_window(workspace):
                 from labtools.gui.experiment_panels import install_experiment_tabs
 
                 install_experiment_tabs(self, workspace)
+                from labtools.gui.workspace_mirror_popup import install_mirror_popup
+
+                install_mirror_popup(self, workspace)
                 protect_parameter_wheels(self)
+                protect_parameter_wheels(self.mirror_window)
             if all_hardware:
                 self.overview_status.setText("Ready - real hardware; connections and outputs require explicit actions")
             elif hardware_spectrum:
