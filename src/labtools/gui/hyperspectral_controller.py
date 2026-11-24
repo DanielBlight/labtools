@@ -6,7 +6,7 @@ import asyncio
 import traceback
 from threading import Event
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal, pyqtSlot
 
 from labtools.measurements import acquire_hyperspectral_map_async
 
@@ -56,6 +56,9 @@ class HyperspectralController(QObject):
         self.thread = None
         self.worker = None
         self._acquisition = acquisition
+        self._reap_timer = QTimer(self)
+        self._reap_timer.setInterval(5)
+        self._reap_timer.timeout.connect(self._clear)
 
     @property
     def busy(self) -> bool:
@@ -65,7 +68,9 @@ class HyperspectralController(QObject):
         if self.busy:
             raise RuntimeError("A hyperspectral acquisition is already running")
         request.validate()
-        thread = QThread()
+        # Keep C++ ownership as well as Python references until native teardown
+        # has joined. QThread.finished precedes thread-local/deferred cleanup.
+        thread = QThread(self)
         worker = HyperspectralWorker(request, runtime, self._acquisition)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -75,7 +80,6 @@ class HyperspectralController(QObject):
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._clear)
         self.thread, self.worker = thread, worker
         thread.start()
@@ -86,6 +90,18 @@ class HyperspectralController(QObject):
 
     @pyqtSlot()
     def _clear(self) -> None:
-        self.thread = None
+        thread = self.thread
+        if thread is None:
+            self._reap_timer.stop()
+            return
+        # Never destroy the last wrapper or block the GUI while native/Python
+        # teardown may still need the GIL. A zero-time join is a readiness probe,
+        # not a deadline extension or a forced interruption of acquisition.
+        if not thread.wait(0):
+            self._reap_timer.start()
+            return
+        self._reap_timer.stop()
         self.worker = None
+        self.thread = None
+        thread.deleteLater()
         self.idle.emit()
