@@ -2,12 +2,11 @@
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -39,18 +38,18 @@ class WorkspaceMirrorPopup(TaskPanel):
         self.y = number(source["home_y_voltage_v"], low, high, 4)
         voltage_card, voltage_form = card("Commanded voltages")
         voltage_row = QWidget()
-        voltage_layout = QHBoxLayout(voltage_row)
+        voltage_layout = QGridLayout(voltage_row)
         voltage_layout.setContentsMargins(0, 0, 0, 0)
-        voltage_layout.setSpacing(16)
-        fields = QFormLayout()
-        fields.addRow("X (V)", self.x)
-        fields.addRow("Y (V)", self.y)
-        voltage_layout.addLayout(fields)
-        voltage_layout.addStretch(1)
-        self.move_actions = QVBoxLayout()
-        self.move_actions.addWidget(self.start_button)
-        self.move_actions.addWidget(self.stop_button)
-        voltage_layout.addLayout(self.move_actions)
+        voltage_layout.setHorizontalSpacing(10)
+        voltage_layout.setVerticalSpacing(8)
+        voltage_layout.addWidget(QLabel("X (V)"), 0, 0)
+        voltage_layout.addWidget(self.x, 0, 1)
+        voltage_layout.addWidget(QLabel("Y (V)"), 1, 0)
+        voltage_layout.addWidget(self.y, 1, 1)
+        voltage_layout.setColumnStretch(2, 1)
+        voltage_layout.addWidget(self.start_button, 0, 3)
+        voltage_layout.addWidget(self.stop_button, 1, 3)
+        self.move_actions = voltage_layout
         voltage_form.addRow(voltage_row)
         self.controls.addWidget(voltage_card)
         self.home_button = QPushButton("Move to configured home")
@@ -63,10 +62,15 @@ class WorkspaceMirrorPopup(TaskPanel):
         self.controls.addStretch(1)
         # The inherited action row is empty after moving its buttons into the card.
         self.move_row = self.left.takeAt(1).layout()
-        for button in (self.start_button, self.stop_button):
-            button.setFixedWidth(130)
-            button.setMinimumHeight(30)
         self.start_button.setText("Move X/Y")
+        # Use one shared size and grid row for each input/action pair.
+        paired_controls = (self.x, self.y, self.start_button, self.stop_button)
+        for control in paired_controls:
+            control.ensurePolished()
+        control_width = max(control.sizeHint().width() for control in paired_controls)
+        control_height = max(control.sizeHint().height() for control in paired_controls)
+        for control in paired_controls:
+            control.setFixedSize(control_width, control_height)
         self.start_button.clicked.connect(self.move)
         self.save_result_button.hide()
         self.hide()
