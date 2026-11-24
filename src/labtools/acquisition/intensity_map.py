@@ -373,19 +373,16 @@ def _save_final_outputs(result: IntensityMapResult, config: IntensityMapConfig) 
         synthetic_data=config.backend == "simulation",
     )
 
-    from labtools.visualisation.intensity_map import plot_intensity_map
+    from labtools.visualisation.map_export import export_intensity_map_png
 
-    figure, _ = plot_intensity_map(
+    export_intensity_map_png(
         result.x_values_v,
         result.y_values_v,
         result.summed_count_rate_cps,
         title=("SYNTHETIC — " if config.backend == "simulation" else "")
         + _plot_title(result.channels),
         output_path=output / "summed_intensity_map.png",
-        show=False,
     )
-    # Export figures are unmanaged Agg figures, not pyplot/Qt windows.
-    figure.clear()
 
 
 def _plot_title(channels: Sequence[int]) -> str:

@@ -2,7 +2,7 @@
 
 from threading import Lock
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QObject, QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -30,6 +30,26 @@ class Retention:
             return self.value
 
 
+class _SaveAvailability(QObject):
+    """Qt-owned slot, disconnected with its button; no anonymous timer callback."""
+
+    def __init__(self, button, panel, retention, busy):
+        super().__init__(button)
+        self.button, self.panel = button, panel
+        self.retention, self.busy = retention, busy
+        self.timer = QTimer(self)
+        self.timer.setInterval(150)
+        self.timer.timeout.connect(self.refresh)
+        self.timer.start()
+
+    @pyqtSlot()
+    def refresh(self):
+        if self.panel.workspace._closed:
+            self.timer.stop()
+            return
+        self.button.setEnabled(not self.busy() and self.retention.get() is not None)
+
+
 def save_button(panel, retention, busy, label):
     button = QPushButton("Save results…")
     button.setToolTip("Save the retained run without reacquisition. Save before a replacement run or closing the application.")
@@ -53,10 +73,7 @@ def save_button(panel, retention, busy, label):
         else:
             panel.status.setText(text)
     button.clicked.connect(save)
-    timer = QTimer(button)
-    timer.setInterval(150)
-    timer.timeout.connect(lambda: button.setEnabled(not busy() and retention.get() is not None))
-    timer.start()
+    button._availability = _SaveAvailability(button, panel, retention, busy)
     button.setEnabled(False)
     return button
 
