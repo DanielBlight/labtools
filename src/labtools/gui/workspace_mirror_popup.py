@@ -1,10 +1,18 @@
 """Modeless source-bound mirror voltage popup, shared-workspace exclusion."""
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy
+from PyQt6.QtWidgets import (
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from labtools.gui.experiment_panels import TaskPanel, number
-from labtools.gui.workspace_studio import add_card
+from labtools.gui.workspace_studio import card
 from labtools.runtime.workspace_mirror import move_manual
 
 
@@ -29,7 +37,22 @@ class WorkspaceMirrorPopup(TaskPanel):
         high = min(workspace.plan.map_config.safe_voltage_max_v, source["maximum_mirror_voltage_v"])
         self.x = number(source["home_x_voltage_v"], low, high, 4)
         self.y = number(source["home_y_voltage_v"], low, high, 4)
-        add_card(self.controls, "Commanded voltages", [("X (V)", self.x), ("Y (V)", self.y)])
+        voltage_card, voltage_form = card("Commanded voltages")
+        voltage_row = QWidget()
+        voltage_layout = QHBoxLayout(voltage_row)
+        voltage_layout.setContentsMargins(0, 0, 0, 0)
+        voltage_layout.setSpacing(16)
+        fields = QFormLayout()
+        fields.addRow("X (V)", self.x)
+        fields.addRow("Y (V)", self.y)
+        voltage_layout.addLayout(fields)
+        voltage_layout.addStretch(1)
+        self.move_actions = QVBoxLayout()
+        self.move_actions.addWidget(self.start_button)
+        self.move_actions.addWidget(self.stop_button)
+        voltage_layout.addLayout(self.move_actions)
+        voltage_form.addRow(voltage_row)
+        self.controls.addWidget(voltage_card)
         self.home_button = QPushButton("Move to configured home")
         self.home_button.clicked.connect(self.home)
         self.controls.addWidget(self.home_button)
@@ -38,9 +61,8 @@ class WorkspaceMirrorPopup(TaskPanel):
         note.setWordWrap(True)
         self.controls.addWidget(note)
         self.controls.addStretch(1)
-        self.move_row = self.left.itemAt(1).layout()
-        self.move_row.insertStretch(0, 1)
-        self.move_row.addStretch(1)
+        # The inherited action row is empty after moving its buttons into the card.
+        self.move_row = self.left.takeAt(1).layout()
         for button in (self.start_button, self.stop_button):
             button.setFixedWidth(130)
             button.setMinimumHeight(30)
@@ -82,7 +104,7 @@ def install_mirror_popup(window, workspace):
     popup.setStyleSheet(window.styleSheet())
     window.mirror_window = popup
     window.pages["Mirror position"] = popup
-    window.mirror_button = QPushButton("Mirrors")
+    window.mirror_button = QPushButton("Mirror")
     window.mirror_button.setToolTip("Open manual mirror voltage positioning")
     camera = window.camera_button
     button = window.mirror_button
