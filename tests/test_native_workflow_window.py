@@ -63,7 +63,8 @@ def test_native_operator_panels_preview_refuse_and_cleanup(tmp_path, monkeypatch
         try:
             window.show()
             app.processEvents()
-            assert window.tabs.count() == 5
+            assert window.tabs.count() == 6
+            assert window.tabs.tabText(window.tabs.count() - 1) == "Analysis"
             assert mapping._config() == workspace.plan.map_config
             assert spectrum._snapshot_settings() == workspace.plan.spectrum_request.settings
             assert mapping.map_controller._acquisition.__self__ is workspace

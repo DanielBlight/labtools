@@ -221,6 +221,10 @@ def create_window(workspace):
                 protect_parameter_wheels(self.stage_window)
                 protect_parameter_wheels(self)
                 protect_parameter_wheels(self.mirror_window)
+            from labtools.analysis.gui import AnalysisPanel
+
+            self.analysis_panel = AnalysisPanel(self)
+            self.tabs.addTab(self.analysis_panel, "Analysis")
             if all_hardware:
                 self.overview_status.setText("Ready - real hardware; connections and outputs require explicit actions")
             elif hardware_spectrum:
@@ -418,6 +422,9 @@ def create_window(workspace):
                     self.overview_status.setText("Stage disconnect failed: " + str(error))
                     event.ignore()
                     return
+            if not self.analysis_panel.shutdown():
+                event.ignore()
+                return
             workspace.close()
             super().closeEvent(event)
 
