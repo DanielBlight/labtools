@@ -47,6 +47,11 @@ class IDQCountService:
             channel, threshold_v=threshold_v, edge=edge, enabled=enabled
         )
 
+    def prepare_counts(self, channels, integration_time_s):
+        if self._closed:
+            raise RuntimeError("IDQ count service is closed")
+        return self._controller.prepare_counts(channels, integration_time_s)
+
     def get_simultaneous_counts(self, channels, integration_time_s):
         if self._closed:
             raise RuntimeError("IDQ count service is closed")

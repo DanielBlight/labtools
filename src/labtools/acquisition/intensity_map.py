@@ -518,6 +518,12 @@ def acquire_intensity_map(
                     enabled=True,
                 )
 
+            # Native counters establish and verify their hardware window once.
+            # Simulation/custom providers may implement the existing count API only.
+            prepare_counts = getattr(controller, "prepare_counts", None)
+            if callable(prepare_counts):
+                prepare_counts(config.channels, config.integration_time_s)
+
             gate.open()
             for y_index, x_index in _scan_indices(config):
                 if completed[y_index, x_index]:

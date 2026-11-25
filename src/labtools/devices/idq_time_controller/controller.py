@@ -45,6 +45,7 @@ Usage example
 from __future__ import annotations
 
 import logging
+import math
 import re
 import subprocess
 import tempfile
@@ -117,6 +118,7 @@ class IDQTimeController:
         self._stream_clients: dict[int, dlt.StreamClient] = {}
         self._stream_ports: dict[int, int] = {}
         self._stream_ids: dict[int, str] = {}
+        self._count_configuration = None
 
     # ------------------------------------------------------------------
     # Context manager
@@ -129,6 +131,7 @@ class IDQTimeController:
                 f"Cannot reach Time Controller at {self.address}:{SCPI_PORT}. "
                 "Check network and that the device is powered on."
             )
+        self._count_configuration = None
         self._context = zmq.Context()
         self._tc = self._context.socket(zmq.REQ)
         self._tc.setsockopt(zmq.RCVTIMEO, 2000)
@@ -207,6 +210,7 @@ class IDQTimeController:
         enabled : bool
             Whether to enable the channel.
         """
+        self._count_configuration = None
         block = "STAR" if channel == 0 else f"INPU{channel}"
         edge_scpi = "RISING" if edge.lower() == "rising" else "FALLing"
         ena_scpi = "ON" if enabled else "OFF"
@@ -320,38 +324,67 @@ class IDQTimeController:
 
         return _parse_numeric_response(self._query(f"{block}:COUNter?"), cast=int)
 
+    def prepare_counts(self, channels: Iterable[int], duration_s: float) -> None:
+        """Configure fixed-duration cyclic input counters once per map/settings.
+
+        Integration time is in milliseconds, matching the legacy mapping code.
+        Read back both mode and duration; never silently use a different window.
+        """
+        selected = tuple(channels)
+        if not selected or len(set(selected)) != len(selected):
+            raise ValueError("Select unique Time Controller channels.")
+        if any(isinstance(c, bool) or not isinstance(c, int) or c not in range(5) for c in selected):
+            raise ValueError("Time Controller channels must be integers from 0 to 4.")
+        if isinstance(duration_s, bool) or not math.isfinite(float(duration_s)) or duration_s <= 0:
+            raise ValueError("duration_s must be finite and greater than zero.")
+        duration_s = float(duration_s)
+        key = (selected, duration_s)
+        if self._count_configuration == key:
+            return
+        self._count_configuration = None
+        integration_ms = duration_s * 1000.0
+        for channel in selected:
+            block = "STARt" if channel == 0 else f"INPU{channel}"
+            self._cmd(f"{block}:COUNter:MODE CYCLE")
+            self._cmd(f"{block}:COUNter:INTEgrationtime {integration_ms:.12g}")
+            mode = self._query(f"{block}:COUNter:MODE?").strip().upper()
+            actual_ms = _parse_numeric_response(
+                self._query(f"{block}:COUNter:INTEgrationtime?"), cast=float
+            )
+            if mode not in {"CYCL", "CYCLE", "CYCLIC"}:
+                raise RuntimeError(f"Channel {channel}: cyclic counter mode not confirmed: {mode!r}")
+            if not math.isfinite(actual_ms) or not math.isclose(
+                actual_ms, integration_ms, rel_tol=1e-9, abs_tol=1e-9
+            ):
+                raise RuntimeError(
+                    f"Channel {channel}: requested {integration_ms:g} ms, read back {actual_ms:g} ms"
+                )
+        self._count_configuration = key
+
     def get_simultaneous_counts(
         self,
         channels: Iterable[int],
         duration_s: float,
     ) -> dict[int, int]:
-        """Count one or more inputs over one shared record window.
+        """Read fixed-window input counts, without per-pixel reset or REC commands.
 
-        Every selected counter is reset before the record starts, so returned
-        values describe the same integration interval.
+        The historical method name is retained for compatibility. Free-running
+        channels are not guaranteed phase-aligned. Wait two integration periods
+        after the caller's move/settle so even the last completed window starts
+        after that movement, regardless of the counter phase. Host delays do not
+        lengthen the hardware integration window. This conservative policy costs
+        about 2T per pixel, and Stop is checked by the caller between pixels.
         """
-        selected = tuple(int(channel) for channel in channels)
-        if not selected:
-            raise ValueError("Select at least one Time Controller channel.")
-        if len(set(selected)) != len(selected):
-            raise ValueError("Time Controller channels must be unique.")
-        if any(channel not in {0, 1, 2, 3, 4} for channel in selected):
-            raise ValueError("Time Controller channels must be in the range 0 to 4.")
-        if duration_s <= 0:
-            raise ValueError("duration_s must be greater than zero.")
-
+        selected = tuple(channels)
+        self.prepare_counts(selected, duration_s)
+        time.sleep(2.0 * float(duration_s) + 0.001)
+        values = {}
         for channel in selected:
             block = "STARt" if channel == 0 else f"INPU{channel}"
-            self._cmd(f"{block}:COUN:MODE ACCU;RESEt")
-        self._run_record(int(duration_s * 1e12))
-
-        values: dict[int, int] = {}
-        for channel in selected:
-            block = "STARt" if channel == 0 else f"INPU{channel}"
-            values[channel] = _parse_numeric_response(
-                self._query(f"{block}:COUNter?"),
-                cast=int,
-            )
+            value = _parse_numeric_response(self._query(f"{block}:COUNter?"), cast=int)
+            if value < 0:
+                raise RuntimeError(f"Channel {channel}: negative counter result {value}")
+            values[channel] = value
         return values
 
     def get_count_rate(self, channel: int, integration_s: float = 0.1) -> float:
@@ -469,6 +502,7 @@ class IDQTimeController:
         self._close_active_dlt_streams()
 
         # Configure record for continuous streaming
+        self._count_configuration = None
         self._cmd("REC:TRIG:ARM:MODE MANUal")
         self._cmd("REC:ENABle ON")
         self._cmd("REC:STOP")
@@ -510,6 +544,7 @@ class IDQTimeController:
         channels = list(channels)
         self._close_active_dlt_streams()
 
+        self._count_configuration = None
         self._cmd("REC:TRIG:ARM:MODE MANUal")
         self._cmd("REC:ENABle ON")
         self._cmd("REC:STOP")
@@ -682,6 +717,7 @@ class IDQTimeController:
 
     def _run_record(self, duration_ps: int):
         """Run a single timed acquisition and block until it finishes."""
+        self._count_configuration = None
         self._cmd("REC:TRIG:ARM:MODE MANUal")
         self._cmd("REC:ENABle ON")
         self._cmd("REC:STOP")
