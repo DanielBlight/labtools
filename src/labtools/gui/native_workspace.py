@@ -215,6 +215,10 @@ def create_window(workspace):
                 from labtools.gui.workspace_mirror_popup import install_mirror_popup
 
                 install_mirror_popup(self, workspace)
+                from labtools.gui.sample_stage_popup import install_sample_stage
+
+                install_sample_stage(self, workspace)
+                protect_parameter_wheels(self.stage_window)
                 protect_parameter_wheels(self)
                 protect_parameter_wheels(self.mirror_window)
             if all_hardware:
@@ -253,12 +257,15 @@ def create_window(workspace):
                 )
 
                 restore_experiment_preferences(self, data)
+            if hasattr(mapping, "focus_controls"):
+                mapping.focus_controls.restore(data)
 
         def display_preferences(self):
             mapping, spectrum, anneal = (self.pages[name] for name in ("Intensity map", "Spectrum", "Annealing"))
             from labtools.gui.experiment_panels import experiment_preferences
 
-            return {**experiment_preferences(self), "map_log": mapping.log_colour_scale.isChecked(),
+            return {**experiment_preferences(self),
+                    **(mapping.focus_controls.preferences() if hasattr(mapping, "focus_controls") else {}), "map_log": mapping.log_colour_scale.isChecked(),
                     "map_manual_limits": mapping.custom_colour_limits.isChecked(),
                     "map_min": mapping.colour_min.value(), "map_max": mapping.colour_max.value(),
                     "spectrum_output": spectrum.output_directory.text(), "spectrum_csv": spectrum.save_csv.isChecked(),
@@ -404,6 +411,13 @@ def create_window(workspace):
                 self.workspace_hub.shutdown()
             if all_hardware:
                 self.laser_panel.close()
+            if hasattr(self, "stage_window"):
+                try:
+                    self.stage_window.shutdown()
+                except Exception as error:  # noqa: BLE001 - veto window close if stage cleanup fails
+                    self.overview_status.setText("Stage disconnect failed: " + str(error))
+                    event.ignore()
+                    return
             workspace.close()
             super().closeEvent(event)
 

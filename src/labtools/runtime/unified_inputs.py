@@ -201,7 +201,8 @@ class UnifiedDrafts:
         self.store.write(payload)
 
 
-DISPLAY_TYPES = {"map_log": bool, "map_manual_limits": bool, "map_min": float, "map_max": float,
+DISPLAY_TYPES = {"focus_enabled": bool, "focus_levels": str, "focus_sweeps": int,
+                 "focus_steps": int, "focus_direction": int, "focus_settle": float, "map_log": bool, "map_manual_limits": bool, "map_min": float, "map_max": float,
                  "spectrum_output": str, "spectrum_csv": bool, "spectrum_png": bool,
                  "camera_exposure_ms": float, "camera_gain": float, "camera_interval_ms": float,
                  "camera_white_level": float,
@@ -252,4 +253,16 @@ def validate_display(data):
             raise ValueError("Sequence spectrum coordinate outside GUI range")
     if "sequence_spectrum_settle" in data and not 0 <= data["sequence_spectrum_settle"] <= 60:
         raise ValueError("Sequence spectrum settle outside GUI range")
+    if any(key.startswith("focus_") for key in data):
+        from labtools.runtime.focus_stack import FocusPlan
+
+        text = data.get("focus_levels", "0")
+        if len(text) > 4000:
+            raise ValueError("Focus voltage list is too long")
+        values = tuple(float(v.strip()) for v in text.replace(";", ",").split(",") if v.strip())
+        if data.get("focus_direction", 0) not in (0, 1):
+            raise ValueError("Invalid focus extension direction")
+        FocusPlan(values, data.get("focus_sweeps", 1), data.get("focus_steps", 1),
+                  1 if data.get("focus_direction", 0) == 0 else -1,
+                  data.get("focus_settle", .5)).validate()
     return dict(data)

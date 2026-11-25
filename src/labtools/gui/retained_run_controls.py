@@ -41,6 +41,11 @@ class _SaveAvailability(QObject):
         self.timer.setInterval(150)
         self.timer.timeout.connect(self.refresh)
         self.timer.start()
+        # Update immediately after worker cleanup, not only on the next timer tick.
+        controller = getattr(panel, "map_controller", None)
+        if controller is not None:
+            controller.idle.connect(self.refresh)
+        self.refresh()
 
     @pyqtSlot()
     def refresh(self):
