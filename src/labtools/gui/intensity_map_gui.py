@@ -49,7 +49,7 @@ from labtools.acquisition.intensity_map import (
 )
 from labtools.gui.operator_ui import ResponsiveSplitter
 from labtools.runtime.lazy_devices import LazyITC4000 as ITC4000
-from labtools.visualisation.intensity_map import update_map_axes
+from labtools.visualisation.intensity_map import MIRROR_Y_PER_X_SCALE, update_map_axes
 
 MAX_LASER_CURRENT_A = 0.040
 DEFAULT_LASER_CURRENT_A = 0.080
@@ -457,7 +457,7 @@ class IntensityMapWindow(QMainWindow):
         self.image = self.axes.imshow(
             np.full((2, 2), np.nan),
             origin="lower",
-            aspect="auto",
+            aspect=MIRROR_Y_PER_X_SCALE,
             interpolation="nearest",
             cmap="inferno",
             extent=(0, 1, 0, 1),
@@ -1652,6 +1652,7 @@ class IntensityMapWindow(QMainWindow):
             self.axes.set_ylim(extent[2], extent[3])
             self.axes.set_xlabel("Mirror X voltage (V)")
             self.axes.set_ylabel("Mirror Y voltage (V)")
+            self.axes.set_aspect(MIRROR_Y_PER_X_SCALE, adjustable="box")
             self._map_display_signature = signature
             # Discard zoom history from the previous map, not on every frame.
             self.toolbar.update()

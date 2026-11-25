@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFormLayout,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -253,20 +255,21 @@ class FocusControls(QWidget):
         self.levels = QLineEdit("0, 10, 20, 30, 40, 50, 60")
         self.levels.setToolTip("Explicit DC voltages in acquisition order, each between 0 and 60 V")
         self.sweeps = integer(1, 1, 50)
-        self.steps = integer(1, 1, 100)
-        self.direction = QComboBox()
-        self.direction.addItems(["Controller +", "Controller -"])
-        self.settle = number(.5, 0, 30)
+        for field in (self.levels, self.sweeps):
+            field.setMinimumWidth(0)
+            field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.browse = QComboBox()
         self.common_scale = QCheckBox("Common colour scale for retained maps")
         self.common_scale.setChecked(True)
-        note = QLabel("Coarse extension: ramp Z DC to zero, take the selected single steps, then repeat the voltage list. "
-                      "Not calibrated displacement. Check step direction and sample clearance. "
-                      "Completion/Stop holds the last DC offset. Save results exports the whole stack.")
+        note = QLabel("If value >1, one 60V step is taken in +Z before repeating the DC sweep.")
         note.setWordWrap(True)
-        add_card(root, "Z focus stack", [(None, self.enabled), ("DC levels (V)", self.levels),
-            ("Sweeps", self.sweeps), ("Steps between sweeps", self.steps), ("Extension direction", self.direction),
-            ("Z settling (s)", self.settle), ("Retained map", self.browse), (None, self.common_scale), (None, note)])
+        focus_card = add_card(root, "Z focus stack", [(None, self.enabled), ("DC levels (V)", self.levels),
+            ("DC sweeps", self.sweeps), (None, note),
+            ("Retained map", self.browse), (None, self.common_scale)])
+        focus_form = focus_card.findChild(QFormLayout)
+        if focus_form is None:
+            raise RuntimeError("Focus-stack form layout was not created")
+        focus_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.browse.currentIndexChanged.connect(self.show_map)
         self.common_scale.toggled.connect(lambda: self.show_map(self.browse.currentIndex()))
         self.original_start = panel._start_worker
@@ -279,24 +282,20 @@ class FocusControls(QWidget):
 
     def preferences(self):
         return {"focus_enabled": self.enabled.isChecked(), "focus_levels": self.levels.text(),
-                "focus_sweeps": self.sweeps.value(), "focus_steps": self.steps.value(),
-                "focus_direction": self.direction.currentIndex(), "focus_settle": self.settle.value()}
+                "focus_sweeps": self.sweeps.value()}
 
     def restore(self, data):
         if "focus_levels" in data:
             self.levels.setText(data["focus_levels"])
         if "focus_enabled" in data:
             self.enabled.setChecked(data["focus_enabled"])
-        for key, widget in (("focus_sweeps", self.sweeps), ("focus_steps", self.steps), ("focus_settle", self.settle)):
-            if key in data:
-                widget.setValue(data[key])
-        if "focus_direction" in data:
-            self.direction.setCurrentIndex(data["focus_direction"])
+        if "focus_sweeps" in data:
+            self.sweeps.setValue(data["focus_sweeps"])
 
     def plan(self):
         values = tuple(float(v.strip()) for v in self.levels.text().replace(";", ",").split(",") if v.strip())
-        return FocusPlan(values, self.sweeps.value(), self.steps.value(),
-                         1 if self.direction.currentIndex() == 0 else -1, self.settle.value()).validate()
+        return FocusPlan(values, self.sweeps.value(), steps_per_extension=1,
+                         direction=1, settle_s=0.2).validate()
 
     def start(self, config):
         if self.panel.map_controller.busy:

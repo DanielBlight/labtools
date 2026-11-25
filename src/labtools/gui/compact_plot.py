@@ -1,5 +1,7 @@
 """Bounded manual plot geometry without constrained-layout/GridSpec solving."""
 
+from labtools.visualisation.intensity_map import MIRROR_Y_PER_X_SCALE
+
 
 def repair_plot_geometry(panel):
     figure = panel.figure
@@ -17,7 +19,10 @@ def repair_plot_geometry(panel):
         available_h = max(20.0, height - bottom_px - top_px)
         x0, x1 = panel.axes.get_xlim()
         y0, y1 = panel.axes.get_ylim()
-        data_ratio = abs((x1 - x0) / (y1 - y0)) if y1 != y0 else 1.0
+        data_ratio = (
+            abs((x1 - x0) / ((y1 - y0) * MIRROR_Y_PER_X_SCALE))
+            if y1 != y0 else 1.0
+        )
         # Preserve data proportions when practical, but never create a ribbon-like
         # map. The visible axes box stays between 3:4 and 4:3.
         box_ratio = min(max(data_ratio, 0.75), 4.0 / 3.0)
@@ -25,7 +30,7 @@ def repair_plot_geometry(panel):
         axes_h = min(available_h, available_w / box_ratio)
         left = left_px + max(0.0, (available_w - axes_w) / 2.0)
         bottom = bottom_px + max(0.0, (available_h - axes_h) / 2.0)
-        panel.axes.set_aspect('auto')
+        panel.axes.set_aspect(MIRROR_Y_PER_X_SCALE, adjustable='box')
         panel.colourbar.ax.set_axes_locator(None)
         # Disable Colorbar's internal fixed box-aspect so the rendered bar uses
         # exactly the same bottom and height as the map axes.

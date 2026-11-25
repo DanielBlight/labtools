@@ -89,7 +89,9 @@ def run_focus_stack(stage, token, plan, config, acquisition, *, progress_callbac
                 for step in range(plan.steps_per_extension):
                     stage.check_stop(cancelled)
                     before = stage.call(token, "read")
-                    after = stage.call(token, "step", axis=1, value=plan.direction, cancel=cancelled)
+                    # Every automatic coarse extension is one +Z step at 60 V.
+                    stage.call(token, "amplitude", axis=1, value=60, cancel=cancelled)
+                    after = stage.call(token, "step", axis=1, value=1, cancel=cancelled)
                     run["coarse_history"].append({"sweep": sweep, "step": step + 1,
                         "direction": plan.direction, "before": before, "after": after})
             for level, voltage in enumerate(plan.voltages):

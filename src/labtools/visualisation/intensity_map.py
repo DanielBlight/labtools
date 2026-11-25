@@ -14,6 +14,10 @@ from numpy.typing import NDArray
 
 FloatArray = NDArray[np.float64]
 
+# Legacy optical calibration: one volt on mirror Y produces 0.75 times the
+# plotted physical displacement of one volt on mirror X.
+MIRROR_Y_PER_X_SCALE = 0.75
+
 
 @dataclass(frozen=True)
 class PlotSettings:
@@ -143,7 +147,7 @@ def plot_intensity_map(
             float(y_values.min()),
             float(y_values.max()),
         ),
-        aspect="auto",
+        aspect=MIRROR_Y_PER_X_SCALE,
         interpolation="nearest",
         cmap=plot_settings.cmap,
         norm=norm,

@@ -45,7 +45,6 @@ def test_focus_stack_runs_browses_and_retains(window):
     focus.enabled.setChecked(True)
     focus.levels.setText("0, 20")
     focus.sweeps.setValue(2)
-    focus.settle.setValue(0)
     panel.start_new()
     spin(app, lambda: not panel.map_controller.busy)
     assert focus.run is not None, panel.status.text()
