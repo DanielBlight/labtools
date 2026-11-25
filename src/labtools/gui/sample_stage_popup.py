@@ -58,7 +58,7 @@ class StagePopup(QWidget):
     def __init__(self, workspace, parent):
         super().__init__(parent, Qt.WindowType.Window)
         self.workspace = workspace
-        self.service = SampleStage(simulated=bool(workspace.simulation_only), realtime=False)
+        self.service = SampleStage(simulated=bool(getattr(workspace, "simulation_only", False)), realtime=False)
         self.future = None
         self.token = None
         self.lease = None
@@ -223,7 +223,8 @@ class StagePopup(QWidget):
                                        f"Limit: {data['limit'] or 'none'} | {', '.join(data['status']) or 'idle'}")
             for widget_name, key in (("dc", "dc_v"), ("amplitude", "amplitude_v"), ("frequency", "frequency_hz")):
                 if not controls[widget_name].hasFocus():
-                    controls[widget_name].setValue(data[key])
+                    value = round(data[key]) if widget_name == "frequency" else data[key]
+                    controls[widget_name].setValue(value)
 
     def request_stop(self):
         self.service.request_stop()
