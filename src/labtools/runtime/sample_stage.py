@@ -4,7 +4,9 @@ Axes are X=0, Z=1, Y=2. No native imports or connection until Connect.
 """
 
 import math
+import multiprocessing
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, Lock
 
@@ -20,12 +22,109 @@ def finite(value, low, high, name):
     return value
 
 
-def native_factory():
+def _anc350_process(connection):
+    """Own pylablib, PyUSB and libusb0 for exactly one connection lifetime."""
+    device = None
     try:
         from pylablib.devices import Attocube
-    except ImportError as error:
-        raise RuntimeError("Stage requires pylablib in this Python environment; no connection made") from error
-    return Attocube.ANC350()
+
+        device = Attocube.ANC350()
+        connection.send(("ready", None))
+        while True:
+            request = connection.recv()
+            if request[0] == "close":
+                break
+            _kind, method, args, kwargs = request
+            try:
+                connection.send(("result", getattr(device, method)(*args, **kwargs)))
+            except BaseException as error:  # noqa: BLE001 - child protocol must return driver failures
+                connection.send(("error", type(error).__name__, str(error), traceback.format_exc()))
+    except BaseException as error:  # noqa: BLE001 - child startup failure crosses process boundary
+        try:
+            connection.send(("startup-error", type(error).__name__, str(error), traceback.format_exc()))
+        except (BrokenPipeError, EOFError, OSError):
+            pass
+    finally:
+        if device is not None:
+            try:
+                device.close()
+            except BaseException:  # noqa: BLE001, S110 - process exit is the final USB cleanup boundary
+                pass
+        connection.close()
+
+
+class ANC350Process:
+    """Fresh process per USB session so Disconnect releases all libusb0 state."""
+
+    def __init__(self, *, startup_timeout=15.0, operation_timeout=35.0):
+        context = multiprocessing.get_context("spawn")
+        parent, child = context.Pipe()
+        process = context.Process(target=_anc350_process, args=(child,), name="labtools-anc350-usb", daemon=True)
+        process.start()
+        child.close()
+        self._connection = parent
+        self._process = process
+        self._operation_timeout = operation_timeout
+        try:
+            message = self._receive(startup_timeout, "ANC350 startup")
+            if message[0] != "ready":
+                self._raise_remote(message)
+        except BaseException:
+            self._terminate()
+            raise
+
+    def _receive(self, timeout, action):
+        if not self._connection.poll(timeout):
+            raise TimeoutError(f"{action} exceeded {timeout:g} seconds")
+        try:
+            return self._connection.recv()
+        except EOFError as error:
+            raise RuntimeError(f"{action} process exited unexpectedly") from error
+
+    @staticmethod
+    def _raise_remote(message):
+        _kind, name, detail, remote = message
+        error = RuntimeError(f"ANC350 {name}: {detail}")
+        error.add_note("Remote ANC350 process traceback:\n" + remote)
+        raise error
+
+    def _call(self, method, *args, **kwargs):
+        if not self._process.is_alive():
+            raise RuntimeError("ANC350 USB process is not running")
+        self._connection.send(("call", method, args, kwargs))
+        message = self._receive(self._operation_timeout, method)
+        if message[0] == "error":
+            self._raise_remote(message)
+        if message[0] != "result":
+            raise RuntimeError(f"Unexpected ANC350 process reply: {message[0]}")
+        return message[1]
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return lambda *args, **kwargs: self._call(name, *args, **kwargs)
+
+    def _terminate(self):
+        if self._process.is_alive():
+            self._process.terminate()
+        self._process.join(5)
+        self._connection.close()
+
+    def close(self):
+        if self._process.is_alive():
+            try:
+                self._connection.send(("close",))
+                self._process.join(10)
+            except (BrokenPipeError, EOFError, OSError):
+                pass
+        if self._process.is_alive():
+            self._terminate()
+            raise RuntimeError("ANC350 close timed out; USB process was terminated")
+        self._connection.close()
+
+
+def native_factory():
+    return ANC350Process()
 
 
 class StageStopped(RuntimeError):
@@ -224,9 +323,11 @@ class SampleStage:
             return self.snapshot()
         if command == "disconnect":
             if self.device is not None:
-                # Closing USB does not ground or ramp the sample automatically.
-                self.device.close()
-                self.device = None
+                # Drop the parent reference before close. The subprocess proxy
+                # terminates its USB process on a close timeout, so reconnect can
+                # always create a fresh process even if cleanup reports failure.
+                device, self.device = self.device, None
+                device.close()
                 self.fault = None
             return self.snapshot()
         if command == "read":
