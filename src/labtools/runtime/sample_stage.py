@@ -22,13 +22,61 @@ def finite(value, low, high, name):
     return value
 
 
+def _open_anc350(base, backend_error, usb_error):
+    """Adapt only the verified pre-sync read, without editing site-packages."""
+    import ast
+    import inspect
+    import textwrap
+
+    def optional_boot_read(instrument, size):
+        try:
+            return instrument.read(size)
+        except backend_error as error:
+            cause = error.__cause__
+            if not isinstance(cause, usb_error):
+                raise
+            message = str(cause).lower()
+            if not all(token in message for token in ('libusb0-dll', '_usb_reap_async', 'timeout error')):
+                raise
+            # A quiet IN endpoint is allowed only before the sync request.
+            return None
+
+    original = base.__init__
+    module = ast.parse(textwrap.dedent(inspect.getsource(original)))
+    if len(module.body) != 1 or not isinstance(module.body[0], ast.FunctionDef):
+        raise RuntimeError('Unrecognised ANC350 constructor; no USB connection attempted')
+    init = module.body[0]
+    expected = ast.parse('with self._close_on_error():\n    self.instr.flush_read()\n    self.instr.read(512)\n    self.set_value(0x000A, 0, 0)\n    self.get_hardware_id()\n    self.enable_updates(False)').body[0]
+    blocks = [node for node in init.body if isinstance(node, ast.With)
+              and ast.dump(node) == ast.dump(expected)]
+    if len(blocks) != 1 or init.decorator_list or not init.args.args or not init.args.args or init.args.args[0].arg != 'self':
+        raise RuntimeError('Unrecognised ANC350 startup sequence; no USB connection attempted')
+    read = blocks[0].body[1]
+    read.value = ast.Call(func=ast.Name(id='_optional_boot_read', ctx=ast.Load()),
+                          args=[read.value.func.value, *read.value.args], keywords=[])
+    calls = [node for node in ast.walk(init) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Name) and node.func.id == 'super'
+             and not node.args and not node.keywords]
+    if len(calls) != 1 or original.__code__.co_freevars != ('__class__',):
+        raise RuntimeError('Unrecognised ANC350 constructor; no USB connection attempted')
+    calls[0].args = [ast.Name(id='_anc_base', ctx=ast.Load()), ast.Name(id='self', ctx=ast.Load())]
+    namespace = {**original.__globals__, '_optional_boot_read': optional_boot_read, '_anc_base': base}
+    # Compile a private constructor; the dependency and its module are unchanged.
+    exec(compile(ast.fix_missing_locations(module), original.__code__.co_filename, 'exec'), namespace)  # noqa: S102
+    adapted = type('LabtoolsANC350', (base,), {'__init__': namespace['__init__']})
+    return adapted()
+
+
 def _anc350_process(connection):
     """Own pylablib, PyUSB and libusb0 for exactly one connection lifetime."""
     device = None
     try:
         from pylablib.devices import Attocube
 
-        device = Attocube.ANC350()
+        from pylablib.devices.Attocube.base import AttocubeBackendError
+        from usb.core import USBError
+
+        device = _open_anc350(Attocube.ANC350, AttocubeBackendError, USBError)
         connection.send(("ready", None))
         while True:
             request = connection.recv()
