@@ -178,3 +178,19 @@ def test_hyperspectral_capture_save_and_reload_dark(window, tmp_path, monkeypatc
     panel.load_dark()
     assert panel.dark_record.record_id == record_id
     assert panel.snapshot().dark_mode == "pre_taken"
+
+
+def test_hyperspectral_scan_card_pairs_x_and_y(window):
+    from PyQt6.QtWidgets import QGridLayout, QLabel
+
+    _app, widget, _workspace = window
+    panel = widget.pages["Hyperspectral"]
+    labels = panel.findChildren(QLabel)
+    card = next(label.parentWidget() for label in labels if label.text() == "Scan")
+    assert not any(label.text() == "Spatial grid" for label in labels)
+    grid = card.findChild(QGridLayout)
+    for row, pair in enumerate(((panel.x_start, panel.y_start),
+                                (panel.x_stop, panel.y_stop),
+                                (panel.x_points, panel.y_points))):
+        for column, control in enumerate(pair):
+            assert grid.itemAtPosition(row, column).widget() is control.parentWidget()

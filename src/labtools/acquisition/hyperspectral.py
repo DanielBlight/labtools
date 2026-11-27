@@ -34,7 +34,7 @@ from labtools.config.hyperspectral import (
 from labtools.simulation.hyperspectral import SIMULATION_MODEL_ID
 
 HYPERSPECTRAL_ARCHIVE_SCHEMA_VERSION = 1
-HYPERSPECTRAL_SERVICE_VERSION = 2
+HYPERSPECTRAL_SERVICE_VERSION = 3
 
 
 class HyperspectralMirror(Protocol):
@@ -69,6 +69,7 @@ class HyperspectralProvenance:
     created_utc: str
     dark_mode: str | None = None
     dark_record_id: str | None = None
+    reusable_dark_stage: str | None = None
     combine_mode: str | None = None
     n_frames: int | None = None
 
@@ -276,6 +277,7 @@ class HyperspectralService:
                 created_utc=datetime.now(UTC).isoformat(),
                 dark_mode=config.dark_mode,
                 dark_record_id=dark.record_id if dark is not None else None,
+                reusable_dark_stage=("pre_stitch" if dark.segments else "post_stitch") if dark is not None else None,
                 combine_mode=config.spectrum.combine_mode,
                 n_frames=config.spectrum.n_frames,
             )

@@ -64,6 +64,14 @@ class WorkspaceSpectrumTransport:
                     self.check()
                     return await backend.acquire(dark_mode)
 
+                async def acquire_with_dark(self, segments):
+                    self.check()
+                    return await backend.acquire_with_dark(segments)
+
+                async def capture_dark_segments(self):
+                    self.check()
+                    return await backend.capture_dark_segments()
+
                 async def capture_dark(self):
                     self.check()
                     return await backend.capture_dark()

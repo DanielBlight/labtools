@@ -392,6 +392,7 @@ def test_real_dark_adapter_delegates_existing_range_capture(settings, monkeypatc
 
     async def capture(spec, start, end, **kwargs):
         calls.append("dark")
+        assert kwargs.pop("segments") == []
         assert kwargs == {"stitch_pixel_overlap": 20, "n_frames": 1, "mode": "single"}
         return DarkSpectrum(np.array([500.0, 600.0]), np.array([1.0, 2.0]))
 

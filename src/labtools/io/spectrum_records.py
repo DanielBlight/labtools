@@ -12,6 +12,7 @@ import numpy as np
 
 from labtools.acquisition.spectrum_service import DarkRecord, SpectrumResult
 from labtools.config.spectrum import SpectrumSettings
+from labtools.processing.dark_spectrum import DarkSegment
 
 
 def _save(path, metadata, **arrays):
@@ -26,10 +27,15 @@ def _save(path, metadata, **arrays):
 
 
 def save_dark_record(path: str | Path, dark: DarkRecord) -> None:
+    segments = {}
+    for index, segment in enumerate(dark.segments):
+        segments[f"segment_{index}_wavelength_nm"] = segment.wavelength_nm
+        segments[f"segment_{index}_intensity"] = segment.intensity
     _save(
         path,
         {
-            "schema_version": 1,
+            "schema_version": 2 if dark.segments else 1,
+            **({"centres_nm": [segment.centre_nm for segment in dark.segments]} if dark.segments else {}),
             "kind": "dark",
             "settings": asdict(dark.settings),
             "record_id": dark.record_id,
@@ -38,13 +44,14 @@ def save_dark_record(path: str | Path, dark: DarkRecord) -> None:
         },
         wavelength_nm=dark.wavelength_nm,
         intensity=dark.intensity,
+        **segments,
     )
 
 
 def load_dark_record(path: str | Path) -> DarkRecord:
     with np.load(path, allow_pickle=False) as data:
-        if set(data.files) != {"metadata", "wavelength_nm", "intensity"}:
-            raise ValueError("Unexpected dark archive members")
+        if "metadata" not in data.files:
+            raise ValueError("Missing dark archive metadata")
         meta = json.loads(str(data["metadata"].item()))
         expected = {
             "schema_version",
@@ -54,13 +61,23 @@ def load_dark_record(path: str | Path) -> DarkRecord:
             "captured_at",
             "synthetic_data",
         }
-        if not isinstance(meta, dict) or set(meta) != expected:
+        version = meta.get("schema_version") if isinstance(meta, dict) else None
+        if type(version) is not int or version not in {1, 2}:
+            raise ValueError("Unsupported dark archive schema")
+        members = {"metadata", "wavelength_nm", "intensity"}
+        centres = []
+        if version == 2:
+            expected.add("centres_nm")
+            centres = meta.get("centres_nm")
+            if not isinstance(centres, list) or not centres or len(centres) > len(data.files):
+                raise ValueError("Invalid dark segment centres")
+            for index in range(len(centres)):
+                members.update((f"segment_{index}_wavelength_nm", f"segment_{index}_intensity"))
+        if set(data.files) != members or len(data.files) != len(members):
+            raise ValueError("Unexpected dark archive members")
+        if set(meta) != expected:
             raise ValueError("Invalid dark metadata")
-        if (
-            type(meta["schema_version"]) is not int
-            or meta["schema_version"] != 1
-            or meta["kind"] != "dark"
-        ):
+        if meta["kind"] != "dark":
             raise ValueError("Unsupported dark archive schema")
         if not isinstance(meta["settings"], dict) or set(meta["settings"]) != {
             field.name for field in fields(SpectrumSettings)
@@ -78,6 +95,9 @@ def load_dark_record(path: str | Path) -> DarkRecord:
             data["intensity"],
             meta["record_id"],
             meta["captured_at"],
+            tuple(DarkSegment(centre, data[f"segment_{index}_wavelength_nm"],
+                              data[f"segment_{index}_intensity"])
+                  for index, centre in enumerate(centres)),
         )
 
 

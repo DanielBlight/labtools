@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 from loguru import logger
 
-from labtools.processing.dark_spectrum import DarkSpectrum, subtract_dark_spectrum
+from labtools.processing.dark_spectrum import (
+    DarkSegment,
+    DarkSpectrum,
+    subtract_dark_spectrum,
+)
 from labtools.processing.spectrum import CombineMode
 
 if TYPE_CHECKING:
@@ -111,6 +115,7 @@ async def capture_range_dark(
     n_frames: int = 1,
     mode: CombineMode = "single",
     stitcher=None,
+    segments: list[DarkSegment] | None = None,
 ) -> DarkSpectrum:
     """Capture one reusable stitched dark spectrum across the full range."""
     if end_wavelength < start_wavelength:
@@ -136,6 +141,8 @@ async def capture_range_dark(
             n_frames=n_frames,
             mode=mode,
         )
+        if segments is not None:
+            segments.append(DarkSegment(float(center), x_data, y_data))
         captures.append(_vendor_capture(x_data, y_data))
 
     x_out, y_out = (stitcher if stitcher is not None else _stitch_and_filter)(
@@ -156,6 +163,7 @@ async def get_range_spectrum(
     mode: CombineMode = "single",
     dark_mode: RangeDarkMode = "none",
     pre_taken_dark: DarkSpectrum | None = None,
+    dark_segments: tuple[DarkSegment, ...] = (),
     stitcher=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Acquire a stitched spectrum with selectable dark-frame behaviour."""
@@ -175,6 +183,13 @@ async def get_range_spectrum(
         stitch_pixel_overlap,
     )
     logger.info("Range scan requires {} centre wavelength(s)", len(centers))
+
+    if dark_segments and (dark_mode != "none" or pre_taken_dark is not None):
+        raise ValueError("Per-centre reusable dark cannot be combined with another dark mode")
+    if dark_segments and (len(centers) != len(dark_segments) or not np.allclose(
+        centers, [item.centre_nm for item in dark_segments], rtol=0.0, atol=1e-8
+    )):
+        raise ValueError("Reusable dark centre plan differs; recapture the dark")
 
     frame_dark_mode = {
         "none": "none",
@@ -197,6 +212,14 @@ async def get_range_spectrum(
             mode=mode,
             dark_frame_mode=frame_dark_mode,
         )
+        if dark_segments:
+            segment = dark_segments[index - 1]
+            try:
+                y_data = subtract_dark_spectrum(
+                    x_data, y_data, DarkSpectrum(segment.wavelength_nm, segment.intensity)
+                )
+            except ValueError as error:
+                raise ValueError(f"Dark grid differs at centre {center:.4f} nm; recapture the dark") from error
         captures.append(_vendor_capture(x_data, y_data))
 
     x_out, y_out = (stitcher if stitcher is not None else _stitch_and_filter)(

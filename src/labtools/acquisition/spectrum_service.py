@@ -18,7 +18,11 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from labtools.config.spectrum import SpectrumSettings
-from labtools.processing.dark_spectrum import DarkSpectrum, subtract_dark_spectrum
+from labtools.processing.dark_spectrum import (
+    DarkSegment,
+    DarkSpectrum,
+    subtract_dark_spectrum,
+)
 
 
 def owned_vector(values: ArrayLike) -> np.ndarray:
@@ -36,9 +40,12 @@ class DarkRecord:
     intensity: np.ndarray
     record_id: str
     captured_at: str
+    segments: tuple[DarkSegment, ...] = ()
 
     def __post_init__(self) -> None:
         self.settings.validate()
+        if not isinstance(self.segments, tuple) or not all(isinstance(item, DarkSegment) for item in self.segments):
+            raise ValueError("Invalid dark segments")
         if not isinstance(self.record_id, str) or not self.record_id.strip():
             raise ValueError("Dark record requires an identifier")
         stamp = datetime.fromisoformat(self.captured_at)
@@ -245,10 +252,15 @@ class SpectrumService:
         settings.validate()
         self._cancel(cancel_requested)
         async with self._backend_factory(settings) as backend:
-            x, y = await backend.capture_dark()
+            capture_segments = getattr(backend, "capture_dark_segments", None)
+            segments = ()
+            if capture_segments is None:
+                x, y = await backend.capture_dark()
+            else:
+                x, y, segments = await capture_segments()
             self._cancel(cancel_requested)
             return DarkRecord(
-                settings, x, y, uuid4().hex, datetime.now(UTC).isoformat()
+                settings, x, y, uuid4().hex, datetime.now(UTC).isoformat(), segments
             )
 
     async def acquire(
@@ -272,6 +284,13 @@ class SpectrumService:
             raise ValueError("Supply a dark only for pre_taken mode")
         self._cancel(cancel_requested)
         async with self._backend_factory(settings) as backend:
+            if dark_mode == "pre_taken" and dark.segments:
+                acquire_with_dark = getattr(backend, "acquire_with_dark", None)
+                if acquire_with_dark is None:
+                    raise ValueError("Configured backend cannot apply a per-centre reusable dark")
+                x, y = await acquire_with_dark(dark.segments)
+                self._cancel(cancel_requested)
+                return SpectrumResult(settings, x, y, None, dark_mode, dark.record_id)
             x, y = await backend.acquire(
                 "none" if dark_mode == "pre_taken" else dark_mode
             )

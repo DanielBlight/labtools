@@ -57,6 +57,11 @@ async def open_real_range(
 
         class Backend:
             async def capture_dark(self) -> tuple[np.ndarray, np.ndarray]:
+                x, y, _segments = await self.capture_dark_segments()
+                return x, y
+
+            async def capture_dark_segments(self):
+                segments = []
                 dark = await capture_range_dark(
                     spec,
                     settings.start_nm,
@@ -64,11 +69,15 @@ async def open_real_range(
                     stitch_pixel_overlap=settings.overlap_pixels,
                     n_frames=settings.n_frames,
                     mode=settings.combine_mode,
+                    segments=segments,
                     **({"stitcher": stitcher} if stitcher is not None else {}),
                 )
-                return dark.wavelength_nm, dark.intensity
+                return dark.wavelength_nm, dark.intensity, tuple(segments)
 
-            async def acquire(self, dark_mode: str) -> tuple[np.ndarray, np.ndarray]:
+            async def acquire_with_dark(self, segments):
+                return await self.acquire("none", dark_segments=segments)
+
+            async def acquire(self, dark_mode: str, *, dark_segments=()) -> tuple[np.ndarray, np.ndarray]:
                 return await get_range_spectrum(
                     spec,
                     settings.start_nm,
@@ -77,6 +86,7 @@ async def open_real_range(
                     n_frames=settings.n_frames,
                     mode=settings.combine_mode,
                     dark_mode=dark_mode,
+                    **({"dark_segments": dark_segments} if dark_segments else {}),
                     **({"stitcher": stitcher} if stitcher is not None else {}),
                 )
 

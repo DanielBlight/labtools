@@ -64,6 +64,23 @@ class DarkSpectrum:
         return cls(x_data, y_data)
 
 
+@dataclass(frozen=True)
+class DarkSegment:
+    """Combined closed-shutter data on one original detector grid."""
+
+    centre_nm: float
+    wavelength_nm: np.ndarray
+    intensity: np.ndarray
+
+    def __post_init__(self):
+        if type(self.centre_nm) not in (int, float) or not np.isfinite(self.centre_nm):
+            raise ValueError("Dark centre must be finite")
+        spectrum = DarkSpectrum(self.wavelength_nm, self.intensity)
+        for name in ("wavelength_nm", "intensity"):
+            array = getattr(spectrum, name)
+            object.__setattr__(self, name, np.frombuffer(array.tobytes(), dtype=float))
+
+
 def subtract_dark_spectrum(
     wavelength_nm: np.ndarray,
     intensity: np.ndarray,

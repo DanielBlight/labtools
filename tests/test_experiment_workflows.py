@@ -168,7 +168,8 @@ def test_batch_context_does_not_authorize_an_unrelated_thread(workspace):
         batch.release()
 
 
-def test_real_cube_uses_one_horiba_session_and_homes_mirror(tmp_path, monkeypatch):
+@pytest.mark.parametrize("dark_mode", ["none", "once_per_map"])
+def test_real_cube_uses_one_horiba_session_and_homes_mirror(tmp_path, monkeypatch, dark_mode):
     import json
     from dataclasses import asdict
 
@@ -194,12 +195,18 @@ def test_real_cube_uses_one_horiba_session_and_homes_mirror(tmp_path, monkeypatc
                            map_factories=map_factories(plan.map_config, trace),
                            spectrometer_factory=spectrum_factory(plan.spectrum_request.settings, trace),
                            stitcher=lambda captures, start, end: (np.array(captures[0][0]), np.array(captures[0][1][0]))) as workspace:
-        config = replace(cube(workspace), backend="real")
+        config = replace(cube(workspace), backend="real", dark_mode=dark_mode)
         batch = Batch(workspace._ownership, ("Spectrum", "Intensity map"))
         try:
             with batch.borrow("Spectrum"), batch.borrow("Intensity map"):
                 result = run_cube(workspace, config, output_path=tmp_path / "real-contract.npz")
             assert result.completed_points == 4
+            if dark_mode == "once_per_map":
+                from labtools.io.spectrum_records import load_dark_record
+
+                dark = load_dark_record(tmp_path / "dark.npz")
+                assert dark.segments and result.provenance.dark_record_id == dark.record_id
+                assert result.provenance.reusable_dark_stage == "pre_stitch"
             events = trace.events()
             assert sum(e["resource"] == "spectrometer" and e["action"] == "connect" for e in events) == 1
             assert sum(e["resource"] == "mirror" and e["action"] == "move" for e in events) == 5

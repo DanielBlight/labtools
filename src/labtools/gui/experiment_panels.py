@@ -32,7 +32,12 @@ from PyQt6.QtWidgets import (
 from labtools.acquisition.spectrum_service import DarkRecord
 from labtools.config.anneal_program import AnnealProgram
 from labtools.config.hyperspectral import HyperspectralConfig
-from labtools.gui.workspace_studio import StudioSplit, add_card, scroll_content
+from labtools.gui.workspace_studio import (
+    StudioSplit,
+    add_card,
+    scroll_content,
+    two_column_fields,
+)
 from labtools.io.spectrum_records import load_dark_record, save_dark_record
 from labtools.runtime.experiment_workflows import (
     capture_cube_dark,
@@ -434,12 +439,15 @@ class CubePanel(MeasurementView, TaskPanel):
         self.y_start, self.y_stop = number(base.y_start_v, low, high), number(base.y_stop_v, low, high)
         self.x_points, self.y_points = integer(base.x_points), integer(base.y_points)
         self.settle = number(base.settle_time_s, 0, 60)
-        add_card(self.controls, "Spatial grid", [("X start (V)", self.x_start), ("X stop (V)", self.x_stop),
-            ("X points", self.x_points), ("Y start (V)", self.y_start), ("Y stop (V)", self.y_stop),
-            ("Y points", self.y_points), ("Mirror settle (s)", self.settle)])
+        add_card(self.controls, "Scan", [(None, two_column_fields([
+            ("X start (V)", self.x_start), ("Y start (V)", self.y_start),
+            ("X end (V)", self.x_stop), ("Y end (V)", self.y_stop),
+            ("X points", self.x_points), ("Y points", self.y_points),
+            ("", QWidget()), ("Mirror settle", self.settle),
+        ]))])
         self.dark = QComboBox()
         self.dark.addItems(["none", "per_center", "per_frame", "once_per_map", "pre_taken"])
-        self.dark.setToolTip("once_per_map: capture one stitched dark for this scan. "
+        self.dark.setToolTip("once_per_map: capture one reusable dark for this scan. "
                              "pre_taken: use the captured or loaded dark below.")
         self.dark_record = None
         self._pending_dark = None
@@ -496,7 +504,8 @@ class CubePanel(MeasurementView, TaskPanel):
     def _accept_dark(self, record, *, select=False):
         self.dark_record = record
         label = "Synthetic dark" if record.settings.backend == "simulation" else "Dark"
-        self.dark_status.setText(f"{label}: {record.settings.n_frames} frames / {record.settings.combine_mode}\n{record.captured_at}")
+        stage = "pre-stitch per centre" if record.segments else "stitched-only / post-stitch"
+        self.dark_status.setText(f"{label} ({stage}): {record.settings.n_frames} frames / {record.settings.combine_mode}\n{record.captured_at}")
         if select:
             self.dark.setCurrentText("pre_taken")
             self._display_dark(record)

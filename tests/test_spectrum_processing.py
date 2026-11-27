@@ -300,3 +300,66 @@ assert os.listdir('.') == []
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reusable_dark_corrects_native_segments_before_overlap(monkeypatch, tmp_path):
+    from labtools.acquisition.spectrum_service import DarkRecord
+    from labtools.config.spectrum import SpectrumSettings
+    from labtools.io.spectrum_records import load_dark_record, save_dark_record
+
+    centre = 0.0
+
+    async def centres(*_args):
+        return [500.0, 501.0]
+
+    async def move(value):
+        nonlocal centre
+        centre = value
+        return value
+
+    async def capture(**_kwargs):
+        return np.array([centre, centre + 1]), np.array(
+            [12., 20.] if centre == 500.0 else [31., 40.]
+        )
+
+    async def signal(**kwargs):
+        assert kwargs["dark_frame_mode"] == "none"
+        axis, dark = await capture()
+        return axis, dark + np.array([-1., 5.] if centre == 500.0 else [7., 9.])
+
+    def stitch(captures, *_args):
+        np.testing.assert_array_equal(captures[0][1][0], [-1., 5.])
+        np.testing.assert_array_equal(captures[1][1][0], [7., 9.])
+        return np.array([500., 501., 502.]), np.array([-1., 6., 9.])
+
+    monkeypatch.setattr(ranges, "_center_wavelengths", centres)
+    device = SimpleNamespace(set_wavelength=move, get_dark_spectrum=capture, get_spectrum=signal)
+    segments = []
+    preview = asyncio.run(ranges.capture_range_dark(
+        device, 500., 502., segments=segments,
+        stitcher=lambda *_args: (np.array([500., 501., 502.]), np.array([12., 25.5, 40.])),
+    ))
+    settings = SpectrumSettings("test", "syncerity", 0.1, 2, 0, 0.5, 500., 502.)
+    path = tmp_path / "dark.npz"
+    save_dark_record(path, DarkRecord(settings, preview.wavelength_nm, preview.intensity,
+        "dark-test", "2026-11-27T09:00:00+00:00", tuple(segments)))
+    loaded = load_dark_record(path)
+    assert len(loaded.segments) == 2 and not loaded.segments[0].intensity.flags.writeable
+    _, values = asyncio.run(ranges.get_range_spectrum(
+        device, 500., 502., dark_segments=loaded.segments, stitcher=stitch,
+    ))
+    np.testing.assert_array_equal(values, [-1., 6., 9.])
+    with pytest.raises(ValueError, match="centre plan differs"):
+        asyncio.run(ranges.get_range_spectrum(
+            device, 500., 502., dark_segments=loaded.segments[::-1], stitcher=stitch,
+        ))
+
+    async def shifted(**kwargs):
+        axis, values = await signal(**kwargs)
+        return axis + 0.1, values
+
+    device.get_spectrum = shifted
+    with pytest.raises(ValueError, match="Dark grid differs at centre"):
+        asyncio.run(ranges.get_range_spectrum(
+            device, 500., 502., dark_segments=loaded.segments, stitcher=stitch,
+        ))
