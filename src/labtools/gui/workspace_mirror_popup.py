@@ -70,7 +70,7 @@ class WorkspaceMirrorPopup(TaskPanel):
         control_width = max(control.sizeHint().width() for control in paired_controls)
         control_height = max(control.sizeHint().height() for control in paired_controls)
         for control in paired_controls:
-            control.setFixedSize(control_width, control_height)
+            control.setMinimumSize(control_width, control_height)
         self.start_button.clicked.connect(self.move)
         self.save_result_button.hide()
         self.hide()
@@ -105,7 +105,10 @@ class WorkspaceMirrorPopup(TaskPanel):
 
 def install_mirror_popup(window, workspace):
     popup = WorkspaceMirrorPopup(workspace, window)
+    from labtools.gui.operator_ui import fit_initial_window
+
     popup.setStyleSheet(window.styleSheet())
+    fit_initial_window(popup, preferred=(440, 290))
     window.mirror_window = popup
     window.pages["Mirror position"] = popup
     window.mirror_button = QPushButton("Mirror")

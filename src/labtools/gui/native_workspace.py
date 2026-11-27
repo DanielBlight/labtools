@@ -204,7 +204,7 @@ def create_window(workspace):
             if "Alignment" in self.pages:
                 self.alignment_window = self.pages["Alignment"]
                 self.alignment_window.setStyleSheet(self.styleSheet())
-                self.alignment_window.resize(1050, 700)
+                fit_initial_window(self.alignment_window, preferred=(1050, 700))
                 self.open_alignment_button = QPushButton("Open alignment")
                 self.open_alignment_button.clicked.connect(self.open_alignment)
                 self.pages["Spectrum"].centralWidget().layout().insertWidget(1, self.open_alignment_button)
@@ -224,6 +224,7 @@ def create_window(workspace):
             from labtools.analysis.gui import AnalysisPanel
 
             self.analysis_panel = AnalysisPanel(self)
+            protect_parameter_wheels(self)
             self.tabs.addTab(self.analysis_panel, "Analysis")
             if all_hardware:
                 self.overview_status.setText("Ready - real hardware; connections and outputs require explicit actions")
@@ -320,7 +321,10 @@ def create_window(workspace):
         def any_busy(self):
             hub = getattr(self, "workspace_hub", None)
             laser = getattr(self, "laser_panel", None)
-            return (bool(busy_workflows(self.pages)) or self.camera_window.busy
+            analysis = getattr(self, "analysis_panel", None)
+            saving = any(getattr(button, "_save_job", None) is not None for button in self.findChildren(QPushButton))
+            return (saving or (analysis is not None and analysis.future is not None)
+                    or bool(busy_workflows(self.pages)) or self.camera_window.busy
                     or bool(hub is not None and hub.busy)
                     or bool(all_hardware and laser is not None and laser.busy))
 
@@ -374,18 +378,20 @@ def create_window(workspace):
                 self.close()
 
         def closeEvent(self, event):
-            if all_hardware:
+            if all_hardware and not self._close_after_cleanup:
                 self.laser_panel.request_shutdown()
             if self.any_busy():
                 if "Alignment" in self.pages:
                     self.pages["Alignment"]._workspace_closing = True
-                self.stop_all()
+                if not self._close_after_cleanup:
+                    self.stop_all()
+                    self.analysis_panel.cancel_load()
                 self._close_after_cleanup = True
                 self._close_retry.start()
                 self.overview_status.setText("Stopping; window will close after cleanup")
                 self.tabs.setCurrentIndex(0)
                 self.details_toggle.setChecked(True)
-                self.report.setPlainText("Stop requested; window will close after worker cleanup.")
+                self.report.setPlainText("Waiting for running jobs. Retained saves are allowed to finish; other work is stopping.")
                 event.ignore()
                 return
             self._close_retry.stop()

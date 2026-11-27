@@ -399,7 +399,10 @@ class FocusControls(QWidget):
 
 def install_sample_stage(window, workspace):
     popup = StagePopup(workspace, window)
+    from labtools.gui.operator_ui import fit_initial_window
+
     popup.setStyleSheet(window.styleSheet())
+    fit_initial_window(popup, preferred=(980, 650))
     window.stage_window = popup
     window.pages["Stage"] = popup
     window.stage_button = QPushButton("Stage")

@@ -44,8 +44,8 @@ from .exports import (
 )
 from .loaders import LoadSession, read_json
 from .models import AnalysisError
-from .plotting import draw_cube_pixel, render
-from .processing import PlotState, quantity_key
+from .plotting import draw_cube_pixel, map_cache_key, render
+from .processing import PlotState, map_values, quantity_key
 
 LABELS = {
     'group_view': 'Stack / sequence view', 'trend_metric': 'Trend metric',
@@ -104,6 +104,7 @@ class AnalysisPanel(QWidget):
         self._details = {}
         self._map_cache = {}
         self._export_job = False
+        self._fit_job = False
         layout = QVBoxLayout(self)
         # Allow the existing narrow vertical layout to shrink below child size hints.
         layout.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
@@ -310,8 +311,18 @@ class AnalysisPanel(QWidget):
         if self.future is None or not self.future.done():
             return
         future, self.future = self.future, None
+        finished_fit = self._fit_job
+        finished_export = self._export_job
         try:
             result = future.result()
+            if self._fit_job:
+                if self.cancel.is_set():
+                    self.status.setText('Fit cancelled; previous plot retained')
+                else:
+                    state, node, cache = result
+                    if self.node is node and self.read_controls() == state:
+                        self._render_state(state, cache)
+                return
             if self._export_job:
                 self.status.setText(f'Saved: {result}')
                 return
@@ -332,10 +343,13 @@ class AnalysisPanel(QWidget):
             else:
                 self.publish(*result)
         except Exception as error:  # noqa: BLE001 - GUI boundary reports malformed files without crashing
-            self.fail(error)
+            if finished_fit and self.cancel.is_set():
+                self.status.setText('Fit cancelled; previous plot retained')
+            else:
+                self.fail(error)
         finally:
-            if self._export_job:
-                self._export_job = False
+            if finished_fit or finished_export:
+                self._fit_job = self._export_job = False
                 self.sidebar.setEnabled(True)
                 self.toolbar.setEnabled(True)
 
@@ -478,13 +492,55 @@ class AnalysisPanel(QWidget):
         self.redraw()
 
     def redraw(self):
-        if self.node is None or self._export_job:
+        if self.node is None or self._export_job or self._fit_job:
             return
+        previously_valid = self._display_valid
         self._display_valid = False
         try:
             state = self.read_controls()
+        except AnalysisError as error:
+            if previously_valid or self._display_arrays:
+                self.status.setText(f'Plot not updated (previous view shown): {error}')
+            else:
+                self.fail(error)
+            return
+        if self.node.kind == 'cube' and state.cube_view in {'fit_width', 'fit_area'} and self.future is None:
+            node = self.node
             reference = self.nodes.get(state.reference_key)
-            arrays, details = render(self.figure, self.node, state, reference=reference, common_nodes=list(self.root.walk()), map_cache=self._map_cache)
+            candidates = [node]
+            if state.comparison in {'difference', 'ratio'} and reference is not None and reference.kind == 'cube':
+                candidates.append(reference)
+            elif state.common:
+                candidates.extend(item for item in self.root.walk()
+                                  if item is not node and quantity_key(item, state) == quantity_key(node, state))
+            pending = [(map_cache_key(item, state), item) for item in candidates]
+            if any(key not in self._map_cache for key, _item in pending):
+                cancel = Event()
+                cached = {key: self._map_cache[key] for key, _item in pending if key in self._map_cache}
+
+                def fit_map():
+                    for key, item in pending:
+                        if key not in cached:
+                            cached[key] = map_values(item, state, cancel=cancel.is_set)
+                    return state, node, cached
+
+                self.cancel = cancel
+                self._fit_job = True
+                self.sidebar.setEnabled(False)
+                self.toolbar.setEnabled(False)
+                self.future = self.executor.submit(fit_map)
+                self.status.setText('Fitting map; use Cancel job to stop between pixels')
+                return
+        self._render_state(state, self._map_cache)
+
+    def _render_state(self, state, cache):
+        try:
+            reference = self.nodes.get(state.reference_key)
+            arrays, details = render(self.figure, self.node, state, reference=reference, common_nodes=list(self.root.walk()), map_cache=cache)
+            if cache is not self._map_cache:
+                self._map_cache.update(list(cache.items())[-16:])
+                while len(self._map_cache) > 16:
+                    self._map_cache.pop(next(iter(self._map_cache)))
             self.state = state
             self._display_arrays = arrays
             self._details = details
@@ -637,8 +693,8 @@ class AnalysisPanel(QWidget):
             self.fail(error)
 
     def close_dataset(self):
-        if self._export_job:
-            self.status.setText('Finish or cancel exporting before closing the dataset')
+        if self._export_job or self._fit_job:
+            self.status.setText('Finish or cancel the current job before closing the dataset')
             return
         self._map_cache.clear()
         self.figure.clear()

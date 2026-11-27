@@ -108,7 +108,7 @@ def test_controls_grid_reflows_and_splitter_reflows(qt):
     split.show()
     try:
         for width, columns, orientation in [(1400, 2, core.Qt.Orientation.Horizontal),
-                                             (800, 1, core.Qt.Orientation.Horizontal),
+                                             (800, 1, core.Qt.Orientation.Vertical),
                                              (1400, 2, core.Qt.Orientation.Horizontal)]:
             grid.resize(width, 600)
             split.resize(width, 600)
@@ -140,7 +140,9 @@ def test_full_workspace_views_and_retained_controls(qt, tmp_path, monkeypatch, s
         window.resize(*size)
         window.show()
         try:
-            assert window.tabs.tabText(window.tabs.count() - 1) == 'Laser'
+            tab_names = [window.tabs.tabText(i) for i in range(window.tabs.count())]
+            assert tab_names.count('Laser') == 1
+            assert tab_names.count('Analysis') == 1
             assert 'Camera' not in {window.tabs.tabText(i) for i in range(window.tabs.count())}
             assert window._studio_installed
             for index in range(window.tabs.count()):

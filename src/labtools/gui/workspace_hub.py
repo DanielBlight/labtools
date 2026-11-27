@@ -98,7 +98,7 @@ class WorkspaceHub(QWidget):
         content.addWidget(settings)
         devices, device_form = card("Device and workflow status")
         self.device_table = QTableWidget(0, 2)
-        self.device_table.setHorizontalHeaderLabels(["Device / workflow", "Observed status"])
+        self.device_table.setHorizontalHeaderLabels(["Device / workflow", "Reported status (not a live probe)"])
         self.device_table.horizontalHeader().setStretchLastSection(True)
         self.device_table.setMinimumHeight(245)
         self.device_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -114,8 +114,10 @@ class WorkspaceHub(QWidget):
         self.spectrum_button = QPushButton("Test spectrum connection")
         self.laser_button = QPushButton("Connect laser controller")
         self.map_button = QPushButton("Test map connections")
-        for index, button in enumerate((self.refresh_button, self.camera_button, self.spectrum_button, self.laser_button, self.map_button)):
-            action_row.addWidget(button, index // 3, index % 3)
+        self._device_actions = (self.refresh_button, self.camera_button, self.spectrum_button, self.laser_button, self.map_button)
+        self._device_action_layout = action_row
+        self._device_columns = None
+        self._arrange_device_actions(2)
         device_form.addRow(actions)
         self.refresh_button.clicked.connect(self.refresh)
         self.camera_button.clicked.connect(window.open_camera)
@@ -169,6 +171,17 @@ class WorkspaceHub(QWidget):
             self.window.save_preferences()
         except (ValueError, RuntimeError, OSError, TypeError) as error:
             self.message.setText(str(error))
+
+    def _arrange_device_actions(self, columns):
+        if columns == self._device_columns:
+            return
+        self._device_columns = columns
+        for index, button in enumerate(self._device_actions):
+            self._device_action_layout.addWidget(button, index // columns, index % columns)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._arrange_device_actions(3 if event.size().width() >= 900 else 2 if event.size().width() >= 560 else 1)
 
     def export_settings(self, path):
         self.require_idle()

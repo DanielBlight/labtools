@@ -155,10 +155,10 @@ def polish_panel(panel, *, simulated=False):
         confirm.hide()
 
 
-def fit_initial_window(window):
+def fit_initial_window(window, *, preferred=(1400, 920)):
     """Use available logical screen geometry, never a fixed desktop-sized window."""
     screen = window.screen()
     if screen is not None:
         available = screen.availableGeometry()
-        window.resize(min(1400, max(480, available.width() - 64)),
-                      min(920, max(360, available.height() - 80)))
+        window.resize(min(preferred[0], max(240, available.width() - 64)),
+                      min(preferred[1], max(180, available.height() - 80)))

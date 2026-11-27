@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
@@ -297,6 +298,7 @@ class CameraWindow(QDialog):
         self.overlay_layout.setSpacing(6)
         layout.addLayout(self.overlay_layout)
         self.surface = self.surface_type()
+        self.surface.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         zoom_controls = QHBoxLayout()
         zoom_controls.addWidget(QLabel("Preview zoom"))
         self.zoom_out = QPushButton("−")
@@ -316,7 +318,10 @@ class CameraWindow(QDialog):
         self.surface.view_changed.connect(self._update_zoom_controls)
         self._update_zoom_controls()
 
-        preview = QHBoxLayout()
+        preview_body = QWidget()
+        preview_body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        preview = QHBoxLayout(preview_body)
+        preview.setContentsMargins(0, 0, 0, 0)
         preview.setSpacing(6)
         preview.addWidget(self.surface, 1)
         self.settings_toggle = QToolButton()
@@ -327,8 +332,10 @@ class CameraWindow(QDialog):
         preview.addWidget(self.settings_toggle)
 
         self.settings_panel = QFrame()
-        self.settings_panel.setMinimumWidth(270)
-        self.settings_panel.setMaximumWidth(310)
+        self.settings_scroll = QScrollArea()
+        self.settings_scroll.setWidgetResizable(True)
+        self.settings_scroll.setMaximumWidth(310)
+        self.settings_scroll.setWidget(self.settings_panel)
         settings = QVBoxLayout(self.settings_panel)
         settings.setContentsMargins(10, 4, 10, 4)
         settings.setSpacing(8)
@@ -383,16 +390,18 @@ class CameraWindow(QDialog):
         self.dark_status.setWordWrap(True)
         settings.addWidget(self.dark_status)
         settings.addStretch(1)
-        preview.addWidget(self.settings_panel)
-        layout.addLayout(preview, 1)
+        preview.addWidget(self.settings_scroll)
+        layout.addWidget(preview_body, 1)
         self.settings_toggle.toggled.connect(self._set_settings_visible)
         self._set_settings_visible(True)
 
         self.status = QLabel("Camera: NOT PROBED")
         self.status.setWordWrap(True)
+        self.status.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         layout.addWidget(self.status)
         self.metrics = QLabel("Preview: fixed 8/16-bit scale; no per-frame autoscaling")
         self.metrics.setWordWrap(True)
+        self.metrics.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         layout.addWidget(self.metrics)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.draw_latest)
@@ -400,6 +409,13 @@ class CameraWindow(QDialog):
         self.gain.valueChanged.connect(self.update_targets)
         self.display_ms.valueChanged.connect(self.update_interval)
         self._connected_ok = False
+        from labtools.gui.operator_ui import (
+            fit_initial_window,
+            protect_parameter_wheels,
+        )
+
+        fit_initial_window(self, preferred=(1000, 760))
+        protect_parameter_wheels(self)
 
     def _update_zoom_controls(self):
         zoom = self.surface.zoom
@@ -410,23 +426,7 @@ class CameraWindow(QDialog):
         self.zoom_in.setEnabled(ready and zoom < self.surface.MAX_ZOOM)
 
     def _set_settings_visible(self, visible):
-        currently_visible = self.settings_panel.isVisible()
-        if visible == currently_visible and hasattr(self, "_settings_width"):
-            return
-        if currently_visible and not visible:
-            self._settings_width = max(self.settings_panel.width(), self.settings_panel.sizeHint().width()) + 6
-            self._preview_size = self.surface.size()
-            self.surface.setFixedSize(self._preview_size)
-            self.settings_panel.hide()
-            self.resize(max(self.minimumWidth(), self.width() - self._settings_width), self.height())
-        elif visible and not currently_visible:
-            width = getattr(self, "_settings_width", self.settings_panel.sizeHint().width() + 6)
-            self.resize(self.width() + width, self.height())
-            self.settings_panel.show()
-            self.surface.setMinimumSize(240, 180)
-            self.surface.setMaximumSize(16777215, 16777215)
-        else:
-            self.settings_panel.setVisible(visible)
+        self.settings_scroll.setVisible(visible)
         self.settings_toggle.setArrowType(
             Qt.ArrowType.RightArrow if visible else Qt.ArrowType.LeftArrow
         )

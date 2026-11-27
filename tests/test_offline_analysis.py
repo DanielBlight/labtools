@@ -623,3 +623,16 @@ def test_export_cancel_does_not_publish(tmp_path, examples, session):
     with pytest.raises(AnalysisError, match='cancelled'):
         export_view(tmp_path, node, node, PlotState(), source, cancel=lambda: True)
     assert not list(tmp_path.iterdir())
+
+
+def test_cube_fit_cancellation_between_pixels(tmp_path, session):
+    pytest.importorskip('scipy')
+    path = tmp_path / 'cube.npz'
+    wavelength = np.linspace(500, 530, 31)
+    signal = np.exp(-0.5 * ((wavelength - 515) / 2)**2)
+    np.savez(path, x_v=[0., 1.], y_v=[0.], wavelength_nm=wavelength,
+             intensity=np.tile(signal, (1, 2, 1)), completed_mask=[[True, True]])
+    cube = session.load(path)
+    checks = iter((False, True))
+    with pytest.raises(AnalysisError, match='Fitted map cancelled'):
+        map_values(cube, PlotState(cube_view='fit_area'), cancel=lambda: next(checks))

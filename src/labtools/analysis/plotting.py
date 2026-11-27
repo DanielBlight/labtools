@@ -106,6 +106,11 @@ def draw_cube_pixel(figure, node, state, output, details):
         details['pixel_diagnostic'] = str(error)
 
 
+def map_cache_key(node, state):
+    return (node.key, tuple((name, value) for name, value in state.to_dict().items()
+                            if name not in {'pixel_x', 'pixel_y', 'dpi', 'vmin', 'vmax', 'cmap', 'log', 'common'}))
+
+
 def render(figure, node, state, *, reference=None, common_nodes=(), map_cache=None):
     """Return the exact displayed arrays and provenance; never mutate source data."""
     state.validate()
@@ -121,8 +126,7 @@ def render(figure, node, state, *, reference=None, common_nodes=(), map_cache=No
     def derived(item):
         if map_cache is None:
             return map_values(item, state)
-        key = (item.key, tuple((name, value) for name, value in state.to_dict().items()
-                               if name not in {'pixel_x', 'pixel_y', 'dpi', 'vmin', 'vmax', 'cmap', 'log', 'common'}))
+        key = map_cache_key(item, state)
         if key not in map_cache:
             if len(map_cache) >= 16:
                 map_cache.pop(next(iter(map_cache)))

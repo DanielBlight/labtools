@@ -152,3 +152,30 @@ def test_failed_camera_open_releases_lease_and_allows_retry(monkeypatch):
         assert len(released) == 2
     finally:
         window.close()
+
+
+def test_settings_toggle_preserves_outer_geometry_and_zoom(monkeypatch):
+    app = qt(monkeypatch)
+    from labtools.gui.camera_window import CameraWindow
+
+    window = CameraWindow()
+    try:
+        window.show()
+        app.processEvents()
+        window.surface.set_pixels(np.zeros((300, 400), dtype=np.uint8))
+        window.surface.set_zoom(2.)
+        original = window.size()
+        preview_height = window.surface.height()
+        window.settings_toggle.setChecked(False)
+        app.processEvents()
+        assert window.size() == original
+        assert not window.settings_scroll.isVisible()
+        assert window.surface.height() >= preview_height - 2
+        assert window.surface.zoom == 2.
+        window.settings_toggle.setChecked(True)
+        app.processEvents()
+        assert window.size() == original
+        assert window.settings_scroll.isVisible()
+        assert window.surface.zoom == 2.
+    finally:
+        window.close()

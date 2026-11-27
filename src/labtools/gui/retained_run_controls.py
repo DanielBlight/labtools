@@ -1,5 +1,6 @@
 """Unified optional output, retained-result export and compact Annealing layout."""
 
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSlot
@@ -52,7 +53,49 @@ class _SaveAvailability(QObject):
         if self.panel.workspace._closed:
             self.timer.stop()
             return
-        self.button.setEnabled(not self.busy() and self.retention.get() is not None)
+        self.button.setEnabled(getattr(self.button, "_save_job", None) is None
+                               and not self.busy() and self.retention.get() is not None)
+
+
+def start_retained_export(panel, button, folder, value, *, label, settings=None):
+    """Export the captured result off-thread; only the polling slot touches Qt."""
+    if getattr(button, "_save_job", None) is not None:
+        return
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="labtools-export")
+    future = executor.submit(export_retained, folder, value, label=label, settings=settings)
+    timer = QTimer(button)
+    button._save_job = future
+    button.setEnabled(False)
+
+    def status(text):
+        if hasattr(panel, "set_status"):
+            panel.set_status(text)
+        else:
+            panel.status.setText(text)
+
+    def poll():
+        if not future.done():
+            return
+        timer.stop()
+        try:
+            target = future.result()
+            if not getattr(panel, "busy", False):
+                status(f"Saved retained run: {target}")
+        except Exception as error:  # noqa: BLE001 - GUI worker boundary
+            status(f"Save failed; retained run is unchanged: {error}")
+        finally:
+            executor.shutdown(wait=False)
+            button._save_job = None
+            refresh = getattr(button, "_availability", None)
+            if refresh is not None:
+                refresh.refresh()
+            else:
+                button.setEnabled(not panel.busy and panel.last_result is not None)
+            timer.deleteLater()
+
+    status("Saving retained run…")
+    timer.timeout.connect(poll)
+    timer.start(50)
 
 
 def save_button(panel, retention, busy, label):
@@ -68,15 +111,7 @@ def save_button(panel, retention, busy, label):
         folder = QFileDialog.getExistingDirectory(panel, "Save retained " + label)
         if not folder:
             return
-        try:
-            target = export_retained(folder, value, label=label)
-            text = "Saved retained run: " + str(target)
-        except (OSError, ValueError, TypeError) as error:
-            text = "Save failed; retained run is unchanged: " + str(error)
-        if hasattr(panel, "set_status"):
-            panel.set_status(text)
-        else:
-            panel.status.setText(text)
+        start_retained_export(panel, button, folder, value, label=label)
     button.clicked.connect(save)
     button._availability = _SaveAvailability(button, panel, retention, busy)
     button.setEnabled(False)

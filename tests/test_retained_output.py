@@ -44,6 +44,7 @@ def test_cube_optional_output_and_save_button(window, tmp_path, monkeypatch):
     assert not (tmp_path / "no-cube-output").exists()
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(tmp_path / "saved"))
     panel.save_result_button.click()
+    spin(app, lambda: getattr(panel.save_result_button, "_save_job", None) is None)
     assert len(list((tmp_path / "saved").glob('*/run.json'))) == 1
     assert panel.last_result.completed_points == 4
 
@@ -88,6 +89,7 @@ def test_map_no_output_then_save_without_reacquisition(window, tmp_path, monkeyp
     assert retained["result"].complete
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(tmp_path / "saved-map"))
     panel.save_retained_button.click()
+    spin(app, lambda: getattr(panel.save_retained_button, "_save_job", None) is None)
     assert list((tmp_path / "saved-map").glob('*/arrays.npz'))
     assert panel.retained_run.get() is retained
 
@@ -107,6 +109,7 @@ def test_anneal_no_output_then_save(window, tmp_path, monkeypatch):
     # Save is gated by a UI timer, allow its first refresh.
     spin(app, lambda: panel.save_retained_button.isEnabled())
     panel.save_retained_button.click()
+    spin(app, lambda: getattr(panel.save_retained_button, "_save_job", None) is None)
     assert list((tmp_path / "saved-anneal").glob('*/run.json'))
 
 
@@ -123,6 +126,7 @@ def test_spectrum_no_automatic_output_and_save_after_run(window, tmp_path, monke
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(tmp_path / "saved-spectrum"))
     spin(app, lambda: panel.save_retained_button.isEnabled())
     panel.save_retained_button.click()
+    spin(app, lambda: getattr(panel.save_retained_button, "_save_job", None) is None)
     assert list((tmp_path / "saved-spectrum").glob('*/arrays.npz'))
 
 
@@ -151,3 +155,20 @@ def test_failed_export_keeps_retained_data_and_unique_path(tmp_path):
     path = export_retained(tmp_path, retention.get())
     with np.load(path / "arrays.npz", allow_pickle=False) as archive:
         np.testing.assert_equal(archive['array_000000'], value['data'])
+
+
+def test_workspace_close_waits_for_offline_analysis(window):
+    from concurrent.futures import Future
+
+    app, widget, workspace = window
+    analysis = widget.analysis_panel
+    pending = Future()
+    analysis.future = pending
+    try:
+        assert not widget.close()
+        assert analysis.cancel.is_set()
+        assert not workspace._closed
+        assert not analysis._closed
+    finally:
+        pending.set_exception(RuntimeError('cancelled test job'))
+        spin(app, lambda: workspace._closed)

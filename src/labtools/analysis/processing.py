@@ -154,7 +154,7 @@ def shared_background(node, state):
     return np.nanmedian(values, axis=0), count
 
 
-def map_values(node, state):
+def map_values(node, state, *, cancel=None):
     state.validate()
     a = node.arrays
     if node.kind == 'map':
@@ -216,6 +216,8 @@ def map_values(node, state):
             elif state.cube_view in {'fit_width', 'fit_area'}:
                 values = np.full(row.shape[0], np.nan)
                 for ix in range(row.shape[0]):
+                    if cancel is not None and cancel():
+                        raise AnalysisError('Fitted map cancelled')
                     if not a['mask'][iy, ix]:
                         continue
                     try:

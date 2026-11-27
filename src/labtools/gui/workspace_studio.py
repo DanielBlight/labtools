@@ -131,34 +131,36 @@ def scroll_content():
     content.setMinimumWidth(320)
     content.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
     scroll.setWidget(content)
-    scroll.setMinimumWidth(340)
+    scroll.setMinimumWidth(0)
     scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
     scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     scroll.setViewportMargins(0, 0, 0, 0)
     scroll.setStyleSheet('QScrollBar:vertical { width: 12px; margin: 0; }')
     return scroll, layout
 
 
 class StudioSplit(QSplitter):
-    """Stable horizontal control/result layout; narrowing never rearranges the page."""
+    """Stack narrow panes and remember the user split independently per orientation."""
     def __init__(self):
         super().__init__(Qt.Orientation.Horizontal)
         self.setChildrenCollapsible(False)
         self.setHandleWidth(8)
-        self.setStretchFactor(0, 0)
-        self.setStretchFactor(1, 1)
+        self._pane_sizes = {}
 
     def resizeEvent(self, event):
+        if self.count() == 2:
+            threshold = max(940, self.fontMetrics().horizontalAdvance('M') * 85)
+            desired = Qt.Orientation.Vertical if event.size().width() < threshold else Qt.Orientation.Horizontal
+            if self.orientation() != desired or not hasattr(self, '_studio_initialized'):
+                current = self.orientation()
+                if hasattr(self, '_studio_initialized'):
+                    self._pane_sizes[current] = self.sizes()
+                self._studio_initialized = True
+                self.widget(0).setMaximumWidth(16777215)
+                self.setOrientation(desired)
+                self.setSizes(self._pane_sizes.get(desired, [350, 650] if desired == Qt.Orientation.Horizontal else [240, 360]))
         super().resizeEvent(event)
-        if self.count() != 2:
-            return
-        controls = self.widget(0)
-        controls.setMinimumWidth(350)
-        controls.setMaximumWidth(350)
-        if self.orientation() != Qt.Orientation.Horizontal:
-            self.setOrientation(Qt.Orientation.Horizontal)
-        self.setSizes([350, max(560, self.width() - 358)])
 
 
 def new_page(panel, title):
@@ -180,8 +182,7 @@ def new_page(panel, title):
     panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
     panel.statusBar().setSizeGripEnabled(False)
     panel.status.setMinimumWidth(0)
-    panel.status.setWordWrap(False)
-    panel.status.setMaximumHeight(panel.fontMetrics().height() + 8)
+    panel.status.setWordWrap(True)
     panel.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
     panel.setStyleSheet('')
     return layout
@@ -271,7 +272,7 @@ def map_view(panel):
     control_layout.setContentsMargins(0, 0, 0, 0)
     scroll, form_layout = scroll_content()
     control_layout.addWidget(scroll, 1)
-    scan_card = add_card(form_layout, 'Scan', [
+    add_card(form_layout, 'Scan', [
         (None, two_column_fields([
             ('X start (V)', panel.x_start), ('Y start (V)', panel.y_start),
             ('X end (V)', panel.x_stop), ('Y end (V)', panel.y_stop),
@@ -280,46 +281,24 @@ def map_view(panel):
         ])),
         (None, panel.serpentine),
     ])
-    scan_card.setMinimumWidth(338)
-    scan_card.setMaximumWidth(338)
     panel.time_controller_toggle.setChecked(True)
-    counter_card = add_card(form_layout, 'Counter', [
+    add_card(form_layout, 'Counter', [
         ('Address', panel.address),
         (None, two_column_fields([
             ('Channel', panel.channel_1), ('Edge', panel.edge_1),
             ('Threshold', panel.threshold_1), ('', QWidget()),
         ])),
         (None, panel.use_second), (None, panel.second_channel_label), (None, panel.second_channel_widget)])
-    counter_card.setMinimumWidth(338)
-    counter_card.setMaximumWidth(338)
     panel.channel_1.setMinimumWidth(120)
     panel.edge_1.setMinimumWidth(120)
     panel._sync_second_channel_visibility()
     browse = QPushButton('Browse')
     browse.clicked.connect(panel._choose_output)
-    browse_row = QWidget()
-    browse_row.setFixedWidth(270)
-    browse_row_layout = QHBoxLayout(browse_row)
-    browse_row_layout.setContentsMargins(0, 0, 0, 0)
-    browse_row_layout.setSpacing(0)
-    browse.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    browse_row_layout.addWidget(browse)
-    browse.setMinimumWidth(270)
-    browse.setMaximumWidth(270)
-    browse.setSizePolicy(
-        QSizePolicy.Policy.Fixed,
-        QSizePolicy.Policy.Fixed,
-    )
-    browse.setMinimumWidth(270)
-    browse.setMaximumWidth(270)
-    browse.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-    panel.output_root.setMinimumWidth(280)
-    panel.output_root.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    output_card = add_card(form_layout, 'Output', [('Folder', panel.output_root), ('', browse_row), ('', panel.save_results)])
-    output_card.setMaximumWidth(338)
-    for widget in (browse, panel.save_results):
-        widget.setMinimumWidth(0)
-        widget.setMaximumWidth(322)
+    output_card = add_card(form_layout, 'Output', [
+        (None, QLabel('Folder')), (None, panel.output_root), (None, browse), (None, panel.save_results),
+    ])
+    output_card.findChild(QFormLayout).setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+    for widget in (panel.output_root, browse):
         widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     limits = QWidget()
     limits_form = QFormLayout(limits)
@@ -333,7 +312,6 @@ def map_view(panel):
     limits.hide()
     form_layout.addStretch(1)
     bottom = QWidget()
-    bottom.setMaximumWidth(338)
     bottom_layout = QVBoxLayout(bottom)
     bottom_layout.setContentsMargins(0, 0, 0, 0)
     bottom_layout.setSpacing(4)
@@ -639,7 +617,7 @@ def finish_compact(window):
         elif isinstance(widget, QAbstractButton):
             widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     mapping = window.pages['Intensity map']
-    # Common right edge: 322 px inside the 350 px pane after card padding.
+    # Keep numeric fields compact without capping their cards.
     for control in (
         mapping.x_start, mapping.x_stop, mapping.x_points,
         mapping.y_start, mapping.y_stop, mapping.y_points,
@@ -654,8 +632,12 @@ def finish_compact(window):
         control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     mapping.threshold_1.setMinimumWidth(0)
     mapping.threshold_1.setMaximumWidth(181)
-    mapping.output_root.setMinimumWidth(270)
-    mapping.output_root.setMaximumWidth(270)
+    mapping.output_root.setMinimumWidth(0)
+    mapping.output_root.setMaximumWidth(16777215)
+    for form in mapping.centralWidget().findChildren(QFormLayout):
+        if form.indexOf(mapping.output_root) >= 0:
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            break
     mapping.output_root.setSizePolicy(
         QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     spectrum = window.pages['Spectrum']
@@ -688,9 +670,9 @@ def finish_compact(window):
             ('Combine', spectrum.mode_combo),
         ])
         for control in acquisition_controls:
-            control.setMinimumWidth(156)
-            control.setMaximumWidth(156)
-            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            control.setMinimumWidth(0)
+            control.setMaximumWidth(16777215)
+            control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         acquisition_form.addRow(acquisition_grid)
 
     # Detector settings: one shared right edge despite the wider label column.
@@ -711,18 +693,16 @@ def finish_compact(window):
             taken = detector_form.takeRow(control)
             if taken.labelItem is not None and taken.labelItem.widget() is not None:
                 taken.labelItem.widget().deleteLater()
-        detector_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
-        detector_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        detector_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        detector_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         detector_form.setHorizontalSpacing(8)
         detector_form.setVerticalSpacing(4)
         for label, control in zip(detector_labels, detector_controls, strict=True):
-            control.setMinimumWidth(244)
-            control.setMaximumWidth(244)
-            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            control.setMinimumWidth(0)
+            control.setMaximumWidth(16777215)
+            control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             detector_form.addRow(label, control)
 
-    # Dark correction has a narrower label column, so 274 px reaches the same
-    # card-edge endpoint as the 244 px Detector-settings fields.
     dark_form = next(
         (form for form in spectrum.findChildren(QFormLayout)
          if form.indexOf(spectrum.background_mode) >= 0),
@@ -735,18 +715,16 @@ def finish_compact(window):
             taken = dark_form.takeRow(control)
             if taken.labelItem is not None and taken.labelItem.widget() is not None:
                 taken.labelItem.widget().deleteLater()
-        dark_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
-        dark_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        dark_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        dark_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         dark_form.setHorizontalSpacing(8)
         dark_form.setVerticalSpacing(4)
         for label, control in zip(dark_labels, dark_controls, strict=True):
-            control.setMinimumWidth(274)
-            control.setMaximumWidth(274)
-            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            control.setMinimumWidth(0)
+            control.setMaximumWidth(16777215)
+            control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             dark_form.addRow(label, control)
 
-    # Output mirrors Intensity map: Folder and Browse share a 270 px field
-    # column; save options start in that same column.
     output_form = next(
         (form for form in spectrum.findChildren(QFormLayout)
          if form.indexOf(spectrum.output_directory) >= 0),
@@ -764,12 +742,12 @@ def finish_compact(window):
             if taken.labelItem is not None and taken.labelItem.widget() is not None:
                 taken.labelItem.widget().deleteLater()
         output_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
-        output_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        output_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         output_form.setVerticalSpacing(4)
         for control in (spectrum.output_directory, spectrum.output_browse_button):
-            control.setMinimumWidth(270)
-            control.setMaximumWidth(270)
-            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            control.setMinimumWidth(0)
+            control.setMaximumWidth(16777215)
+            control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         output_form.addRow('Folder', spectrum.output_directory)
         output_form.addRow('', spectrum.output_browse_button)
         output_form.addRow('', spectrum.save_csv)
@@ -804,17 +782,17 @@ def finish_compact(window):
             taken = dark_form.takeRow(control)
             if taken.labelItem is not None and taken.labelItem.widget() is not None:
                 taken.labelItem.widget().deleteLater()
-        dark_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
-        dark_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        dark_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        dark_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         dark_form.setHorizontalSpacing(8)
         dark_form.setVerticalSpacing(4)
         for label, control in (
             ('Source', spectrum.background_mode),
             ('Timing', spectrum.background_timing),
         ):
-            control.setMinimumWidth(274)
-            control.setMaximumWidth(274)
-            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            control.setMinimumWidth(0)
+            control.setMaximumWidth(16777215)
+            control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             dark_form.addRow(label, control)
         for control in (
             spectrum.capture_dark_button,
@@ -843,18 +821,19 @@ def finish_compact(window):
             taken = output_form.takeRow(control)
             if taken.labelItem is not None and taken.labelItem.widget() is not None:
                 taken.labelItem.widget().deleteLater()
-        output_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
-        output_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        output_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        output_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         output_form.setHorizontalSpacing(8)
         output_form.setVerticalSpacing(4)
         for control in (spectrum.output_directory, spectrum.output_browse_button):
-            control.setMinimumWidth(270)
-            control.setMaximumWidth(270)
-            control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        output_form.addRow('Folder', spectrum.output_directory)
-        output_form.addRow('', spectrum.output_browse_button)
-        output_form.addRow('', spectrum.save_csv)
-        output_form.addRow('', spectrum.save_png)
+            control.setMinimumWidth(0)
+            control.setMaximumWidth(16777215)
+            control.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        output_form.addRow(QLabel('Folder'))
+        output_form.addRow(spectrum.output_directory)
+        output_form.addRow(spectrum.output_browse_button)
+        output_form.addRow(spectrum.save_csv)
+        output_form.addRow(spectrum.save_png)
     # Annealing folder/spacing refinement V2.
     anneal = window.pages['Annealing']
 

@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -131,7 +132,7 @@ class TaskPanel(QWidget):
         self._message = str(text)
 
     def launch(self, function, owners=None):
-        if self.busy:
+        if self.busy or getattr(self.save_result_button, "_save_job", None) is not None:
             return
         self.stop_event = Event()
         self.last_result = None
@@ -197,20 +198,17 @@ class TaskPanel(QWidget):
             self.timer.stop()
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
-            self.save_result_button.setEnabled(self.last_result is not None)
+            self.save_result_button.setEnabled(self.last_result is not None and getattr(self.save_result_button, "_save_job", None) is None)
 
     def save_retained(self):
         if self.busy or self.last_result is None:
             return
         folder = QFileDialog.getExistingDirectory(self, "Save retained experiment results")
         if folder:
-            try:
-                from labtools.runtime.retained_results import export_retained
+            from labtools.gui.retained_run_controls import start_retained_export
 
-                target = export_retained(folder, self.last_result, label=type(self).__name__, settings=getattr(self, "run_settings", None))
-                self.status.setText("Saved retained run: " + str(target))
-            except (OSError, ValueError, TypeError) as error:
-                self.status.setText("Save failed; run remains retained: " + str(error))
+            start_retained_export(self, self.save_result_button, folder, self.last_result,
+                                  label=type(self).__name__, settings=getattr(self, "run_settings", None))
 
     def completed(self, result):
         self.status.setText("Stopped" if self.stop_event.is_set() else "Completed")
@@ -321,8 +319,17 @@ class MeasurementView:
         self.latest_pixel_button.clicked.connect(self.follow_latest_pixel)
         self.results.insertWidget(2, self.latest_pixel_button)
         self.canvas.mpl_connect("button_press_event", self.select_pixel)
+        self.canvas.mpl_connect("resize_event", self._resize_plot)
+        self._cube_plot_stacked = None
+
+    def _resize_plot(self, _event):
+        loaded = self.displayed_measurement
+        if (loaded is not None and loaded[0] in {"cube", "cube-live"}
+                and (self.canvas.width() < 630) != self._cube_plot_stacked):
+            self.render_measurement(*loaded)
 
     def render_measurement(self, kind, value):
+        self.displayed_measurement = (kind, value)
         is_cube = kind in {"cube", "cube-live"}
         self.latest_pixel_button.setVisible(is_cube)
         self._cube_result = None
@@ -331,7 +338,9 @@ class MeasurementView:
             self._selected_cube_pixel = None
         self.figure.clear()
         if is_cube:
-            self.map_axes, self.spectrum_axes = self.figure.subplots(1, 2)
+            self._cube_plot_stacked = self.canvas.width() < 630
+            shape = (2, 1) if self._cube_plot_stacked else (1, 2)
+            self.map_axes, self.spectrum_axes = self.figure.subplots(*shape)
             if kind == "cube-live":
                 image, _wavelength, _intensity, iy, ix, live = value
                 if self._live_cube is not live:
@@ -463,9 +472,15 @@ class CubePanel(MeasurementView, TaskPanel):
         save_dark.clicked.connect(self.save_dark)
         view_dark = QPushButton("View dark")
         view_dark.clicked.connect(self.view_dark)
-        add_card(self.controls, "Spectrum", [("Dark mode", self.dark),
-            (None, self.dark_status), (None, self.capture_dark_button),
-            (None, load_dark), (None, save_dark), (None, view_dark)])
+        dark_actions = QWidget()
+        dark_grid = QGridLayout(dark_actions)
+        dark_grid.setContentsMargins(0, 0, 0, 0)
+        for index, button in enumerate((self.capture_dark_button, load_dark, save_dark, view_dark)):
+            dark_grid.addWidget(button, index // 2, index % 2)
+        self.spectrum_summary = QLabel("Uses the Spectrum tab settings when you start")
+        self.spectrum_summary.setWordWrap(True)
+        add_card(self.controls, "Spectrum", [(None, self.spectrum_summary), ("Dark mode", self.dark),
+            (None, self.dark_status), (None, dark_actions)])
         self.output = QLineEdit(str(Path.home() / "Labtools" / "Hyperspectral"))
         self.browse_button = QPushButton("Browse output")
         self.browse_button.clicked.connect(self.browse)
@@ -600,6 +615,11 @@ class CubePanel(MeasurementView, TaskPanel):
         try:
             config = self.snapshot()
             dark = self.selected_dark(config)
+            settings = config.spectrum
+            self.spectrum_summary.setText(
+                f"Run: {settings.start_nm:g}–{settings.end_nm:g} nm | {settings.exposure_s:g} s | "
+                f"{settings.n_frames} frame(s), {settings.combine_mode} | dark: {config.dark_mode}"
+            )
             self.latest_pixel_button.setText("Follow latest spectrum")
             save = self.save_output.isChecked()
             if save and not self.output.text().strip():
@@ -660,8 +680,23 @@ class SequencePanel(MeasurementView, TaskPanel):
         self.controls.addWidget(note)
         self.controls.addStretch(1)
         self.install_plot()
+        self.timeline = QLabel("Ready: baseline → dose → measurement")
+        self.timeline.setWordWrap(True)
+        self.results.insertWidget(0, self.timeline)
         self.start_button.clicked.connect(self.start)
         self.start_button.setEnabled(program_panel.start_button.isEnabled() and cube_panel.start_button.isEnabled())
+
+    def poll(self):
+        if self._message and self.busy:
+            self.timeline.setText(self._message)
+        super().poll()
+
+    def completed(self, result):
+        super().completed(result)
+        steps = result.get("steps", [])
+        latest = steps[-1] if steps else {}
+        saved = "Saved to disk" if latest.get("output") else "Retained in memory"
+        self.timeline.setText(f"{result.get('status', 'complete').title()} | {len(steps)} recorded steps | {saved}")
 
     def browse(self):
         path = QFileDialog.getExistingDirectory(self, "Sequence output", self.output.text())
