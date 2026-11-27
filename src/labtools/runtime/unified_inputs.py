@@ -230,7 +230,7 @@ def validate_display(data):
         if name in data and not low <= data[name] <= high:
             raise ValueError("Camera display preference outside GUI range")
     for key, options in (("program_mode", {"Single point", "Dwell ramp array", "Uniform array"}),
-                         ("program_spacing", {"Linear", "Logarithmic"}), ("cube_dark", {"none", "per_center", "per_frame"}),
+                         ("program_spacing", {"Linear", "Logarithmic"}), ("cube_dark", {"none", "per_center", "per_frame", "once_per_map", "pre_taken"}),
                          ("sequence_measurement", {"Spectrum", "Intensity map", "Hyperspectral"})):
         if key in data and data[key] not in options:
             raise ValueError("Unknown experiment option: " + key)

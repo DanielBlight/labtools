@@ -583,9 +583,9 @@ class HoribaSpectrometer:
                 Per-pixel median of ``n_frames`` frames. Simple cosmic ray
                 rejection. Requires ``n_frames >= 3``.
             ``"sigma_clip"``
-                Per-pixel mean after discarding values more than ``k_sigma``
-                standard deviations from the mean. Better SNR than median
-                because clean frames are averaged rather than selected.
+                Per-channel mean of inliers around the median using scaled MAD.
+                Falls back to median when the scale is zero or inliers are
+                not a strict majority.
                 Requires ``n_frames >= 3``.
         k_sigma : float
             Clipping threshold in standard deviations for ``mode="sigma_clip"``

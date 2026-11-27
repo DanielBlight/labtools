@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 
 import numpy as np
 
@@ -70,7 +70,7 @@ def run_program(workspace, program, *, stop=None, report=lambda text: None, outp
     return record
 
 
-def validate_cube(workspace, config):
+def validate_cube(workspace, config, dark=None):
     config.validate()
     workspace._require_open()
     if getattr(workspace, "all_hardware_enabled", False):
@@ -86,7 +86,11 @@ def validate_cube(workspace, config):
     if config.x_points * config.y_points > 100000:
         raise ValueError("Cube exceeds 100000 pixels")
     if config.dark_mode == "pre_taken":
-        raise ValueError("Unified cubes support none/per_center/per_frame dark; reusable dark is not selected here")
+        if dark is None:
+            raise ValueError("Capture or load a matching dark before starting the cube")
+        dark.validate_for(config.spectrum)
+    elif dark is not None:
+        raise ValueError("Select pre_taken to use the captured or loaded dark")
     if not getattr(workspace, "simulation_only", False) and not getattr(workspace, "all_hardware_enabled", False):
         raise RuntimeError("Real hyperspectral mapping requires --hardware, not HORIBA-only mode")
 
@@ -139,11 +143,44 @@ async def cube_mirror(workspace):
                         raise
 
 
-def run_cube(workspace, config, *, stop=None, output_path=None, progress=None, display=None):
+class LiveCubeSpectra:
+    """Publish read-only references to completed rows, not a second dense cube."""
+
+    def __init__(self, config):
+        self.x_v = np.linspace(config.x_start_v, config.x_stop_v, config.x_points)
+        self.y_v = np.linspace(config.y_start_v, config.y_stop_v, config.y_points)
+        self._spectra = {}
+        self._lock = Lock()
+
+    def publish(self, iy, ix, wavelength, intensity):
+        with self._lock:
+            self._spectra[iy, ix] = (wavelength, intensity)
+
+    def get(self, iy, ix):
+        with self._lock:
+            return self._spectra.get((iy, ix))
+
+
+def capture_cube_dark(workspace, settings, stop):
+    """Capture on the existing Spectrum worker and retain ownership until done."""
+    from labtools.runtime.operator_spectrum import ensure_operator_spectrum
+
+    if stop.is_set():
+        raise asyncio.CancelledError()
+    runtime = ensure_operator_spectrum(workspace)
+    job = runtime.worker.capture_dark(settings, owner="Hyperspectral dark")
+    while not job.done():
+        if stop.wait(0.01):
+            job.cancel()
+    return job.result()
+
+
+def run_cube(workspace, config, *, stop=None, output_path=None, progress=None,
+             display=None, dark=None, on_dark=None):
     from labtools.runtime.hyperspectral import open_hyperspectral_service
     from labtools.runtime.operator_spectrum import ensure_operator_spectrum
 
-    validate_cube(workspace, config)
+    validate_cube(workspace, config, dark)
     from labtools.runtime.workflow_batch import has_owner
 
     if not all(has_owner(workspace._ownership, owner) for owner in ("Spectrum", "Intensity map")):
@@ -154,19 +191,34 @@ def run_cube(workspace, config, *, stop=None, output_path=None, progress=None, d
     runtime = ensure_operator_spectrum(workspace)
 
     integrated = np.full((config.y_points, config.x_points), np.nan)
+    live = LiveCubeSpectra(config) if display is not None else None
+
     def pixel(iy, ix, wavelength, intensity):
         integrated[iy, ix] = float(np.sum(intensity))
         if display is not None:
             image = integrated.copy()
             image.setflags(write=False)
-            display("cube-live", (image, wavelength, intensity, iy, ix))
+            live.publish(iy, ix, wavelength, intensity)
+            display("cube-live", (image, wavelength, intensity, iy, ix, live))
+
+    def publish_dark(record):
+        if on_dark is not None:
+            on_dark(record)
+        if output_path is not None:
+            from labtools.io.spectrum_records import save_dark_record
+
+            save_dark_record(output_path.with_name("dark.npz"), record)
 
     async def operation(job_cancelled):
         def cancelled():
             return job_cancelled() or stop.is_set()
         async with open_hyperspectral_service(config, spectrum_service=runtime.service,
                                              mirror_factory=lambda: cube_mirror(workspace), cancel_requested=cancelled) as service:
-            return await service.acquire(config, output_path=output_path, progress=progress, cancel_requested=cancelled, pixel_callback=pixel)
+            return await service.acquire(
+                config, dark=dark, output_path=output_path, progress=progress,
+                cancel_requested=cancelled, pixel_callback=pixel,
+                dark_callback=publish_dark,
+            )
 
     job = runtime.worker.submit_operation(config.spectrum, operation, owner="Hyperspectral")
     while not job.done():
@@ -186,7 +238,7 @@ def run_cube(workspace, config, *, stop=None, output_path=None, progress=None, d
 
 
 def run_sequence(workspace, program, measurement, request, *, cycles, output_root=None,
-                 save_output=True, stop=None, report=lambda text: None, display=None, spectrum_position=None):
+                 save_output=True, stop=None, report=lambda text: None, display=None, spectrum_position=None, cube_dark=None):
     """One baseline measurement, then one anneal/measurement pair per cycle."""
     from labtools.runtime.operator_spectrum import ensure_operator_spectrum
 
@@ -206,7 +258,7 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
     for point in points:
         workspace.anneal_config(point) if getattr(workspace, "all_hardware_enabled", False) else workspace.drafts.validate("anneal", point)
     if measurement == "Hyperspectral":
-        validate_cube(workspace, request)
+        validate_cube(workspace, request, cube_dark)
     elif measurement == "Spectrum":
         workspace.workflows.spectrum_settings(request)
     else:
@@ -268,7 +320,7 @@ def run_sequence(workspace, program, measurement, request, *, cycles, output_roo
                     display("map", result)
             else:
                 with batch.borrow("Spectrum"), batch.borrow("Intensity map"):
-                    result = run_cube(workspace, request, stop=stop, output_path=step / "cube.npz" if step else None, display=display)
+                    result = run_cube(workspace, request, stop=stop, output_path=step / "cube.npz" if step else None, display=display, dark=cube_dark)
                 if display is not None:
                     display("cube", result)
             record["retained_steps"].append({"cycle": cycle, "phase": phase, "role": role, "result": result,

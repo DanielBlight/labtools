@@ -364,3 +364,65 @@ def test_real_range_ownership_conflict_prevents_second_factory():
 
     run(exercise())
     assert created == 1
+
+
+def test_one_dark_before_first_move_and_post_stitch_subtraction(config, tmp_path):
+    from contextlib import asynccontextmanager
+
+    from labtools.acquisition.spectrum_service import SpectrumService
+    from labtools.io.spectrum_records import load_dark_record, save_dark_record
+
+    events = []
+    axis = np.array([500.0, 501.0, 502.0])
+
+    class Backend:
+        async def capture_dark(self):
+            events.append("capture")
+            return axis, np.array([2., 3., 4.])
+
+        async def acquire(self, mode):
+            assert mode == "none"  # Already-stitched signal, with no fresh dark.
+            events.append("signal")
+            return axis, np.array([5., 7., 9.])
+
+    class Mirror:
+        backend_identity = "real:contract-fake"
+
+        async def move_to(self, _x, _y):
+            events.append("move")
+
+        async def home(self):
+            return None
+
+    @asynccontextmanager
+    async def backend(settings):
+        assert settings.n_frames == 10 and settings.combine_mode == "sigma_clip"
+        yield Backend()
+
+    @asynccontextmanager
+    async def mirror():
+        yield Mirror()
+
+    settings = replace(config.spectrum, backend="real", n_frames=10, combine_mode="sigma_clip")
+    request = replace(config, spectrum=settings, backend="real", dark_mode="once_per_map")
+    darks, pixels = [], []
+    service_ = HyperspectralService(SpectrumService(backend), mirror)
+    result = run(service_.acquire(request, dark_callback=darks.append,
+        pixel_callback=lambda *pixel: pixels.append(pixel)))
+    assert events == ["capture", *(["move", "signal"] * 6)]
+    assert len(darks) == 1 and result.provenance.dark_record_id == darks[0].record_id
+    assert result.provenance.n_frames == 10
+    np.testing.assert_array_equal(result.intensity, np.broadcast_to([3., 4., 5.], (2, 3, 3)))
+    assert not pixels[0][3].flags.writeable
+    np.testing.assert_array_equal(pixels[0][3], [3., 4., 5.])
+    path = tmp_path / "dark.npz"
+    save_dark_record(path, darks[0])
+    record = load_dark_record(path)
+    events.clear()
+    run(service_.acquire(replace(request, dark_mode="pre_taken"), dark=record))
+    assert "capture" not in events
+    events.clear()
+    mismatched = replace(request, dark_mode="pre_taken", spectrum=replace(settings, n_frames=9))
+    with pytest.raises(ValueError, match="settings differ"):
+        run(service_.acquire(mismatched, dark=record))
+    assert not events

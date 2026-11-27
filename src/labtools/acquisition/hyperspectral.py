@@ -34,7 +34,7 @@ from labtools.config.hyperspectral import (
 from labtools.simulation.hyperspectral import SIMULATION_MODEL_ID
 
 HYPERSPECTRAL_ARCHIVE_SCHEMA_VERSION = 1
-HYPERSPECTRAL_SERVICE_VERSION = 1
+HYPERSPECTRAL_SERVICE_VERSION = 2
 
 
 class HyperspectralMirror(Protocol):
@@ -67,6 +67,10 @@ class HyperspectralProvenance:
     config_schema_version: int
     scan_order: str
     created_utc: str
+    dark_mode: str | None = None
+    dark_record_id: str | None = None
+    combine_mode: str | None = None
+    n_frames: int | None = None
 
 
 @dataclass(frozen=True)
@@ -225,12 +229,18 @@ class HyperspectralService:
         progress: ProgressCallback | None = None,
         pixel_callback=None,
         cancel_requested: CancelCallback | None = None,
+        dark_callback=None,
     ) -> HyperspectralResult:
         if self._closed:
             raise RuntimeError("HyperspectralService is closed")
         config.validate()
         if config.dark_mode == "pre_taken" and dark is None:
             raise ValueError("pre_taken dark mode requires a DarkRecord")
+        if dark is not None:
+            if config.dark_mode != "pre_taken":
+                raise ValueError("A supplied dark requires pre_taken mode")
+            dark.validate_for(config.spectrum)
+        effective_dark_mode = "pre_taken" if config.dark_mode == "once_per_map" else config.dark_mode
         if output_path is not None and output_path.exists():
             raise FileExistsError(output_path)
         x_v = np.linspace(config.x_start_v, config.x_stop_v, config.x_points)
@@ -264,6 +274,10 @@ class HyperspectralService:
                 config_schema_version=HYPERSPECTRAL_CONFIG_SCHEMA_VERSION,
                 scan_order="y-major/x-minor",
                 created_utc=datetime.now(UTC).isoformat(),
+                dark_mode=config.dark_mode,
+                dark_record_id=dark.record_id if dark is not None else None,
+                combine_mode=config.spectrum.combine_mode,
+                n_frames=config.spectrum.n_frames,
             )
 
         def result(
@@ -294,6 +308,13 @@ class HyperspectralService:
                     raise ValueError(
                         "Mirror backend identity does not match requested backend"
                     )
+                if config.dark_mode == "once_per_map":
+                    emit("capturing_dark", 0)
+                    dark = await self._spectra.capture_dark(
+                        config.spectrum, cancel_requested=cancel_requested,
+                    )
+                if dark is not None and dark_callback is not None:
+                    dark_callback(dark)
                 for iy, y in enumerate(y_v):
                     for ix, x in enumerate(x_v):
                         if cancel_requested is not None and cancel_requested():
@@ -309,14 +330,14 @@ class HyperspectralService:
                             await asyncio.sleep(config.settle_time_s)
                         spectrum: SpectrumResult = await self._spectra.acquire(
                             config.spectrum,
-                            dark_mode=config.dark_mode,
+                            dark_mode=effective_dark_mode,
                             dark=dark,
                             cancel_requested=cancel_requested,
                         )
                         values = np.asarray(spectrum.intensity, dtype=float)
                         axis = np.asarray(spectrum.wavelength_nm, dtype=float)
                         if wavelength.size == 0:
-                            wavelength = axis.copy()
+                            wavelength = owned_vector(axis)
                             cube = np.full(
                                 (config.y_points, config.x_points, axis.size), np.nan
                             )
@@ -338,7 +359,10 @@ class HyperspectralService:
                         cube[iy, ix] = values
                         completed[iy, ix] = True
                         if pixel_callback is not None:
-                            pixel_callback(iy, ix, owned_vector(wavelength), owned_vector(values))
+                            # This row is complete and is never written again.
+                            pixel = cube[iy, ix]
+                            pixel.setflags(write=False)
+                            pixel_callback(iy, ix, wavelength, pixel)
                         emit("point_completed", int(completed.sum()), iy, ix)
                 status = "complete"
         except asyncio.CancelledError:

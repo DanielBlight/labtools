@@ -111,6 +111,17 @@ def test_live_cube_visible_before_job_completion(window, monkeypatch):
         image = panel.displayed_measurement[1][0]
         assert np.isfinite(image).sum() == 1 and not image.flags.writeable
         assert len(panel.map_axes.images) == 1 and len(panel.spectrum_axes.lines) == 1
+        from types import SimpleNamespace
+
+        assert panel.map_axes.get_xlabel() == "Mirror X voltage (V)"
+        assert panel.map_axes.get_ylabel() == "Mirror Y voltage (V)"
+        assert panel.map_axes.get_aspect() == .75
+        panel.select_pixel(SimpleNamespace(inaxes=panel.map_axes, button=1,
+            xdata=panel._cube_x[0], ydata=panel._cube_y[0]))
+        assert panel._selected_cube_pixel == (0, 0)
+        panel.show_pixel(0, 1)
+        assert panel._selected_cube_pixel == (0, 0)  # not yet acquired
+        assert panel.spectrum_axes.get_title().startswith("Selected:")
     finally:
         release.set()
         spin(app, lambda: not panel.busy)
@@ -146,3 +157,24 @@ def test_sequence_displays_latest_measurement_and_optional_output(window, measur
     assert len(panel.last_result["steps"]) == 3
     assert panel.displayed_measurement is not None
     assert panel.spectrum_axes.lines if measurement == "Spectrum" else panel.map_axes.images
+
+
+def test_hyperspectral_capture_save_and_reload_dark(window, tmp_path, monkeypatch):
+    from PyQt6.QtWidgets import QFileDialog
+
+    app, widget, _workspace = window
+    panel = widget.pages["Hyperspectral"]
+    panel.capture_dark_button.click()
+    spin(app, lambda: not panel.busy)
+    assert panel.dark_record is not None
+    assert panel.dark.currentText() == "pre_taken"
+    assert len(panel.spectrum_axes.lines) == 1
+    target = tmp_path / "manual-dark.npz"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args: (str(target), ""))
+    panel.save_dark()
+    assert target.is_file()
+    record_id = panel.dark_record.record_id
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(target), ""))
+    panel.load_dark()
+    assert panel.dark_record.record_id == record_id
+    assert panel.snapshot().dark_mode == "pre_taken"

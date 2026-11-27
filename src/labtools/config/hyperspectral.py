@@ -39,7 +39,7 @@ class HyperspectralConfig:
             raise ValueError("backend must be real or simulation")
         if self.spectrum.backend != self.backend:
             raise ValueError("Hyperspectral and spectrum backends must match")
-        if self.dark_mode not in {"none", "per_center", "per_frame", "pre_taken"}:
+        if self.dark_mode not in {"none", "per_center", "per_frame", "pre_taken", "once_per_map"}:
             raise ValueError("Unsupported dark_mode")
         for name in ("x_start_v", "x_stop_v", "y_start_v", "y_stop_v", "settle_time_s"):
             value = getattr(self, name)

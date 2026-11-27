@@ -49,27 +49,22 @@ def method(name):
     return ns[name]
 
 
-@pytest.mark.parametrize("mode", ["single", "mean", "median", "sigma_clip"])
-@pytest.mark.parametrize("k", [1.0, 3.0])
-def test_combination_matches_historical_algorithm(mode, k):
-    frames = [
-        np.array([1.0, 5.0, 7.0]),
-        np.array([2.0, 5.0, 8.0]),
-        np.array([100.0, 5.0, 9.0]),
-    ]
+@pytest.mark.parametrize("mode", ["single", "mean", "median"])
+def test_unclipped_modes_are_unchanged(mode):
+    frames = [np.array([1.0, 5.0]), np.array([2.0, 5.0]), np.array([100.0, 5.0])]
     stack = np.stack(frames)
-    expected = {
-        "single": frames[0],
-        "mean": stack.mean(0),
-        "median": np.median(stack, axis=0),
-    }
-    if mode == "sigma_clip":
-        mask = np.abs(stack - stack.mean(0)) > k * stack.std(0)
-        target = np.nanmean(np.where(mask, np.nan, stack), axis=0)
-    else:
-        target = expected[mode]
-    np.testing.assert_array_equal(combine_frames(frames, mode, k), target)
-    np.testing.assert_array_equal(frames[0], [1.0, 5.0, 7.0])
+    expected = {"single": frames[0], "mean": stack.mean(0), "median": np.median(stack, axis=0)}
+    np.testing.assert_array_equal(combine_frames(frames, mode), expected[mode])
+    np.testing.assert_array_equal(frames[0], [1.0, 5.0])
+
+
+def test_robust_clip_rejects_signal_and_dark_hits_and_averages_clean_frames():
+    quiet = [1098., 1102., 1099., 1101., 1102., 1100., 1098., 1103., 1101.]
+    frames = [np.array([value, value, 1100.0, index]) for index, value in enumerate(quiet)]
+    frames.append(np.array([11100., -8900., 11100., 9.]))
+    actual = combine_frames(frames, "sigma_clip")
+    np.testing.assert_allclose(actual, [np.mean(quiet), np.mean(quiet), 1100.0, 4.5])
+    assert actual[0] != np.median(quiet)
 
 
 def test_single_preserves_array_identity():

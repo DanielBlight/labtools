@@ -206,3 +206,25 @@ def test_real_cube_uses_one_horiba_session_and_homes_mirror(tmp_path, monkeypatc
             assert len({e["thread"] for e in events}) == 1
         finally:
             batch.release()
+
+
+def test_cube_workflow_saves_matching_dark_and_all_live_rows(workspace, tmp_path):
+    from labtools.io.spectrum_records import load_dark_record
+
+    batch = Batch(workspace._ownership, ("Spectrum", "Intensity map"))
+    frames, darks = [], []
+    try:
+        with batch.borrow("Spectrum"), batch.borrow("Intensity map"):
+            request = replace(cube(workspace), dark_mode="once_per_map")
+            result = run_cube(workspace, request, output_path=tmp_path / "cube.npz",
+                display=lambda kind, value: frames.append((kind, value)), on_dark=darks.append)
+    finally:
+        batch.release()
+    record = load_dark_record(tmp_path / "dark.npz")
+    assert record.record_id == darks[0].record_id == result.provenance.dark_record_id
+    assert len(darks) == 1 and len(frames) == result.completed_points
+    live = frames[-1][1][-1]
+    for iy, ix in np.argwhere(result.completed_mask):
+        x, y = live.get(iy, ix)
+        np.testing.assert_array_equal(x, result.wavelength_nm)
+        np.testing.assert_array_equal(y, result.intensity[iy, ix])

@@ -1,8 +1,4 @@
-"""Frame combination shared by signal and dark acquisition.
-
-Preserves historical single-pass mean/population-standard-deviation clipping,
-not a median/MAD or iterative estimator. Acquisition validation stays in the wrapper.
-"""
+"""Frame combination shared by signal and dark acquisition."""
 
 from __future__ import annotations
 
@@ -27,8 +23,15 @@ def combine_frames(
         return np.mean(stacked, axis=0)
     if mode == "median":
         return np.median(stacked, axis=0)
-    mean = stacked.mean(axis=0)
-    std = stacked.std(axis=0)
-    mask = np.abs(stacked - mean) > k_sigma * std
-    clean = np.where(mask, np.nan, stacked)
-    return np.nanmean(clean, axis=0)
+    if not np.isfinite(k_sigma) or k_sigma <= 0:
+        raise ValueError("Clipping threshold must be finite and positive")
+    centre = np.median(stacked, axis=0)
+    deviations = np.abs(stacked - centre)
+    scale = 1.4826 * np.median(deviations, axis=0)
+    keep = deviations <= k_sigma * scale
+    count = keep.sum(axis=0)
+    total = np.sum(stacked, axis=0, where=keep, dtype=float)
+    # A degenerate spread or no strict majority is not grounds for averaging
+    # an arbitrary subset. Use the robust centre for those channels instead.
+    return np.divide(total, count, out=np.array(centre, dtype=float),
+                     where=(scale > 0) & (count > len(frames) // 2))

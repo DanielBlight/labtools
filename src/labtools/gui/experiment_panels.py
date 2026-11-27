@@ -6,6 +6,7 @@ from contextvars import copy_context
 from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock
+from zipfile import BadZipFile
 
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -28,10 +29,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from labtools.acquisition.spectrum_service import DarkRecord
 from labtools.config.anneal_program import AnnealProgram
 from labtools.config.hyperspectral import HyperspectralConfig
 from labtools.gui.workspace_studio import StudioSplit, add_card, scroll_content
+from labtools.io.spectrum_records import load_dark_record, save_dark_record
 from labtools.runtime.experiment_workflows import (
+    capture_cube_dark,
     run_cube,
     run_program,
     run_sequence,
@@ -39,6 +43,7 @@ from labtools.runtime.experiment_workflows import (
     validate_cube,
 )
 from labtools.runtime.workflow_batch import Batch
+from labtools.visualisation.intensity_map import MIRROR_Y_PER_X_SCALE
 
 
 def number(value, lower=0.0, upper=43200.0, decimals=6):
@@ -293,7 +298,8 @@ class MeasurementView:
         self.figure = Figure(layout="constrained")
         self.map_axes, self.spectrum_axes = self.figure.subplots(1, 2)
         self.canvas = FigureCanvasQTAgg(self.figure)
-        self.results.insertWidget(0, NavigationToolbar2QT(self.canvas, self))
+        self.plot_toolbar = NavigationToolbar2QT(self.canvas, self)
+        self.results.insertWidget(0, self.plot_toolbar)
         self.results.insertWidget(1, self.canvas, 1)
         self.log.setMaximumHeight(100)
         self.details_button = QPushButton("Details")
@@ -303,61 +309,119 @@ class MeasurementView:
         self.left.addWidget(self.details_button)
         self.log.hide()
         self._cube_result = None
+        self._live_cube = None
+        self._selected_cube_pixel = None
+        self.latest_pixel_button = QPushButton("Follow latest spectrum")
+        self.latest_pixel_button.hide()
+        self.latest_pixel_button.clicked.connect(self.follow_latest_pixel)
+        self.results.insertWidget(2, self.latest_pixel_button)
         self.canvas.mpl_connect("button_press_event", self.select_pixel)
 
     def render_measurement(self, kind, value):
+        is_cube = kind in {"cube", "cube-live"}
+        self.latest_pixel_button.setVisible(is_cube)
+        self._cube_result = None
+        if not is_cube:
+            self._live_cube = None
+            self._selected_cube_pixel = None
         self.figure.clear()
-        if kind == "spectrum":
-            self.spectrum_axes = self.figure.add_subplot(111)
-            self.map_axes = self.spectrum_axes
-        elif kind == "map":
-            self.map_axes = self.figure.add_subplot(111)
-            self.spectrum_axes = self.map_axes
-        else:
+        if is_cube:
             self.map_axes, self.spectrum_axes = self.figure.subplots(1, 2)
-        if kind == "spectrum":
-            self.spectrum_axes.plot(value.wavelength_nm, value.intensity)
-            self.spectrum_axes.set_title("Latest spectrum")
-            self.spectrum_axes.set_visible(True)
-        else:
-            self.map_axes.set_visible(True)
             if kind == "cube-live":
-                image, wavelength, intensity, iy, ix = value
-                self.spectrum_axes.plot(wavelength, intensity)
-                self.spectrum_axes.set_title(f"Latest pixel X={ix}, Y={iy}")
-                self._cube_result = None
-            elif kind == "cube":
+                image, _wavelength, _intensity, iy, ix, live = value
+                if self._live_cube is not live:
+                    self._selected_cube_pixel = None
+                self._live_cube = live
+                self._cube_x, self._cube_y = live.x_v, live.y_v
+                self._latest_cube_pixel = (iy, ix)
+            else:
+                self._live_cube = None
                 self._cube_result = value
-                image = np.where(value.completed_mask, np.nansum(value.intensity, axis=2), np.nan)
+                self._cube_x, self._cube_y = value.x_v, value.y_v
+                image = np.where(value.completed_mask, np.sum(value.intensity, axis=2), np.nan)
                 indices = np.argwhere(value.completed_mask)
-                if indices.size:
-                    iy, ix = indices[-1]
-                    self.spectrum_axes.plot(value.wavelength_nm, value.intensity[iy, ix])
-                    self.spectrum_axes.set_title(f"Pixel X={ix}, Y={iy}")
+                self._latest_cube_pixel = tuple(indices[-1]) if indices.size else None
+                if self._selected_cube_pixel is not None and self._spectrum_at(*self._selected_cube_pixel) is None:
+                    self._selected_cube_pixel = None
+            x0, x1 = self._voltage_extent(self._cube_x)
+            y0, y1 = self._voltage_extent(self._cube_y)
+            self.map_axes.imshow(image, origin="lower", aspect=MIRROR_Y_PER_X_SCALE,
+                                 extent=(x0, x1, y0, y1), interpolation="nearest")
+            self.map_axes.set(xlabel="Mirror X voltage (V)", ylabel="Mirror Y voltage (V)",
+                              title="Integrated intensity")
+            self._pixel_marker, = self.map_axes.plot([], [], "+", color="cyan", markersize=10)
+            self._draw_cube_spectrum()
+        else:
+            self.spectrum_axes = self.map_axes = self.figure.add_subplot(111)
+            if kind in {"spectrum", "dark"}:
+                self.spectrum_axes.plot(value.wavelength_nm, value.intensity)
+                title = "Latest spectrum"
+                if kind == "dark":
+                    title = f"Closed-shutter dark ({value.settings.n_frames} frames / {value.settings.combine_mode})"
+                self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity", title=title)
             else:
                 image = np.where(value.completed_mask, value.summed_count_rate_cps, np.nan)
-                self._cube_result = None
-            self.map_axes.imshow(image, origin="lower", aspect="equal" if kind == "map" else "auto")
-            self.map_axes.set(xlabel="X pixel", ylabel="Y pixel", title="Latest map / cube")
-        if kind != "map":
-            self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity")
+                self.map_axes.imshow(image, origin="lower", aspect="equal")
+                self.map_axes.set(xlabel="X pixel", ylabel="Y pixel", title="Latest map")
         self.canvas.draw_idle()
 
-    def show_pixel(self, y, x):
+    @staticmethod
+    def _voltage_extent(axis):
+        if len(axis) == 1 or axis[0] == axis[-1]:
+            return axis[0] - 0.0005, axis[0] + 0.0005
+        half_step = (axis[1] - axis[0]) / 2
+        return axis[0] - half_step, axis[-1] + half_step
+
+    def _spectrum_at(self, y, x):
+        if self._live_cube is not None:
+            return self._live_cube.get(y, x)
         result = self._cube_result
-        if result is None or result.wavelength_nm.size == 0:
-            return
+        if (result is not None and 0 <= y < len(result.y_v) and 0 <= x < len(result.x_v)
+                and result.completed_mask[y, x]):
+            return result.wavelength_nm, result.intensity[y, x]
+        return None
+
+    def _draw_cube_spectrum(self):
+        selected = self._selected_cube_pixel or self._latest_cube_pixel
         self.spectrum_axes.clear()
-        self.spectrum_axes.plot(result.wavelength_nm, result.intensity[y, x])
-        self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity", title=f"Pixel X={x}, Y={y}")
+        self.spectrum_axes.set(xlabel="Wavelength (nm)", ylabel="Intensity")
+        if selected is None:
+            self.spectrum_axes.set_title("No completed pixels")
+            return
+        y, x = selected
+        data = self._spectrum_at(y, x)
+        if data is None:
+            self.spectrum_axes.set_title("Pixel not yet acquired")
+            return
+        xv, yv = self._cube_x[x], self._cube_y[y]
+        self._pixel_marker.set_data([xv], [yv])
+        self.spectrum_axes.plot(*data)
+        label = "Selected" if self._selected_cube_pixel is not None else "Latest"
+        self.spectrum_axes.set_title(f"{label}: X={xv:.4g} V, Y={yv:.4g} V")
+
+    def show_pixel(self, y, x):
+        if self._spectrum_at(y, x) is None:
+            return
+        self._selected_cube_pixel = (y, x)
+        self._draw_cube_spectrum()
+        self.canvas.draw_idle()
+
+    def follow_latest_pixel(self):
+        if self._live_cube is None and self._cube_result is None:
+            return
+        self._selected_cube_pixel = None
+        self._draw_cube_spectrum()
         self.canvas.draw_idle()
 
     def select_pixel(self, event):
-        result = self._cube_result
-        if event.inaxes is self.map_axes and event.xdata is not None and event.ydata is not None and result is not None:
-            y = min(max(round(event.ydata), 0), len(result.y_v)-1)
-            x = min(max(round(event.xdata), 0), len(result.x_v)-1)
-            self.show_pixel(y, x)
+        if self._live_cube is None and self._cube_result is None:
+            return
+        if (event.inaxes is not self.map_axes or event.xdata is None or event.ydata is None
+                or self.plot_toolbar.mode or event.button != 1):
+            return
+        y = int(np.argmin(np.abs(self._cube_y - event.ydata)))
+        x = int(np.argmin(np.abs(self._cube_x - event.xdata)))
+        self.show_pixel(y, x)
 
 
 class CubePanel(MeasurementView, TaskPanel):
@@ -374,8 +438,26 @@ class CubePanel(MeasurementView, TaskPanel):
             ("X points", self.x_points), ("Y start (V)", self.y_start), ("Y stop (V)", self.y_stop),
             ("Y points", self.y_points), ("Mirror settle (s)", self.settle)])
         self.dark = QComboBox()
-        self.dark.addItems(["none", "per_center", "per_frame"])
-        add_card(self.controls, "Spectrum", [("Dark mode", self.dark)])
+        self.dark.addItems(["none", "per_center", "per_frame", "once_per_map", "pre_taken"])
+        self.dark.setToolTip("once_per_map: capture one stitched dark for this scan. "
+                             "pre_taken: use the captured or loaded dark below.")
+        self.dark_record = None
+        self._pending_dark = None
+        self._dark_only = False
+        self._saved_run = None
+        self.dark_status = QLabel("No reusable dark selected")
+        self.dark_status.setWordWrap(True)
+        self.capture_dark_button = QPushButton("Capture dark")
+        self.capture_dark_button.clicked.connect(self.capture_dark)
+        load_dark = QPushButton("Load dark NPZ")
+        load_dark.clicked.connect(self.load_dark)
+        save_dark = QPushButton("Save dark NPZ")
+        save_dark.clicked.connect(self.save_dark)
+        view_dark = QPushButton("View dark")
+        view_dark.clicked.connect(self.view_dark)
+        add_card(self.controls, "Spectrum", [("Dark mode", self.dark),
+            (None, self.dark_status), (None, self.capture_dark_button),
+            (None, load_dark), (None, save_dark), (None, view_dark)])
         self.output = QLineEdit(str(Path.home() / "Labtools" / "Hyperspectral"))
         self.browse_button = QPushButton("Browse output")
         self.browse_button.clicked.connect(self.browse)
@@ -390,7 +472,9 @@ class CubePanel(MeasurementView, TaskPanel):
         self.controls.addStretch(1)
         self.install_plot()
         self.start_button.clicked.connect(self.start)
-        self.start_button.setEnabled(bool(getattr(workspace, "simulation_only", False) or getattr(workspace, "all_hardware_enabled", False)))
+        enabled = bool(getattr(workspace, "simulation_only", False) or getattr(workspace, "all_hardware_enabled", False))
+        self.start_button.setEnabled(enabled)
+        self.capture_dark_button.setEnabled(enabled)
 
     def browse(self):
         path = QFileDialog.getExistingDirectory(self, "Cube output", self.output.text())
@@ -403,12 +487,111 @@ class CubePanel(MeasurementView, TaskPanel):
             self.x_start.value(), self.x_stop.value(), self.x_points.value(),
             self.y_start.value(), self.y_stop.value(), self.y_points.value(),
             self.settle.value(), self.dark.currentText(), spectrum.backend)
-        validate_cube(self.workspace, config)
+        validate_cube(self.workspace, config, self.selected_dark(config))
         return config
 
+    def selected_dark(self, config):
+        return self.dark_record if config.dark_mode == "pre_taken" else None
+
+    def _accept_dark(self, record, *, select=False):
+        self.dark_record = record
+        label = "Synthetic dark" if record.settings.backend == "simulation" else "Dark"
+        self.dark_status.setText(f"{label}: {record.settings.n_frames} frames / {record.settings.combine_mode}\n{record.captured_at}")
+        if select:
+            self.dark.setCurrentText("pre_taken")
+            self._display_dark(record)
+
+    def capture_dark(self):
+        if self.busy or not self.capture_dark_button.isEnabled():
+            return
+        try:
+            settings = self.pages["Spectrum"]._snapshot_settings()
+            self._saved_run = (self.last_result, getattr(self, "run_settings", None))
+            self._dark_only = True
+            def capture():
+                with self.batch.borrow("Spectrum"):
+                    return capture_cube_dark(self.workspace, settings, self.stop_event)
+            self.launch(capture, ("Spectrum",))
+            self.status.setText("Capturing closed-shutter dark using Spectrum settings")
+        except (ValueError, RuntimeError, OSError) as error:
+            self._restore_saved_run()
+            self.status.setText(str(error))
+
+    def _restore_saved_run(self):
+        if self._saved_run is not None:
+            self.last_result, self.run_settings = self._saved_run
+            self.save_result_button.setEnabled(self.last_result is not None)
+        self._saved_run = None
+        self._dark_only = False
+
+    def drain_display(self):
+        with self._display_lock:
+            record, self._pending_dark = self._pending_dark, None
+        if record is not None:
+            self._accept_dark(record)
+        super().drain_display()
+
+    def _publish_dark(self, record):
+        with self._display_lock:
+            self._pending_dark = record
+
+    def poll(self):
+        super().poll()
+        if self._dark_only and not self.busy:
+            self._restore_saved_run()
+
+    def load_dark(self):
+        if self.busy:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Load spectrum dark", "", "Dark spectra (*.npz)")
+        if path:
+            try:
+                record = load_dark_record(path)
+                record.validate_for(self.pages["Spectrum"]._snapshot_settings())
+                self._accept_dark(record, select=True)
+                self.status.setText("Loaded reusable dark")
+            except (ValueError, TypeError, RuntimeError, OSError, BadZipFile) as error:
+                self.status.setText(str(error))
+
+    def save_dark(self):
+        if self.dark_record is None:
+            self.status.setText("Capture or load a dark first")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save spectrum dark", "dark.npz", "Dark spectra (*.npz)")
+        if path:
+            try:
+                target = Path(path).with_suffix(".npz")
+                save_dark_record(target, self.dark_record)
+                self.status.setText(f"Saved dark: {target}")
+            except (ValueError, OSError) as error:
+                self.status.setText(str(error))
+
+    def view_dark(self):
+        if self.dark_record is None or self.busy:
+            return
+        self._display_dark(self.dark_record)
+
+    def _display_dark(self, record):
+        self.render_measurement("dark", record)
+        previous = self._saved_run[0] if self._dark_only and self._saved_run is not None else self.last_result
+        if previous is not None and not isinstance(previous, DarkRecord):
+            self.latest_pixel_button.setText("Return to map")
+            self.latest_pixel_button.show()
+
+    def follow_latest_pixel(self):
+        if self._cube_result is None and self._live_cube is None and self.last_result is not None:
+            self.latest_pixel_button.setText("Follow latest spectrum")
+            self.render_measurement("cube", self.last_result)
+        else:
+            super().follow_latest_pixel()
+
     def start(self):
+        if self.busy:
+            return
         try:
             config = self.snapshot()
+            dark = self.selected_dark(config)
+            self.latest_pixel_button.setText("Follow latest spectrum")
             save = self.save_output.isChecked()
             if save and not self.output.text().strip():
                 raise ValueError("Choose a cube output folder or disable saving")
@@ -417,15 +600,22 @@ class CubePanel(MeasurementView, TaskPanel):
                 with self.batch.borrow("Spectrum"), self.batch.borrow("Intensity map"):
                     path = unique_directory(self.output_path, "cube") / "cube.npz" if save else None
                     return run_cube(self.workspace, config, stop=self.stop_event, output_path=path,
-                        display=self.publish, progress=lambda p: self.report(f"Cube: {p.completed_points}/{p.total_points} pixels"))
+                        display=self.publish, dark=dark, on_dark=self._publish_dark,
+                        progress=lambda p: self.report("Capturing one dark for the map" if p.phase == "capturing_dark"
+                            else f"Cube: {p.completed_points}/{p.total_points} pixels"))
             self.output_path = Path(self.output.text())
             self.launch(run, ("Spectrum", "Intensity map"))
         except (ValueError, RuntimeError, OSError) as error:
             self.status.setText(str(error))
 
     def completed(self, result):
+        if isinstance(result, DarkRecord):
+            self._accept_dark(result, select=True)
+            self.status.setText("Dark captured. Save dark NPZ to keep a copy.")
+            return
         self.status.setText(f"Cube {result.status}: {result.completed_points} pixels")
         self.log.appendPlainText(str(result.output_path))
+        self.displayed_measurement = ("cube", result)
         self.render_measurement("cube", result)
 
 
@@ -474,12 +664,13 @@ class SequencePanel(MeasurementView, TaskPanel):
             program = self.program_panel.snapshot()
             measurement = self.measurement.currentText()
             request = self.cube_panel.snapshot() if measurement == "Hyperspectral" else self.pages["Spectrum"]._snapshot_settings() if measurement == "Spectrum" else self.pages["Intensity map"]._config()
+            cube_dark = self.cube_panel.selected_dark(request) if measurement == "Hyperspectral" else None
             cycles, save = self.cycles.value(), self.save_output.isChecked()
             position = (self.spectrum_x.value(), self.spectrum_y.value(), self.spectrum_settle.value()) if measurement == "Spectrum" else None
             self.run_settings = {"program": program, "measurement": measurement, "request": request, "cycles": cycles, "spectrum_position": position}
             output = Path(self.output.text()) if self.output.text().strip() else None
             self.launch(lambda: run_sequence(self.workspace, program, measurement, request, cycles=cycles,
-                output_root=output, save_output=save, stop=self.stop_event, report=self.report, display=self.publish, spectrum_position=position))
+                output_root=output, save_output=save, stop=self.stop_event, report=self.report, display=self.publish, spectrum_position=position, cube_dark=cube_dark))
         except (ValueError, RuntimeError, OSError) as error:
             self.status.setText(str(error))
 
