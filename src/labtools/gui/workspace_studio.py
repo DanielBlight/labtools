@@ -265,6 +265,10 @@ def result_view(panel):
 
 def map_view(panel):
     layout = new_page(panel, 'Intensity map')
+    # Keep path text from allocating vertical space below the live plot.
+    panel.status.setWordWrap(False)
+    panel.statusBar().ensurePolished()
+    panel.statusBar().setFixedHeight(panel.statusBar().sizeHint().height())
     split = StudioSplit()
     layout.addWidget(split, 1)
     controls = QWidget()
