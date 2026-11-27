@@ -7,7 +7,16 @@ from pathlib import Path
 from threading import Event
 
 import numpy as np
-from PyQt6.QtCore import QObject, QRect, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import (
+    QObject,
+    QPointF,
+    QRectF,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+    pyqtSlot,
+)
 from PyQt6.QtGui import QFont, QImage, QImageReader, QPainter
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -38,18 +47,129 @@ from labtools.runtime.camera_stream import (
 class ImageSurface(QWidget):
     """Paint QImage directly; no per-frame QPixmap creation or pre-scaled copy."""
 
+    view_changed = pyqtSignal()
+    MAX_ZOOM = 8.0
+    ZOOM_STEP = 1.25
+
     def __init__(self):
         super().__init__()
         self.setMinimumSize(240, 180)
         self._pixels = None
         self._image = QImage()
+        self.zoom = 1.0
+        self._centre = QPointF(.5, .5)
+        self._pan_at = self._pan_button = None
+        self.setToolTip("Wheel to zoom at the pointer; drag to pan. Middle drag also works in annotation mode.")
 
     def set_pixels(self, pixels):
+        first_frame = self._image.isNull()
         self._pixels = pixels  # Keep the immutable contiguous numpy owner alive.
         height, width = pixels.shape[:2]
         fmt = QImage.Format.Format_Grayscale8 if pixels.ndim == 2 else QImage.Format.Format_BGR888
         self._image = QImage(pixels.data, width, height, pixels.strides[0], fmt)
+        if first_frame:
+            self.view_changed.emit()
         self.update()
+
+    @property
+    def has_image(self):
+        return not self._image.isNull()
+
+    def _target_rect(self, width, height):
+        if min(width, height, self.width(), self.height()) <= 0:
+            return QRectF()
+        scale = self.zoom * min(self.width() / width, self.height() / height)
+        w, h = width * scale, height * scale
+        x = self.width() / 2 - self._centre.x() * w
+        y = self.height() / 2 - self._centre.y() * h
+        x = (self.width() - w) / 2 if w <= self.width() else min(0., max(self.width() - w, x))
+        y = (self.height() - h) / 2 if h <= self.height() else min(0., max(self.height() - h, y))
+        return QRectF(x, y, w, h)
+
+    def target_rect(self):
+        return self._target_rect(self._image.width(), self._image.height())
+
+    def set_zoom(self, factor, anchor=None):
+        if not self.has_image:
+            return
+        factor = min(self.MAX_ZOOM, max(1.0, factor))
+        if factor == self.zoom:
+            return
+        before = self.target_rect()
+        if before.isEmpty():
+            return
+        if anchor is None or not before.contains(anchor):
+            anchor = QPointF(self.width() / 2, self.height() / 2)
+        u = (anchor.x() - before.x()) / before.width()
+        v = (anchor.y() - before.y()) / before.height()
+        ratio = factor / self.zoom
+        self.zoom = factor
+        self._centre = QPointF(
+            u + (self.width() / 2 - anchor.x()) / (before.width() * ratio),
+            v + (self.height() / 2 - anchor.y()) / (before.height() * ratio),
+        )
+        self._commit_view()
+
+    def _commit_view(self):
+        rect = self.target_rect()
+        if not rect.isEmpty():
+            self._centre = QPointF((self.width() / 2 - rect.x()) / rect.width(),
+                                   (self.height() / 2 - rect.y()) / rect.height())
+        self.view_changed.emit()
+        self.update()
+
+    def reset_zoom(self):
+        self.zoom = 1.0
+        self._centre = QPointF(.5, .5)
+        self._stop_pan()
+        self.view_changed.emit()
+        self.update()
+
+    def clear_image(self):
+        self._image = QImage()
+        self._pixels = None
+        self.reset_zoom()
+
+    def wheelEvent(self, event):
+        steps = event.angleDelta().y() / 120 or event.pixelDelta().y() / 120
+        if self.has_image and steps and self.target_rect().contains(event.position()):
+            self.set_zoom(self.zoom * self.ZOOM_STEP ** max(-8., min(8., steps)), event.position())
+            event.accept()
+            return
+        event.ignore()
+
+    def mousePressEvent(self, event):
+        if (self.has_image and self.zoom > 1 and self._pan_at is None and self.target_rect().contains(event.position())
+                and event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton)):
+            self._pan_at, self._pan_button = event.position(), event.button()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._pan_at is not None:
+            rect = self.target_rect()
+            if not rect.isEmpty():
+                delta = event.position() - self._pan_at
+                self._centre = QPointF((self.width() / 2 - rect.x() - delta.x()) / rect.width(),
+                                       (self.height() / 2 - rect.y() - delta.y()) / rect.height())
+                self._pan_at = event.position()
+                self._commit_view()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def _stop_pan(self):
+        self._pan_at = self._pan_button = None
+        self.unsetCursor()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == self._pan_button:
+            self._stop_pan()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -58,11 +178,8 @@ class ImageSurface(QWidget):
             painter.setPen(Qt.GlobalColor.white)
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Camera stopped; press Start camera")
             return
-        size = self._image.size().scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio)
-        target = QRect((self.width() - size.width()) // 2, (self.height() - size.height()) // 2,
-                       size.width(), size.height())
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        painter.drawImage(target, self._image)
+        painter.drawImage(self.target_rect(), self._image)
 
 
 class PreviewWorker(QObject):
@@ -132,6 +249,8 @@ class CameraWindow(QDialog):
     actions or experiment execution gates are changed. No automatic connection.
     """
 
+    surface_type = ImageSurface
+
     def __init__(self, parent=None, *, reserve=None, factory=native_camera_factory):
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("Live camera - independent preview")
@@ -177,7 +296,25 @@ class CameraWindow(QDialog):
         self.overlay_layout = QVBoxLayout()
         self.overlay_layout.setSpacing(6)
         layout.addLayout(self.overlay_layout)
-        self.surface = ImageSurface()
+        self.surface = self.surface_type()
+        zoom_controls = QHBoxLayout()
+        zoom_controls.addWidget(QLabel("Preview zoom"))
+        self.zoom_out = QPushButton("−")
+        self.zoom_out.setAccessibleName("Zoom out")
+        self.zoom_in = QPushButton("+")
+        self.zoom_in.setAccessibleName("Zoom in")
+        self.zoom_fit = QPushButton("Fit")
+        self.zoom_fit.setToolTip("Reset zoom and show the whole frame")
+        self.zoom_indicator = QLabel()
+        self.zoom_out.clicked.connect(lambda: self.surface.set_zoom(self.surface.zoom / self.surface.ZOOM_STEP))
+        self.zoom_in.clicked.connect(lambda: self.surface.set_zoom(self.surface.zoom * self.surface.ZOOM_STEP))
+        self.zoom_fit.clicked.connect(self.surface.reset_zoom)
+        for control in (self.zoom_out, self.zoom_in, self.zoom_fit, self.zoom_indicator):
+            zoom_controls.addWidget(control)
+        zoom_controls.addStretch(1)
+        layout.addLayout(zoom_controls)
+        self.surface.view_changed.connect(self._update_zoom_controls)
+        self._update_zoom_controls()
 
         preview = QHBoxLayout()
         preview.setSpacing(6)
@@ -263,6 +400,14 @@ class CameraWindow(QDialog):
         self.gain.valueChanged.connect(self.update_targets)
         self.display_ms.valueChanged.connect(self.update_interval)
         self._connected_ok = False
+
+    def _update_zoom_controls(self):
+        zoom = self.surface.zoom
+        ready = self.surface.has_image
+        self.zoom_indicator.setText("Fit (1×)" if zoom == 1 else f"{zoom:.2f}× fit")
+        self.zoom_out.setEnabled(ready and zoom > 1)
+        self.zoom_fit.setEnabled(ready and zoom > 1)
+        self.zoom_in.setEnabled(ready and zoom < self.surface.MAX_ZOOM)
 
     def _set_settings_visible(self, visible):
         currently_visible = self.settings_panel.isVisible()

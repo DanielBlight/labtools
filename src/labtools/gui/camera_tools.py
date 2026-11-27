@@ -10,8 +10,8 @@ import argparse
 import math
 import sys
 
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QShortcut
+from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -49,9 +49,7 @@ class AnnotationSurface(ImageSurface):
         geometry = self.annotations.geometry
         if geometry is None:
             return QRectF()
-        size = QSize(*geometry).scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio)
-        return QRectF((self.width() - size.width()) / 2, (self.height() - size.height()) / 2,
-                      size.width(), size.height())
+        return self._target_rect(*geometry)
 
     def set_geometry(self, raw_shape):
         if self.annotations.set_geometry(int(raw_shape[1]), int(raw_shape[0])):
@@ -89,10 +87,12 @@ class AnnotationSurface(ImageSurface):
                 self.update()
                 event.accept()
                 return
+            event.ignore()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self._drag is not None:
+        if self._pan_at is None and self._drag is not None:
             self._edge = self.point(event.position())
             self.update()
             event.accept()
@@ -168,25 +168,22 @@ class AnnotationSurface(ImageSurface):
             radius = math.hypot(self._edge[0] - self._drag[0], self._edge[1] - self._drag[1])
             circle(*self._drag, radius, "#ffffff")
         if self.synthetic:
-            painter.fillRect(QRectF(rect.x(), rect.y(), 270, 25), QColor(0, 0, 0, 200))
+            visible = rect.intersected(QRectF(self.rect()))
+            painter.fillRect(QRectF(visible.x(), visible.y(), 270, 25), QColor(0, 0, 0, 200))
             painter.setPen(QColor("#ffcf40"))
-            painter.drawText(QPointF(rect.x() + 7, rect.y() + 18), "SIMULATED - NOT CAMERA DATA")
+            painter.drawText(QPointF(visible.x() + 7, visible.y() + 18), "SIMULATED - NOT CAMERA DATA")
         painter.restore()
 
 
 class CameraWindow(BaseCameraWindow):
+    surface_type = AnnotationSurface
+
     def __init__(self, parent=None, *, reserve=None, **kwargs):
         super().__init__(parent, reserve=reserve, **kwargs)
         self._real_factory = self._factory
         self._real_reserve = reserve
         self._illumination = SimulatedIllumination()
         self._source_mode = "simulation"
-        old = self.surface
-        self.surface = AnnotationSurface()
-        item = self.layout().replaceWidget(old, self.surface)
-        del item
-        old.hide()
-        old.deleteLater()
         sources = QHBoxLayout()
         sources.addWidget(QLabel("Preview source"))
         self.source = QComboBox()
@@ -285,8 +282,7 @@ class CameraWindow(BaseCameraWindow):
         self.surface.annotations.reset()
         self.surface.annotations.geometry = None
         self.surface.cancel_drag()
-        self.surface._image = QImage()
-        self.surface._pixels = None
+        self.surface.clear_image()
         self._last_packet = None
         self.mailbox.take()
         self.surface.update()

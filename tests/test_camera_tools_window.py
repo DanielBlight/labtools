@@ -95,3 +95,60 @@ def test_simulation_overlay_drag_undo_dark_and_no_hardware(monkeypatch):
         window.request_stop()
         wait(lambda: not window.busy)
         window.close()
+
+
+def test_preview_zoom_wheel_pan_and_fit(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PyQt6.QtWidgets", exc_type=ImportError)
+    from PyQt6.QtCore import QPoint, QPointF, Qt
+    from PyQt6.QtGui import QWheelEvent
+    from PyQt6.QtTest import QTest
+    from PyQt6.QtWidgets import QApplication
+
+    from labtools.gui.camera_tools import CameraWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = CameraWindow()
+    try:
+        window.show()
+        window.surface.setFixedSize(400, 300)
+        app.processEvents()
+        surface = window.surface
+        assert not window.zoom_in.isEnabled()
+        pixels = np.zeros((300, 400), dtype=np.uint8)
+        surface.set_geometry(pixels.shape)
+        surface.set_pixels(pixels)
+        fit = surface.target_rect()
+        anchor = fit.center() + QPointF(20, 0)
+        original_point = surface.point(anchor)
+        wheel = QWheelEvent(anchor, surface.mapToGlobal(anchor), QPoint(), QPoint(0, 120),
+                            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                            Qt.ScrollPhase.NoScrollPhase, False)
+        QApplication.sendEvent(surface, wheel)
+        assert surface.zoom == pytest.approx(1.25)
+        assert surface.point(anchor) == pytest.approx(original_point)
+        assert window.zoom_fit.isEnabled()
+        window.zoom_in.click()
+        window.zoom_in.click()
+        start = QPoint(surface.width() // 2, surface.height() // 2)
+        before = surface.target_rect()
+        window.draw_mode.setChecked(True)
+        QTest.mousePress(surface, Qt.MouseButton.MiddleButton, pos=start)
+        QTest.mouseMove(surface, start + QPoint(40, 0))
+        QTest.mouseRelease(surface, Qt.MouseButton.MiddleButton, pos=start + QPoint(40, 0))
+        assert surface.target_rect().x() > before.x()
+        assert not surface.annotations.circles
+        zoomed = surface.target_rect()
+        surface.set_pixels(pixels.copy())
+        assert surface.target_rect() == zoomed
+        assert surface.grab().size() == surface.size()
+        for _ in range(24):
+            window.zoom_in.click()
+        assert surface.zoom == surface.MAX_ZOOM and not window.zoom_in.isEnabled()
+        window.zoom_fit.click()
+        assert surface.target_rect() == fit and surface.zoom == 1
+        window.zoom_in.click()
+        window.source.setCurrentIndex(1)
+        assert surface.zoom == 1 and not window.zoom_in.isEnabled()
+    finally:
+        window.close()
