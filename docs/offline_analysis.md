@@ -163,3 +163,41 @@ Address the explicitly documented synchronous large-data operations and bounded 
 map performance as one bounded follow-up if required for release, not a
 series of speculative micro-patches. Deliver a source-matched guarded updater,
 exact validation evidence, Git commands and the next bounded continuation prompt.
+
+## Analysis v2: recipes, calibration, background and peak models
+
+- Recipes now identify a measurement by relative source path, kind and local
+  location in the source record. A recipe verifies original source hashes and
+  refuses changed collection/common-scale membership. Old single-file recipes
+  with no comparison can be replayed if their identity is unambiguous. Reopen
+  and resave old collection recipes rather than trusting their positional IDs.
+- Darks open as calibration, including the stitched curve and saved native-centre
+  segments. They are not signal spectra and are not subtracted again. The cube
+  title and export metadata show the recorded reusable-dark stage if available.
+- To subtract shared sample/optical background, pick a genuinely signal-free
+  region of the cube. Enter `X min, X max, Y min, Y max` in mirror volts under
+  Background ROI, then Apply. The wavelength-wise median of at least three
+  completed spectra is subtracted at each pixel before deriving the map or
+  processing a selected spectrum. The ROI is outlined and its spectrum is
+  included in the exported NPZ and CSV. Clear the field to undo the correction.
+  This is additive background removal, not a way to reconstruct raw detector
+  frames or reapply the acquisition dark. Do not select a region containing a
+  sample feature you wish to preserve. Do not assume a single template is valid
+  where the background shape or intensity varies strongly across the scan.
+- Fit models include Gaussian, Lorentzian and Voigt with a common constant
+  offset and up to four positive components of the chosen model. Use a sensible
+  wavelength window; for overlapping peaks, enter approximate centres in nm.
+  Components are ordered by wavelength. The chosen component supplies fitted
+  width/area map or trend metrics; fit metadata records every component of a
+  displayed multi-peak spectrum. Fitted areas are full profile areas, not
+  integrations restricted to the displayed wavelength interval. Fits use the
+  existing optional SciPy package. A fitted component is not proof of a physical
+  transition, especially for poorly separated peaks.
+- Trend shared_mean uses finite acquired pixels common to the stack. Compare
+  acquired fractions before interpreting totals from stopped maps. By default,
+  signed differences and dark/background-corrected intensity use symmetric
+  limits and a diverging palette. Log views mark acquired nonpositive pixels.
+- Exports and recipe saves run as jobs and a batch reuses verified file hashes.
+  Cancellation takes effect at checkpoints, not during an active image encode,
+  compression, or fit. Apply can still take time for expensive fitted maps;
+  clicking a point in an already-rendered cube only updates the linked spectrum.

@@ -134,8 +134,15 @@ class LoadSession:
             for child in parent.children:
                 inherit(child, parent.synthetic)
         inherit(node)
-        for index, child in enumerate(node.walk()):
-            child.key = str(index)
+        occurrences = {}
+        base = source if source.is_dir() else source.parent
+        for child in node.walk():
+            target = child.source.resolve()
+            relative = target.relative_to(base).as_posix() if target.is_relative_to(base) else str(target)
+            identity = (relative, child.kind)
+            ordinal = occurrences.get(identity, 0)
+            occurrences[identity] = ordinal + 1
+            child.key = json.dumps([*identity, ordinal], separators=(',', ':'))
             child.validate()
         return node
 
@@ -183,6 +190,22 @@ class LoadSession:
             meta['synthetic_data'] = bool(data['synthetic_data'].item())
         if 'backend' in data:
             meta['backend'] = str(data['backend'].item())
+        if meta.get('kind') == 'dark':
+            version = meta.get('schema_version')
+            if version not in {1, 2} or not {'wavelength_nm', 'intensity'} <= data.keys():
+                raise AnalysisError('Invalid dark archive')
+            arrays = {key: value for key, value in data.items() if key != 'metadata'}
+            if version == 2:
+                centres = meta.get('centres_nm')
+                if not isinstance(centres, list) or not centres:
+                    raise AnalysisError('Segmented dark has no centre list')
+                for index, centre in enumerate(centres):
+                    x = arrays.get(f'segment_{index}_wavelength_nm')
+                    y = arrays.get(f'segment_{index}_intensity')
+                    if (x is None or y is None or x.ndim != 1 or x.shape != y.shape
+                            or type(centre) not in (int, float) or not np.isfinite(centre)):
+                        raise AnalysisError('Invalid dark segment')
+            return Dataset(path.stem, 'calibration', path, arrays, meta, synthetic=is_synthetic(meta))
         return self._numeric(data, path.stem, path, meta)
 
     def _numeric(self, data, label, source, meta):
@@ -331,6 +354,8 @@ class LoadSession:
     def _append_folder_children(self, node, folder):
         for child_path in sorted(folder.iterdir()):
             self.check()
+            if child_path.name == 'intensity_map_checkpoint.npz' and (folder / 'intensity_map_complete.npz').is_file():
+                continue
             if child_path.name.startswith('.') or child_path.name in {'run.json', 'sequence.json', 'program.json', 'arrays.npz'}:
                 continue
             csv_candidate = child_path.suffix.lower() == '.csv' and not child_path.with_suffix('.npz').exists() and (
@@ -349,9 +374,23 @@ class LoadSession:
         for name in ('run.json', 'sequence.json', 'program.json'):
             if (path / name).exists():
                 return self._document(path / name)
-        for name in ('intensity_map_complete.npz', 'intensity_map_checkpoint.npz', 'hyperspectral_cube.npz', 'spectral_cube.npz', 'cube.npz', 'spectrum.npz', 'spectrum_complete.npz'):
-            if (path / name).exists():
-                return self._npz(path / name)
+        preferred = ('intensity_map_complete.npz', 'intensity_map_checkpoint.npz', 'hyperspectral_cube.npz',
+                     'spectral_cube.npz', 'cube.npz', 'spectrum.npz', 'spectrum_complete.npz')
+        candidates = [path / name for name in preferred if (path / name).is_file()]
+        if candidates:
+            redundant = {'dark.npz', 'intensity_map_checkpoint.npz'} if candidates[0].name == 'intensity_map_complete.npz' else {'dark.npz'}
+            siblings = [entry for entry in path.iterdir() if not entry.name.startswith('.') and
+                        (entry.is_dir() or (entry.suffix.lower() == '.npz' and entry.name not in redundant))]
+            if len(siblings) == 1:
+                node = self._npz(candidates[0])
+                if node.kind == 'cube' and (path / 'dark.npz').is_file():
+                    try:
+                        calibration = self._npz(path / 'dark.npz')
+                        if calibration.kind == 'calibration':
+                            node.children.append(calibration)
+                    except (AnalysisError, OSError) as error:
+                        self.diagnostics.append(str(error))
+                return node
         meta = {}
         for name in ('metadata.json', 'result.json'):
             if (path / name).exists():

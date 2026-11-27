@@ -507,3 +507,119 @@ def test_windows_publish_helper_is_not_recursive():
     ]
     assert not recursive
     assert len(rename_calls) == 1
+
+
+def test_recipe_replay_keeps_primary_and_reference_after_insertion(tmp_path):
+    root_dir = tmp_path / 'collection'
+    root_dir.mkdir()
+    for i, name in enumerate(('b', 'c'), start=1):
+        np.savez(root_dir / f'{name}.npz', wavelength_nm=[500., 501.], intensity=[i, i])
+    original = LoadSession()
+    try:
+        root = original.load(root_dir)
+        b, c = root.children
+        path = tmp_path / 'recipe.json'
+        write_json(path, recipe(root, b, PlotState(comparison='difference'), root_dir, c))
+        np.savez(root_dir / 'a.npz', wavelength_nm=[500., 501.], intensity=[10, 10])
+        restored, _root, node, _state, reference, _origin = open_recipe(path)
+        try:
+            assert (node.label, reference.label) == ('b', 'c')
+        finally:
+            restored.close()
+    finally:
+        original.close()
+
+
+def test_background_and_linked_pixel_are_non_destructive(tmp_path, session, monkeypatch):
+    from labtools.analysis import plotting
+
+    x = np.arange(4.)
+    background = np.array([3., 1., 5.])
+    data = np.tile(background, (1, 4, 1))
+    data[0, 3] += [1, -3, 5]
+    path = tmp_path / 'cube.npz'
+    np.savez(path, x_v=x, y_v=[0.], wavelength_nm=[500., 501., 502.], intensity=data,
+             completed_mask=np.ones((1, 4), dtype=bool), metadata_json=json.dumps({
+                 'provenance': {'dark_mode': 'pre_taken', 'reusable_dark_stage': 'pre_stitch'}}))
+    node = session.load(path)
+    state = PlotState(background_roi='0,2,0,0')
+    figure = Figure()
+    output, details = render(figure, node, state)
+    np.testing.assert_array_equal(output['background_intensity'], background)
+    np.testing.assert_array_equal(output['displayed_map'], [[0, 0, 0, 3]])
+    assert details['colour_limits'] == [-3., 3.]
+    assert 'pre-stitch' in figure._suptitle.get_text()
+    monkeypatch.setattr(plotting, 'map_values', lambda *_args: pytest.fail('Map recomputed on click'))
+    plotting.draw_cube_pixel(figure, node, replace(state, pixel_x=3), output, details)
+    np.testing.assert_array_equal(output['pixel_intensity'], [1, -3, 5])
+    np.testing.assert_array_equal(node.arrays['intensity'], data)
+
+
+@pytest.mark.parametrize('model', ['Gaussian', 'Lorentzian', 'Voigt'])
+def test_two_peak_fits(model):
+    from scipy.special import voigt_profile
+
+    x = np.linspace(500, 530, 301)
+    centres = [508., 520.]
+
+    def profile(delta):
+        if model == 'Gaussian':
+            return np.exp(-0.5 * (delta / 1.1)**2)
+        if model == 'Lorentzian':
+            return 1 / (1 + (delta / 1.1)**2)
+        return voigt_profile(delta, 1.1, .7) / voigt_profile(0, 1.1, .7)
+
+    y = 2 + 8 * profile(x - centres[0]) + 6 * profile(x - centres[1])
+    state = PlotState(fit_model=model, fit_peaks=2, fit_centres='508,520', fit_component=2)
+    fitted, details = fit_peak(x, y, state)
+    np.testing.assert_allclose(fitted, y, atol=1e-5)
+    assert details['centre_nm'] == pytest.approx(520.)
+    assert len(details['components']) == 2
+    assert details['components'][0]['centre_nm'] == pytest.approx(508.)
+
+
+def test_calibration_sibling_and_comparison_guard(tmp_path, session):
+    common = {'x_v': [0., 1.], 'y_v': [0.], 'completed_mask': np.ones((1, 2), bool)}
+    np.savez(tmp_path / 'cube.npz', **common, wavelength_nm=[500., 501.], intensity=[[[-2., 1.], [3., 4.]]])
+    np.savez(tmp_path / 'map.npz', **common, summed_count_rate_cps=[[5., 9.]])
+    np.savez(tmp_path / 'dark.npz', wavelength_nm=[500., 501.], intensity=[2., 3.],
+             segment_0_wavelength_nm=[500., 501.], segment_0_intensity=[2., 3.],
+             metadata=json.dumps({'kind': 'dark', 'schema_version': 2, 'centres_nm': [500.5]}))
+    root = session.load(tmp_path)
+    nodes = {item.kind: item for item in root.children}
+    assert set(nodes) == {'map', 'cube', 'calibration'}
+    assert len(render(Figure(), nodes['calibration'], PlotState())[0]) == 4
+    with pytest.raises(AnalysisError, match='matching measurement quantities'):
+        render(Figure(), nodes['map'], PlotState(comparison='difference'), reference=nodes['cube'])
+    figure = Figure()
+    _, details = render(figure, nodes['cube'], PlotState(log=True))
+    assert details['nonpositive_hidden_by_log'] == 1
+    assert len(figure.axes[0].collections) == 2
+
+
+def test_missing_baseline_rejected(tmp_path, session):
+    np.savez(tmp_path / 'after.npz', wavelength_nm=[500., 501.], intensity=[1., 2.])
+    (tmp_path / 'sequence.json').write_text(json.dumps({'steps': [
+        {'role': 'post-anneal', 'status': 'complete', 'source': 'after.npz'}]}))
+    node = session.load(tmp_path)
+    with pytest.raises(AnalysisError, match='No unique recorded baseline'):
+        render(Figure(), node, PlotState(comparison='difference'))
+
+
+def test_partial_shared_region_trend(tmp_path, session):
+    for name, mask, rates in [('a', [[True, True]], [[2., 100.]]),
+                              ('b', [[True, False]], [[4., 0.]])]:
+        np.savez(tmp_path / f'{name}.npz', x_v=[0., 1.], y_v=[0.],
+                 completed_mask=mask, summed_count_rate_cps=rates)
+    root = session.load(tmp_path)
+    output, _ = render(Figure(), root, PlotState(group_view='trend', trend_metric='shared_mean'))
+    np.testing.assert_array_equal(output['trend_y'], [2., 4.])
+    np.testing.assert_array_equal(output['coverage'], [1., .5])
+
+
+def test_export_cancel_does_not_publish(tmp_path, examples, session):
+    source = examples / 'spectrum'
+    node = session.load(source)
+    with pytest.raises(AnalysisError, match='cancelled'):
+        export_view(tmp_path, node, node, PlotState(), source, cancel=lambda: True)
+    assert not list(tmp_path.iterdir())

@@ -23,6 +23,11 @@ class PlotState:
     pixel_y: int = 0
     normalise: str = 'none'
     baseline: str = 'none'
+    background_roi: str = ''
+    fit_model: str = 'Gaussian'
+    fit_peaks: int = 1
+    fit_centres: str = ''
+    fit_component: int = 1
     fit: bool = False
     residuals: bool = False
     comparison: str = 'none'
@@ -47,8 +52,9 @@ class PlotState:
 
     def validate(self):
         choices = {
+            'fit_model': {'Gaussian', 'Lorentzian', 'Voigt'},
             'group_view': {'overlay', 'trend'},
-            'trend_metric': {'integral', 'mean', 'median', 'maximum', 'gradient_rms', 'centre_nm', 'fwhm_nm', 'area'},
+            'trend_metric': {'integral', 'mean', 'median', 'maximum', 'gradient_rms', 'centre_nm', 'fwhm_nm', 'area', 'shared_mean'},
             'trend_axis': {'index', 'cycle', 'cumulative_dwell_s', 'requested_dc_v'},
             'quantity': {'rates', 'counts', 'summed'},
             'cube_view': {'sum', 'area', 'band', 'wavelength', 'peak', 'peak_wavelength', 'fit_width', 'fit_area'},
@@ -72,6 +78,10 @@ class PlotState:
         for name in ('fit', 'residuals', 'log', 'common'):
             if type(getattr(self, name)) is not bool:
                 raise AnalysisError(f'{name} must be boolean')
+        if (type(self.fit_peaks) is not int or not 1 <= self.fit_peaks <= 4
+                or type(self.fit_component) is not int or not 1 <= self.fit_component <= self.fit_peaks
+                or not isinstance(self.fit_centres, str) or not isinstance(self.background_roi, str)):
+            raise AnalysisError('Invalid peak count, component, centres or background region')
         if not isinstance(self.cmap, str) or not isinstance(self.reference_key, str):
             raise AnalysisError('Invalid colour map or reference')
         if self.low_nm is not None and self.high_nm is not None and self.low_nm > self.high_nm:
@@ -96,7 +106,11 @@ def _variant(node, state):
                 return a['raw']  # Subtract row/pixel-sized dark slices below.
             return np.asarray(a['raw'], dtype=float) - a['dark']
         # Native SpectrumResult.intensity already contains the saved dark mode.
-        if node.metadata.get('dark_mode') not in (None, 'none', 'off'):
+        provenance = node.metadata.get('provenance') or {}
+        dark_mode = node.metadata.get('dark_mode')
+        if isinstance(provenance, dict):
+            dark_mode = provenance.get('dark_mode', dark_mode)
+        if dark_mode not in (None, 'none', 'off'):
             return a['intensity']
         raise AnalysisError('No saved dark correction or raw/dark pair is available')
     if state.variant not in a:
@@ -113,6 +127,31 @@ def wavelength_selection(w, state):
     if not selection.any():
         raise AnalysisError('No wavelengths lie in the selected range')
     return selection
+
+
+def shared_background(node, state):
+    """Median completed spectrum in an explicit rectangle of mirror voltages."""
+    if not state.background_roi or node.kind != 'cube':
+        return None
+    try:
+        x0, x1, y0, y1 = map(float, state.background_roi.split(','))
+    except ValueError as error:
+        raise AnalysisError('Background ROI needs X min, X max, Y min, Y max (V)') from error
+    if not np.isfinite([x0, x1, y0, y1]).all() or x0 > x1 or y0 > y1:
+        raise AnalysisError('Invalid background voltage bounds')
+    a = node.arrays
+    mask = a['mask'] & ((a['x'] >= x0) & (a['x'] <= x1))[None, :] & ((a['y'] >= y0) & (a['y'] <= y1))[:, None]
+    count = int(mask.sum())
+    if count < 3 or count * a['wavelength'].size > 8_000_000:
+        raise AnalysisError('Choose a smaller background region with at least three completed spectra (max 8 million samples)')
+    cube = _variant(node, state)
+    values = np.asarray(cube[mask], dtype=float)
+    if state.variant == 'corrected' and 'raw' in a and 'dark' in a:
+        values -= a['dark'][mask] if a['dark'].ndim == 3 else a['dark']
+    values[~np.isfinite(values)] = np.nan
+    if not np.isfinite(values).any(axis=0).all():
+        raise AnalysisError('Background region has no finite reference at one or more wavelengths')
+    return np.nanmedian(values, axis=0), count
 
 
 def map_values(node, state):
@@ -139,6 +178,7 @@ def map_values(node, state):
         result = np.array(value, dtype=float, copy=True)
     elif node.kind == 'cube':
         cube = _variant(node, state)
+        background = shared_background(node, state)
         w = a['wavelength']
         if state.cube_view == 'wavelength':
             if state.low_nm is None or not min(w) <= state.low_nm <= max(w):
@@ -162,6 +202,8 @@ def map_values(node, state):
                 dark = a['dark']
                 dark_row = dark[iy, :, indices[0]:indices[-1] + 1] if dark.ndim == 3 else dark[indices[0]:indices[-1] + 1]
                 row = row - dark_row
+            if background is not None:
+                row = row - background[0][indices[0]:indices[-1] + 1]
             valid = np.isfinite(row).any(axis=-1)
             safe = np.where(np.isfinite(row), row, -np.inf)
             if state.cube_view in {'sum', 'band', 'wavelength'}:
@@ -177,7 +219,7 @@ def map_values(node, state):
                     if not a['mask'][iy, ix]:
                         continue
                     try:
-                        _fitted, parameters = fit_peak(w[selected], row[ix])
+                        _fitted, parameters = fit_peak(w[selected], row[ix], state)
                         values[ix] = parameters['fwhm_nm' if state.cube_view == 'fit_width' else 'area']
                     except AnalysisError:
                         # Failure is explicitly counted in plot metadata, never a raw-data edit.
@@ -207,14 +249,45 @@ def compare(first, second, mode):
     return result
 
 
-def map_comparison(node, reference, state):
+def quantity_key(node, state):
+    a = node.arrays
+    if node.kind == 'map':
+        key = state.quantity
+        channels = tuple(np.asarray(a.get('channels', ())).tolist())
+        channel = channels[state.channel:state.channel + 1] if state.channel >= 0 else channels
+        return ('map', node.synthetic, 'counts' if key == 'counts' else 'counts/s', channel)
+    details = node.metadata.get('settings') or {}
+    if not isinstance(details, dict):
+        details = {}
+    lineage = node.metadata.get('provenance') or {}
+    if not isinstance(lineage, dict):
+        lineage = {}
+    return (node.kind, node.synthetic, state.cube_view if node.kind == 'cube' else state.normalise,
+            str(node.metadata.get('units', node.metadata.get('intensity_units'))),
+            str(details.get('exposure_s')), str(details.get('gain')),
+            node.metadata.get('dark_mode', lineage.get('dark_mode')), lineage.get('reusable_dark_stage'))
+
+
+def require_compatible(node, reference, state):
+    if quantity_key(node, state) != quantity_key(reference, state):
+        raise AnalysisError('Comparison requires matching measurement quantities, channels, units and recorded acquisition settings')
+    if node.kind == 'cube':
+        x, y = node.arrays['wavelength'], reference.arrays['wavelength']
+        if x.shape != y.shape or not np.allclose(x, y, rtol=0, atol=1e-8):
+            raise AnalysisError('Cube comparison requires matching wavelength grids')
+
+
+def map_comparison(node, reference, state, *, derived=None):
+    require_compatible(node, reference, state)
     for key in ('x', 'y'):
         if node.arrays[key].shape != reference.arrays[key].shape or not np.allclose(node.arrays[key], reference.arrays[key], rtol=0, atol=1e-12):
             raise AnalysisError('Map comparison requires identical voltage grids; no implicit interpolation')
+    if derived is not None:
+        return compare(derived(node), derived(reference), state.comparison)
     return compare(map_values(node, state), map_values(reference, state), state.comparison)
 
 
-def spectrum_values(node, state):
+def spectrum_values(node, state, *, background=None):
     state.validate()
     a = node.arrays
     if node.kind not in {'cube', 'spectrum'}:
@@ -231,6 +304,10 @@ def spectrum_values(node, state):
         if state.variant == 'corrected' and 'raw' in a and 'dark' in a:
             dark = a['dark']
             value = value - (dark[iy, ix] if dark.ndim == 3 else dark)
+    if background is None:
+        background = shared_background(node, state)
+    if background is not None:
+        value = value - background[0]
     selection = wavelength_selection(w, state)
     x, y = np.array(w[selection], dtype=float), np.array(value[selection], dtype=float)
     if not np.isfinite(y).any():
@@ -255,7 +332,18 @@ def spectrum_values(node, state):
     return x, y
 
 
-def fit_peak(x, y):
+def fit_peak(x, y, state=None):
+    if state is not None and (state.fit_model != 'Gaussian' or state.fit_peaks != 1 or state.fit_centres):
+        from .fitting import fit_components
+
+        try:
+            return fit_components(x, y, state)
+        except ImportError as error:
+            raise AnalysisError('Peak fitting requires the optional scipy analysis dependency') from error
+    return _fit_gaussian(x, y)
+
+
+def _fit_gaussian(x, y):
     """Optional bounded Gaussian + constant; never silently alter the data."""
     try:
         from scipy.optimize import OptimizeWarning, curve_fit

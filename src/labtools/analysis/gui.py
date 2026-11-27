@@ -2,7 +2,7 @@
 import json
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from threading import Event
 
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLayout,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -43,8 +44,8 @@ from .exports import (
 )
 from .loaders import LoadSession, read_json
 from .models import AnalysisError
-from .plotting import render
-from .processing import PlotState
+from .plotting import draw_cube_pixel, render
+from .processing import PlotState, quantity_key
 
 LABELS = {
     'group_view': 'Stack / sequence view', 'trend_metric': 'Trend metric',
@@ -54,15 +55,20 @@ LABELS = {
     'low_nm': 'Lower wavelength (nm)', 'high_nm': 'Upper wavelength (nm)',
     'pixel_x': 'Pixel X index', 'pixel_y': 'Pixel Y index',
     'normalise': 'Normalisation', 'baseline': 'Baseline subtraction',
-    'fit': 'Gaussian + constant fit', 'residuals': 'Show fit residuals',
+    'background_roi': 'Background ROI: X min, X max, Y min, Y max (V)',
+    'fit_model': 'Peak model', 'fit_peaks': 'Number of peaks (1–4)',
+    'fit_centres': 'Initial centres (nm, comma-separated)',
+    'fit_component': 'Peak for metric (ordered by wavelength)',
+    'fit': 'Show spectrum fit', 'residuals': 'Show fit residuals',
     'comparison': 'Compare with reference', 'reference_key': 'Reference dataset',
     'cmap': 'Colour map', 'log': 'Log colour scale',
     'common': 'Common scale across loaded maps', 'vmin': 'Colour minimum (blank = auto)',
     'vmax': 'Colour maximum (blank = auto)', 'dpi': 'Export resolution (DPI)',
 }
 OPTIONS = {
+    'fit_model': ['Gaussian', 'Lorentzian', 'Voigt'],
     'group_view': ['overlay', 'trend'],
-    'trend_metric': ['integral', 'mean', 'median', 'maximum', 'gradient_rms', 'centre_nm', 'fwhm_nm', 'area'],
+    'trend_metric': ['integral', 'mean', 'median', 'maximum', 'gradient_rms', 'centre_nm', 'fwhm_nm', 'area', 'shared_mean'],
     'trend_axis': ['index', 'cycle', 'cumulative_dwell_s', 'requested_dc_v'],
     'quantity': ['rates', 'counts', 'summed'],
     'cube_view': ['sum', 'area', 'band', 'wavelength', 'peak', 'peak_wavelength', 'fit_width', 'fit_area'],
@@ -95,6 +101,9 @@ class AnalysisPanel(QWidget):
         self._recipe_job = False
         self._display_valid = False
         self._display_arrays = {}
+        self._details = {}
+        self._map_cache = {}
+        self._export_job = False
         layout = QVBoxLayout(self)
         # Allow the existing narrow vertical layout to shrink below child size hints.
         layout.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
@@ -102,12 +111,18 @@ class AnalysisPanel(QWidget):
         buttons = QGridLayout()
         for index, (text, callback) in enumerate([
             ('Open file', self.open_file), ('Open folder', self.open_folder),
-            ('Open recipe', self.choose_recipe), ('Relink recipe source', self.relink_recipe),
-            ('Cancel loading', self.cancel_load), ('Close dataset', self.close_dataset),
+            ('Cancel job', self.cancel_load), ('Close dataset', self.close_dataset),
         ]):
             button = QPushButton(text)
             button.clicked.connect(callback)
             buttons.addWidget(button, index // 3, index % 3)
+        recipe_button = QPushButton('Recipes')
+        recipe_menu = QMenu(recipe_button)
+        recipe_menu.addAction('Open recipe', self.choose_recipe)
+        recipe_menu.addAction('Relink recipe source', self.relink_recipe)
+        recipe_menu.addAction('Save plot recipe', self.save_recipe)
+        recipe_button.setMenu(recipe_menu)
+        buttons.addWidget(recipe_button, 1, 1)
         layout.addLayout(buttons)
         self.status = QLabel('Offline Analysis | Open a saved result. No instruments are used.')
         self.status.setWordWrap(True)
@@ -202,7 +217,7 @@ class AnalysisPanel(QWidget):
         self.canvas.mpl_connect('motion_notify_event', self.hover_pixel)
         exports = QGridLayout()
         for index, (text, callback) in enumerate([
-            ('Export plot + data', self.export_current), ('Save plot recipe', self.save_recipe),
+            ('Export plot + data', self.export_current),
             ('Batch export measurements', self.batch_export),
         ]):
             button = QPushButton(text)
@@ -242,7 +257,7 @@ class AnalysisPanel(QWidget):
     def cancel_load(self):
         self.cancel.set()
         if self.future is not None:
-            self.status.setText('Cancelling load; the current dataset remains unchanged')
+            self.status.setText('Cancelling job; the current dataset remains unchanged')
 
     def load_path(self, path):
         if self.future is not None:
@@ -297,6 +312,9 @@ class AnalysisPanel(QWidget):
         future, self.future = self.future, None
         try:
             result = future.result()
+            if self._export_job:
+                self.status.setText(f'Saved: {result}')
+                return
             if self.cancel.is_set():
                 result[0].close()
                 self.status.setText('Load cancelled')
@@ -309,11 +327,17 @@ class AnalysisPanel(QWidget):
                     self.state.reference_key = reference.key
                 self.write_controls()
                 self.select_key(node.key)
+                self.write_controls()
                 self.redraw()
             else:
                 self.publish(*result)
         except Exception as error:  # noqa: BLE001 - GUI boundary reports malformed files without crashing
             self.fail(error)
+        finally:
+            if self._export_job:
+                self._export_job = False
+                self.sidebar.setEnabled(True)
+                self.toolbar.setEnabled(True)
 
     def publish(self, session, root, source):
         self.close_dataset()
@@ -334,7 +358,7 @@ class AnalysisPanel(QWidget):
         self.controls['reference_key'].clear()
         self.controls['reference_key'].addItem('None', '')
         for item in root.walk():
-            if item.kind != 'group':
+            if item.kind in {'map', 'cube', 'spectrum'}:
                 self.controls['reference_key'].addItem(item.label, item.key)
         self.state = PlotState()
         self.write_controls()
@@ -364,7 +388,24 @@ class AnalysisPanel(QWidget):
         self.raw_column.setText('0')
         self.show_raw()
         self.configure_controls()
+        self.refresh_references()
         self.redraw()
+
+    def refresh_references(self):
+        control = self.controls['reference_key']
+        previous = control.currentData()
+        kinds = {'spectrum'} if self.node.kind == 'group' else {self.node.kind}
+        control.clear()
+        control.addItem('None / recorded baseline for sequences', '')
+        for item in self.nodes.values():
+            # Quantity is validated again using the exact applied settings.
+            if (
+                item is not self.node
+                and item.kind in kinds
+                and (self.node.kind == 'group' or quantity_key(item, self.state) == quantity_key(self.node, self.state))
+            ):
+                control.addItem(item.label, item.key)
+        control.setCurrentIndex(max(0, control.findData(previous)))
 
     def configure_controls(self):
         kind = self.node.kind
@@ -377,6 +418,9 @@ class AnalysisPanel(QWidget):
             'low_nm': has_spectrum, 'high_nm': has_spectrum,
             'pixel_x': kind == 'cube', 'pixel_y': kind == 'cube',
             'normalise': has_spectrum, 'baseline': has_spectrum,
+            'background_roi': 'cube' in descendants,
+            'fit_model': has_spectrum, 'fit_peaks': has_spectrum,
+            'fit_centres': has_spectrum, 'fit_component': has_spectrum,
             'fit': has_spectrum, 'residuals': kind in {'spectrum', 'cube'},
             'cmap': has_map, 'log': has_map, 'common': has_map,
             'vmin': has_map, 'vmax': has_map,
@@ -400,11 +444,13 @@ class AnalysisPanel(QWidget):
                 value = control.currentData() if name == 'reference_key' else control.currentText()
             else:
                 text = control.text().strip()
-                if name in {'channel', 'pixel_x', 'pixel_y', 'dpi'}:
+                if name in {'channel', 'pixel_x', 'pixel_y', 'dpi', 'fit_peaks', 'fit_component'}:
                     try:
                         value = int(text)
                     except ValueError as error:
                         raise AnalysisError(f'{LABELS[name]} must be an integer') from error
+                elif name in {'background_roi', 'fit_centres'}:
+                    value = text
                 else:
                     try:
                         value = float(text) if text else None
@@ -432,15 +478,16 @@ class AnalysisPanel(QWidget):
         self.redraw()
 
     def redraw(self):
-        if self.node is None:
+        if self.node is None or self._export_job:
             return
         self._display_valid = False
         try:
             state = self.read_controls()
             reference = self.nodes.get(state.reference_key)
-            arrays, details = render(self.figure, self.node, state, reference=reference, common_nodes=list(self.root.walk()))
+            arrays, details = render(self.figure, self.node, state, reference=reference, common_nodes=list(self.root.walk()), map_cache=self._map_cache)
             self.state = state
             self._display_arrays = arrays
+            self._details = details
             self._display_valid = True
             info = {'source': str(self.node.source), 'kind': self.node.kind, 'status': self.node.status,
                     'synthetic': self.node.synthetic, 'arrays': serialise(self.node.arrays),
@@ -468,13 +515,27 @@ class AnalysisPanel(QWidget):
         return iy, ix
 
     def pick_pixel(self, event):
+        if self._export_job or getattr(event, 'button', 1) != 1:
+            return
         pixel = self._pixel(event)
         if pixel is not None and not self.toolbar.mode:
             iy, ix = pixel
             self.controls['pixel_x'].setText(str(ix))
             self.controls['pixel_y'].setText(str(iy))
-            if self.node.kind == 'cube':
-                self.redraw()
+            if self.node.kind == 'cube' and self._display_valid and not self._export_job:
+                pending = replace(self.state, pixel_x=ix, pixel_y=iy)
+                try:
+                    if self.read_controls() != pending:
+                        self.status.setText('Apply pending plot settings before selecting a pixel')
+                        return
+                    draw_cube_pixel(self.figure, self.node, pending, self._display_arrays, self._details)
+                    self.state = pending
+                    info = json.loads(self.metadata.toPlainText())
+                    info['display'] = self._details
+                    self.metadata.setPlainText(json.dumps(info, indent=2, allow_nan=False))
+                    self.canvas.draw_idle()
+                except (AnalysisError, ValueError) as error:
+                    self.fail(error)
 
     def hover_pixel(self, event):
         pixel = self._pixel(event)
@@ -518,6 +579,8 @@ class AnalysisPanel(QWidget):
             self.status.setText(str(error))
 
     def _export_ready(self):
+        if self.future is not None:
+            raise AnalysisError('Finish or cancel the current job first')
         if self.node is None:
             raise AnalysisError('Open and select a dataset first')
         state = self.read_controls()
@@ -525,14 +588,21 @@ class AnalysisPanel(QWidget):
             raise AnalysisError('Apply valid plot settings before exporting')
         return state
 
+    def start_export(self, function, *args, **kwargs):
+        self.cancel = Event()
+        self._export_job = True
+        self.sidebar.setEnabled(False)
+        self.toolbar.setEnabled(False)
+        self.future = self.executor.submit(function, *args, cancel=self.cancel.is_set, **kwargs)
+        self.status.setText('Exporting offline. Cancel job stops before publication.')
+
     def export_current(self):
         try:
             state = self._export_ready()
             destination = QFileDialog.getExistingDirectory(self, 'Choose export parent outside source folder')
             if destination:
-                target = export_view(destination, self.root, self.node, state, self.source,
-                                     reference=self.nodes.get(state.reference_key), common_nodes=list(self.root.walk()))
-                self.status.setText(f'Exported PNG/SVG/PDF, NPZ/CSV, metadata and recipe to {target}')
+                self.start_export(export_view, destination, self.root, self.node, state, self.source,
+                                  reference=self.nodes.get(state.reference_key), common_nodes=list(self.root.walk()))
         except Exception as error:  # noqa: BLE001 - export failures are recoverable GUI errors
             self.fail(error)
 
@@ -545,8 +615,14 @@ class AnalysisPanel(QWidget):
                 source_dir = self.source if self.source.is_dir() else self.source.parent
                 if target == source_dir or source_dir in target.parents:
                     raise AnalysisError('Save recipes outside the source acquisition folder')
-                write_json(target, recipe(self.root, self.node, state, self.source, self.nodes.get(state.reference_key)))
-                self.status.setText(f'Recipe saved: {target}')
+                root, node, source, reference = self.root, self.node, self.source, self.nodes.get(state.reference_key)
+                def save(*, cancel):
+                    document = recipe(root, node, state, source, reference, cancel=cancel)
+                    if cancel():
+                        raise AnalysisError('Recipe save cancelled')
+                    write_json(target, document)
+                    return target
+                self.start_export(save)
         except Exception as error:  # noqa: BLE001 - report invalid paths or existing recipe without overwriting
             self.fail(error)
 
@@ -556,12 +632,15 @@ class AnalysisPanel(QWidget):
             destination = QFileDialog.getExistingDirectory(self, 'Batch export parent outside source folder')
             if not destination:
                 return
-            target = export_collection(destination, self.root, self.node, state, self.source)
-            self.status.setText(f'Batch exported with stack-wide numerical archive: {target}')
+            self.start_export(export_collection, destination, self.root, self.node, state, self.source)
         except Exception as error:  # noqa: BLE001 - stop batch on first failure and retain completed unique exports
             self.fail(error)
 
     def close_dataset(self):
+        if self._export_job:
+            self.status.setText('Finish or cancel exporting before closing the dataset')
+            return
+        self._map_cache.clear()
         self.figure.clear()
         self._display_arrays = {}
         self.raw_array.blockSignals(True)
@@ -581,7 +660,7 @@ class AnalysisPanel(QWidget):
     def shutdown(self):
         if self.future is not None:
             self.cancel.set()
-            self.status.setText('Cancelling Analysis load; close again after it finishes')
+            self.status.setText('Cancelling Analysis job; close again after it finishes')
             return False
         if not self._closed:
             self.close_dataset()
